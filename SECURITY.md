@@ -1,0 +1,29 @@
+# SECURITY — 安全与数据安全边界
+
+## 这个仓库里有什么、没有什么
+
+- **只有模板与协议文本**：骨架规则、流程文档、两个 Python 工具脚本。不含任何用户数据、凭据或机器特定信息。
+- **实例化后的项目是独立仓库**：你在 CoHarness 骨架上创建的项目，其代码与数据归你自己的 git 仓库所有；CoHarness 不收集、不上传、不遥测任何内容。
+
+## wsc.py 与 check.py 的行为边界（可审计）
+
+1. **零网络**：两个脚本均不发起任何网络请求；下载 CoHarness 本身（curl/git clone）是用户主动行为
+2. **subprocess 全字面量**：所有子进程调用的参数列表均为硬编码字面量（`git` / `backlog` / `python scripts/check.py`），shell=False，用户输入只作为工作目录（cwd）
+3. **无动态执行**：不使用 eval / exec / 动态 import
+4. **文件操作范围**：`init` 只向目标目录写入骨架文件与适配指针；`sync` 只执行 `git pull --ff-only`；`check` / `improve` 只读项目文件；`doctor` 只探测 PATH
+5. **pre-commit 钩子**：仅执行 `python scripts/check.py`（本仓库自带、可读、约 300 行纯标准库），不做其他任何事
+
+## 供应链建议
+
+- 引导安装用 `git clone`（全量、可审计）或 `curl` 单文件 `wsc.py`；**建议按 release tag 固定版本**下载，不要盲拉 main
+- 实例化后先读一遍项目内 `AGENTS.md` 与 `scripts/check.py` 再开工——整个执法面就这两个文件加一个 pre-commit 钩子
+
+## 实例化项目的数据安全
+
+- 03 骨架自带 `.gitignore` 模板（.env / 密钥 / 依赖目录 / 构建产物），**按项目补充后再提交**
+- 纪律已写入骨架：密钥与本机配置不入库、过程产物不进交付树、日志不打印敏感信息（coder 角色约束）
+- 多 harness 并行的本质是"多个 AI 工具共享一个 git 仓库"——**给工具的凭据权限请自行最小化**，CoHarness 不代管任何凭据
+
+## 披露
+
+发现安全问题请开 GitHub Issue 或邮件仓库所有者；不接受"另写一份规则文档"式的修复——安全约束一律进骨架文件本体。

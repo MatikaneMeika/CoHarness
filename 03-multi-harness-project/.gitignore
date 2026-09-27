@@ -1,0 +1,26 @@
+# CoHarness 实例化项目通用 .gitignore（按项目技术栈补充）
+# 纪律：密钥与本机配置不入库；过程产物不进交付树
+
+# 密钥与本地配置
+.env
+.env.*
+*.key
+*.pem
+credentials*.json
+secrets.*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node
+node_modules/
+dist/
+build/
+
+# 运行残留与系统文件
+*.log
+.DS_Store
+Thumbs.db

@@ -1,0 +1,13 @@
+#!/bin/sh
+# working_struct 执法钩子：所有 harness 的提交必经 check.py（命名/卡格式与认领/改动挂卡）。
+# 安装：wsc init 自动复制到 .git/hooks/pre-commit；手动：
+#   cp scripts/hooks/pre-commit .git/hooks/pre-commit
+# stale 提示不在此列（advisory，不拦截提交），要看报告跑 python scripts/check.py --stale
+
+python scripts/check.py --names --tasks --diff
+rc=$?
+if [ $rc -ne 0 ]; then
+  echo "" >&2
+  echo "pre-commit：check.py 未通过，提交被拦截。修复违规后重试；卡外改动请先开卡。" >&2
+  exit $rc
+fi
