@@ -4,6 +4,8 @@
 
 起因很简单：各家 harness 之间没有官方的协作机制，几个人（或几个工具）同时改一个仓库时，靠的是把约定写成文件放进仓库，大家读同一份。这个库就是我们踩坑之后沉淀下来的那套约定，整理成了四套模板，克隆走就能用。它不是框架，没有服务端，也没有配置中心——仓库里只有 Markdown 和两个几百行的 Python 脚本。
 
+它和一般模板库有个不太一样的地方：**模板不是静态的，带一条改进管线**。用的时候发现哪里不合用，登记、试点、审核，通过的改动会写回模板本体——你的使用经验会沉淀进这套约定，而不是烂在你自己的 fork 里。见下文「会自己进化的模板」。
+
 ## 快速开始
 
 ```bash
@@ -19,6 +21,19 @@ python CoHarness/wsc.py init <骨架> <目标路径>    # 骨架: solo / study /
 curl -fsSL https://github.com/MatikaneMeika/CoHarness/raw/main/wsc.py -o wsc.py
 python wsc.py init <骨架> <目标路径>
 ```
+
+## 会自己进化的模板
+
+大多数模板库是静态的：作者按自己的经验写一版，你遇到不合用的地方，要么忍，要么自己改一份——改完就和上游分叉了。CoHarness 把"改"做成了正式流程，一共四步：
+
+1. **登记**：harness 干活时撞上规则缺口（或缺某个 skill/MCP/依赖），往项目里 `.agent/improvements.md` 记一行。门槛写在文件头部：实际返工过、同类摩擦两次以上、或确有能力缺口，才值得记
+2. **试点**：改动先落在这个项目自己的 `.agent/` 里试运行，模板本体不动
+3. **审核**：对 harness 说「evolve <项目路径>」，它按五条标准逐条评——真实性、普遍性、有效性、兼容性、必要性——结论是晋升或驳回，逐条给理由
+4. **写回**：你批准后，改动才进模板本体，CHANGELOG 记一行，一个改进一个 commit
+
+举个这套库里真实发生过的升级：「交付文件名禁带 `-v2` / `-final`」最初只是一条文字纪律，后来发现光靠提醒没用——文件后缀还是越堆越多——于是它变成 check.py 里的一条正则，由 pre-commit 直接拦截。从"文字提醒"升级到"机械执法"，走的就是上面这条管线。
+
+如果你用的是自己的克隆，改进写回你本地的本体；想回馈上游就发 PR——这个库自己的每次升级也都是这么来的。审核那一关，驳回是一等公民，标准与流程见 [docs/EVOLUTION-PROCESS.md](docs/EVOLUTION-PROCESS.md)。
 
 ## 骨架怎么选
 
@@ -50,10 +65,6 @@ python wsc.py list             # 骨架列表
 多数主流 harness 会自动读项目根的 AGENTS.md（ZCode、Codex、Qoder、opencode、Copilot CLI 这些都是）。只认自家文件的工具，init 时加 `--adapter claude,gemini,cursor,copilot,windsurf`（或 all），会生成一行指针文件，内容就一句"读 AGENTS.md，以其为准"。支持 skills 的工具可以选装 `skills/collab-zone/`（复制过去、改一行路径），不装也不影响使用。
 
 出现分歧时的裁决顺序：项目规则 > spec-kit 产物 > 任务卡 > 会话里的口头约定。
-
-## 规则会自己进化
-
-模板是死的，用的时候一定会遇到不顺手的地方。约定是：在项目里 `.agent/improvements.md` 记一笔 → 在这个项目里先试点 → 对 harness 说「evolve <项目>」，它会按五条标准（真实性、普遍性、有效性、兼容性、必要性）逐条审，你同意了才把改动写回这套模板本体。驳回很常见，不用勉强凑理由。细节在 [docs/EVOLUTION-PROCESS.md](docs/EVOLUTION-PROCESS.md)。
 
 ## 关于安全
 
