@@ -12,6 +12,9 @@ class TempProjectCase(unittest.TestCase):
         self.tmp = H.tmp_dir()
         self.addCleanup(H.rmtree, self.tmp)
         self.proj = H.make_project(self.tmp)
+        # 03 骨架随带常驻规则卡 T-000-board（见 parallel-protocol），
+        # 卡规则用例要的是"只有我在测的那几张卡"，计数才准确
+        (self.proj / "backlog" / "tasks" / "T-000-board.md").unlink()
 
     def assertCheck(self, args, rc, *fragments):
         res = H.check(self.proj, *args)

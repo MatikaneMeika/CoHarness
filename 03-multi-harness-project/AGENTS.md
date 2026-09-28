@@ -55,6 +55,7 @@
 - 建卡 / 改卡：`backlog task create` / `backlog task edit`（卡片格式约定见 `.agent/tasks/CARD-CONVENTION.md`）
 - 状态四列：`todo → doing → review → done`（`backlog.config.yml` 配置）
 - 认领 = `-a <harness标识> -s doing` 且**提交直接进 main**；一卡一 assignee；开工/收工协议见 `.agent/workflows/parallel-protocol.md`
+- 改他人卡、改看板结构、往 `.agent/improvements.md` 登记这三类提交，先认领常驻规则卡 `backlog/tasks/T-000-board.md`（绕行细节见 parallel-protocol 同名节）
 
 ## 角色一览
 
