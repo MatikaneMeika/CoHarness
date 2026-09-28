@@ -13,6 +13,8 @@
 输出显式按 utf-8 解码（见 _run）。
 """
 import argparse
+import json
+import os
 import re
 import shutil
 import subprocess
@@ -226,6 +228,39 @@ def cmd_list(_args):
         print(f"  {s.name:<28} {desc}")
 
 
+def registry_path():
+    """本机实例登记表：纯本地一个 json，跨项目摩擦统计用它。位置可用 COHARNESS_HOME 挪走。"""
+    home = os.environ.get("COHARNESS_HOME")
+    base = Path(home).expanduser() if home else Path.home() / ".coharness"
+    return base / "projects.json"
+
+
+def read_registry():
+    try:
+        data = json.loads(registry_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    return data if isinstance(data, list) else []
+
+
+def register_project(dst, skeleton):
+    """把这次实例化记进本机登记表（路径 + 骨架名 + 本体 commit + 时间）。写失败只提示，不影响装机。"""
+    rev = _git_field(["git", "rev-parse", "--short", "HEAD"], ROOT)
+    entry = {"path": str(dst), "skeleton": skeleton,
+             "skeleton_commit": rev[1] if rev[0] == "ok" else "",
+             "instantiated_at": f"{datetime.now():%Y-%m-%d %H:%M}"}
+    rows = [r for r in read_registry() if isinstance(r, dict) and r.get("path") != entry["path"]]
+    rows.append(entry)
+    f = registry_path()
+    try:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(rows, ensure_ascii=False, indent=1) + "\n",
+                     encoding="utf-8", newline="\n")
+    except OSError as e:
+        return None, f"（未写入本机登记表 {f}: {e}）"
+    return f, None
+
+
 def cmd_init(args):
     src = resolve_skeleton(args.skeleton)
     dst = Path(args.target).resolve()
@@ -272,6 +307,12 @@ def cmd_init(args):
         print(f"\n依赖安装（自检: python {ROOT / 'wsc.py'} doctor）:")
         for line in steps:
             print(f"  {line}")
+
+    f, warn = register_project(dst, src.name)
+    if f is not None:
+        print(f"\n已记入本机登记表 {f}（跨项目摩擦统计用，纯本地零网络；删掉该文件即不再参与统计）")
+    else:
+        print(f"\n{warn}")
 
 
 HOOK_NOTICES = {
@@ -372,13 +413,9 @@ LEDGER_STATUSES = ("登记", "试点中", "待审", "已晋升", "已驳回")
 UNFINISHED = LEDGER_STATUSES[:3]
 
 
-def cmd_improve(args):
-    """列出项目改进登记表中的非终态条目（登记/试点中/待审）。纯读文件，不改任何东西。"""
-    project = Path(args.project).resolve() if args.project else Path.cwd()
-    f = project / ".agent" / "improvements.md"
-    if not f.exists():
-        sys.exit(f"未找到 {f}（该骨架不含改进登记表，或项目未实例化）")
-    pending, warnings = [], []
+def load_ledger(f: Path):
+    """读改进登记表：返回 (全部条目, 非终态条目, 告警)。只读文件。"""
+    rows, pending, warnings = [], [], []
     for lineno, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
         s = line.strip()
         if not (s.startswith("|") and s.endswith("|")):
@@ -397,8 +434,67 @@ def cmd_improve(args):
             warnings.append(f"  [状态存疑] {head}：'{cells[7]}' 不在状态机里（"
                             f"{' / '.join(LEDGER_STATUSES)}）")
             continue
+        rows.append(cells)
         if cells[7] in UNFINISHED:
             pending.append(cells)
+    return rows, pending, warnings
+
+
+def _friction_key(cells):
+    """同类摩擦的机械判据：类别 + 提议改动正文（去空白与 markdown 记号后取前 40 字）。"""
+    proposal = re.sub(r"[\s`*_|]", "", cells[5]) or re.sub(r"[\s`*_|]", "", cells[4])
+    return (cells[2], proposal[:40])
+
+
+def cmd_improve_cross(args):
+    """跨项目摩擦统计：把本机登记过的实例的非终态条目按同类归并，只出机械计数。
+
+    门槛"同类摩擦 ≥2 次"是审核标准里的客观那一半，这里给的是证据；
+    "是不是真的同一件事"仍归人判——所以每条都带来源项目，不做自动晋升。
+    """
+    reg = read_registry()
+    if not reg:
+        sys.exit(f"本机登记表是空的（{registry_path()}）：先用 wsc init 实例化骨架，"
+                 f"或设 COHARNESS_HOME 指向已有登记表")
+    print(f"== 跨项目改进统计（本机登记表 {registry_path()}）==")
+    groups, scanned, missing = {}, 0, 0
+    for entry in reg:
+        proj = Path(entry.get("path", ""))
+        f = proj / ".agent" / "improvements.md"
+        if not f.exists():
+            missing += 1
+            print(f"  [跳过] {proj}（无 .agent/improvements.md，路径可能已移走）")
+            continue
+        scanned += 1
+        rows, pending, warnings = load_ledger(f)
+        for w in warnings:
+            print(f"  {proj.name}:{w}")
+        for cells in pending:
+            groups.setdefault(_friction_key(cells), []).append((proj.name, cells))
+    if not groups:
+        print(f"扫描 {scanned} 个实例：无非终态条目，没有可统计的摩擦。")
+        return
+    print(f"扫描 {scanned} 个实例（另有 {missing} 个登记路径已失效），非终态条目按同类归并：\n")
+    for (category, _), hits in sorted(groups.items(), key=lambda kv: -len(kv[1])):
+        projects = sorted({p for p, _ in hits})
+        verdict = "达到 ≥2 门槛，可进待审" if len(projects) >= 2 else "单项目孤证，继续攒证据"
+        print(f"  [{category}] {len(projects)} 个项目 / {len(hits)} 条 → {verdict}")
+        print(f"    提议：{hits[0][1][5] or hits[0][1][4]}")
+        for pname, cells in hits:
+            print(f"    - {pname} {cells[0]}（{cells[7]}）：{cells[3]}")
+    print("\n机械计数只回答「出现过几次」；有效性/必要性/副作用三条标准见 "
+          f"{ROOT / 'docs' / 'EVOLUTION-PROCESS.md'}。")
+
+
+def cmd_improve(args):
+    """列出项目改进登记表中的非终态条目（登记/试点中/待审）。纯读文件，不改任何东西。"""
+    if getattr(args, "cross", False):
+        return cmd_improve_cross(args)
+    project = Path(args.project).resolve() if args.project else Path.cwd()
+    f = project / ".agent" / "improvements.md"
+    if not f.exists():
+        sys.exit(f"未找到 {f}（该骨架不含改进登记表，或项目未实例化）")
+    _, pending, warnings = load_ledger(f)
     for w in warnings:
         print(w)
     if not pending:
@@ -606,6 +702,8 @@ def main():
     p_check.add_argument("project", nargs="?", help="项目路径（默认当前目录）")
     p_imp = sub.add_parser("improve", help="列出项目待审改进条目")
     p_imp.add_argument("project", nargs="?", help="项目路径（默认当前目录）")
+    p_imp.add_argument("--cross", action="store_true",
+                       help="扫本机登记表里的全部实例，按同类摩擦出机械计数")
     p_claim = sub.add_parser("claim", help="原子认领一张 todo 卡（写卡+过钩子+推 main）")
     p_claim.add_argument("project", help="项目路径")
     p_claim.add_argument("card", help="卡片 id，如 T-003")

@@ -37,8 +37,8 @@ def check(project, *args):
     return run([sys.executable, Path(project) / "scripts" / "check.py", *args], cwd=project)
 
 
-def wsc(*args, cwd=None):
-    return run([sys.executable, WSC, *args], cwd=cwd)
+def wsc(*args, cwd=None, extra_env=None):
+    return run([sys.executable, WSC, *args], cwd=cwd, extra_env=extra_env)
 
 
 def native_cli(*args, cwd=None):

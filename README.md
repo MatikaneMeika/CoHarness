@@ -57,11 +57,12 @@ python wsc.py sync <项目>      # 开工先跑：pull + 看板摘要 + stale �
 python wsc.py claim <项目> T-001 <标识>  # 原子认领：同步+校验+写卡+提交+推 main 绑成一步，被抢就还原
 python wsc.py check <项目>     # 全量体检（命名、卡格式、改动挂卡、认领冲突、边界交集）
 python wsc.py improve <项目>   # 列出待审的骨架改进
+python wsc.py improve --cross  # 扫本机登记过的全部实例，按同类摩擦出机械计数（晋升门槛 ≥2 次的证据源）
 python wsc.py doctor           # 依赖自检
 python wsc.py list             # 骨架列表
 ```
 
-仓库自带 109 条自测，跑起来不需要装任何东西：
+仓库自带 119 条自测，跑起来不需要装任何东西：
 
 ```bash
 python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows × py3.11/3.13 上跑同样的命令

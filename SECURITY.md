@@ -11,7 +11,8 @@
 2. **subprocess 全字面量 argv、无 shell**：所有子进程调用都以参数列表传（`git` / `backlog` / `<当前解释器> scripts/check.py`，解释器取 `sys.executable` 而非 PATH 上的别名），`shell=False`；用户输入只作为独立 argv 元素（如 `claim` 的卡号与标识会进 commit message 这一参数）或工作目录，绝不拼进命令行字符串；子进程输出一律显式按 utf-8 解码
 3. **无动态执行**：不使用 eval / exec / 动态 import
 4. **文件操作范围**：`init` 向目标目录写骨架文件与适配指针，并把 pre-commit 钩子复制进 `git rev-parse --git-path hooks` 指向的目录（目标是 linked worktree 时那是主仓库的 `.git/hooks`——多 harness 共享同一执法点，正是并行协议要的）；目标不是仓库根时**不写任何东西**，只打印提示；`sync` 执行 `git pull --ff-only` 并在缺钩子时补装那一个文件；`check` / `improve` 只读项目文件；`doctor` 只探测 PATH；`claim` 只改它认领的那一张卡（写前还原、写坏也还原），其余动作都是 git 子命令
-5. **pre-commit 钩子**：仅执行 `<能用的解释器> scripts/check.py`（本仓库自带、可读、五百余行纯标准库，实测 544 行）。解释器按 `python` / `python3` / `py -3` 顺序探测，每个都真跑一次 `-c "import sys"` 确认可用——因为 Windows 上 `python3` 常是商店占位符；三个都不行就 exit 1 拦住提交，不静默放过
+5. **唯一的项目外写入**：`init` 成功后往 `~/.coharness/projects.json` 追加一条本机登记（项目路径 + 骨架名 + 骨架库 commit + 时间），给 `improve --cross` 当扫描清单用。纯本地明文 json，不含文件名之外的内容、不上传、可随时删除；不想写在家目录就设 `COHARNESS_HOME=<你想放的目录>`，写不进去（只读家目录等）只打印提示，不影响装机
+6. **pre-commit 钩子**：仅执行 `<能用的解释器> scripts/check.py`（本仓库自带、可读、五百余行纯标准库，实测 544 行）。解释器按 `python` / `python3` / `py -3` 顺序探测，每个都真跑一次 `-c "import sys"` 确认可用——因为 Windows 上 `python3` 常是商店占位符；三个都不行就 exit 1 拦住提交，不静默放过
 
 ## 供应链建议
 
