@@ -8,12 +8,12 @@
 | 项 | 状态 | 证据 |
 |---|---|---|
 | 包定义 `pyproject.toml` | 已就绪 | `tests/test_packaging.py`（7 条：运行期零依赖、三个入口脚本、wheel 清单覆盖骨架、不夹带开发面文件、指纹可移植、README 双语互链真存在、`init` 复制文件数与文档一致） |
-| 本地安装可用 | 已实测 | `uv build --wheel` + 在干净 venv 里 `pip install --no-build-isolation ./` → `wsc list` 列出四套骨架、`wsc init 03 <空目录>` 复制出 27 个文件、`wsc check` 全绿 |
+| 本地安装可用 | 已实测两种 | ① `uv build --wheel` + 干净 venv 里 `pip install --no-build-isolation ./`；② `uv tool install --from <wheel> coharness` 的隔离工具环境（pipx 等价，工具目录指 D 盘）。两条都验到 `wsc list` 列出四套骨架、`wsc init 03 <空目录>` 复制出 27 个文件、`wsc check` 全绿 |
 | 单文件模式的真实边界 | 已改真 | `README.md` / `README.en.md` / `SECURITY.md` 不再承诺"curl 一个 wsc.py 就能装骨架"；`wsc.py init` 在无骨架目录时给出可执行的两条替代路径（`tests/test_packaging.py::test_single_file_mode_says_what_it_cannot_do`） |
 | 双语 README | 已就绪 | `README.md` ↔ `README.en.md` 互链 |
 | 贡献与审核门禁 | 已就绪 | `CONTRIBUTING.md`、`docs/EVOLUTION-PROCESS.md`、`docs/rfcs/`、`.github/ISSUE_TEMPLATE/*`、`.github/PULL_REQUEST_TEMPLATE.md` |
 | 自测 | 全绿 | `python -m unittest discover -s tests`（零依赖），带预言机时 skipped=0；详见 `docs/ACCEPTANCE-v1.1.md` |
-| CI 剧本 | 已写好，**未首跑** | `.github/workflows/ci.yml`（ubuntu/windows × py3.11/3.13 + oracle job）。本机没有 `act`/`docker`，Actions 的真实首跑只能在你 push 之后看 |
+| CI 剧本 | **已跑 17 次，最新一次 failing** | `.github/workflows/ci.yml`（`on: push`，ubuntu/windows × py3.11/3.13 + oracle job）。状态无需登录就能读：`curl` 取 workflow 的 `badge.svg` 实测返回 `failing`。本机没有 `act`/`docker`，所以定位要 job 级日志（未认证 API 被出口 IP 限流，需 `gh auth login`） |
 
 ## 二、v1.1.0 相对 v1.0 的改动摘要（发布说明草稿）
 
@@ -55,31 +55,43 @@
 - 去中心化审核池与 LLM-as-Judge：ADR-3/ADR-4 明确推迟，重启条件写在 `docs/EVOLUTION-PLAN.md`
 ```
 
-## 三、只有你能执行的动作（我不代办）
+## 三、分三层：谁来做才做得成
+
+上一版把这一节整节写成"只有你能执行"，其中一半其实是我把"我还没查"当成"你不可替代"。按谁能做成重分：
+
+**A 层——我能做，只是对外动作要你当次点头**
 
 ```bash
-# 0. 先看 CI 有没有绿（Actions 首跑）
-gh run list --limit 5
-gh run watch          # 或看仓库 Actions 页
-
-# 1. 打标并推送
+# 1. 打标并推送（本机 git 凭据已通，前 16 次 push 就是证据；回退 = 删远端 ref，不动历史）
 git tag -a v1.1.0 -m "v1.1.0：认领原子化 + 本地 stats + 迁移与审核门禁"
 git push origin v1.1.0
+# 前置条件：CI 先转绿。红的 commit 上打 tag 等于给发布物挂个已知坏的状态。
 
-# 2. 建 GitHub Release（草稿正文可用上面第二节）
-gh release create v1.1.0 --title "CoHarness v1.1.0" --notes-file <把上面草稿贴成文件> \
-  --latest
+# 2. 每次 push 后自检 CI 状态（不需要凭据）
+curl -s https://github.com/MatikaneMeika/CoHarness/actions/workflows/ci.yml/badge.svg | grep -o passing
+```
 
-# 3. 传 PyPI（建议先 test.pypi.org 走一遍）
-python -m uv build                                  # 或 python -m build
+**B 层——只有你能做（凭据在我够不到的地方）**
+
+```bash
+# 0. 登录一次 gh，之后 CI 日志、GitHub Release 我都能接手做
+gh auth login            # GitHub.com + 浏览器授权，约 30 秒
+gh run list --limit 5    # 定位 failing 的 job 与失败行
+
+# 1. PyPI：需要你在 pypi.org 账号里建 API token（名字 coharness 实测未被占：/pypi/coharness/json 返回 404）
 python -m uv publish --publish-url https://test.pypi.org/legacy/ --check-url \
   https://test.pypi.org/simple/
-python -m uv publish                               # 正式
-
-# 4. 装一遍验收发布物
-pipx install coharness && wsc list
-pipx install coharness --python python3.13 && wsc doctor
+python -m uv publish
 ```
+
+**C 层——谁都替代不了，只有时间会给**
+
+`star 1→50`、第一个外部 PR、ADR-3 的"≥50 装机指纹"。前置件（`CONTRIBUTING.md`、Issue/PR 模板、
+RFC 档案、SECURITY 披露路径）都已就位，但这一格的数字不是任何一次执行能造出来的。
+
+**pipx 那条已经不用你跑**：本机没有 pipx，但我用 `uv tool install --from dist/coharness-1.1.0-py3-none-any.whl coharness`
+做了等价验证（隔离环境 + 全局命令 + D 盘工具目录），装出来的 `wsc list`/`init`/`check` 全部正常。
+你若要字面那条，`pipx install coharness && wsc list` 照旧可用。
 
 发布后请把这两格数据补进 `docs/ACCEPTANCE-v1.1.md`：Actions 首跑是否全绿、
 `pipx install` 是否在你机器与目标 Python 版本上成功。
