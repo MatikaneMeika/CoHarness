@@ -50,37 +50,148 @@ def _utf8_streams():
             stream.reconfigure(encoding="utf-8", errors="replace")
 
 
-def parse_frontmatter(path: Path):
-    """解析 Backlog 卡的扁平 frontmatter：key: value / key: [] / key: 换行 - item。"""
-    text = path.read_text(encoding="utf-8")
+class CardFormatError(Exception):
+    """卡片用了 CARD-CONVENTION 之外的写法：宁可不解析，也不静默给出错的值。"""
+
+
+_PENDING = object()  # `key:` 后面空着，是列表还是空值要等下一行才定
+_SUBSET = "只认扁平写法：`key: 值`、`key: [a, b]`、`key:` 下缩进 `- 项`"
+
+
+def _origin(path):
+    try:
+        return Path(path).relative_to(ROOT).as_posix()
+    except ValueError:
+        return Path(path).as_posix()
+
+
+def _strip_comment(value: str):
+    """去行尾注释；引号里的 # 不算注释。"""
+    v = value.strip()
+    if v[:1] in ("\"", "'"):
+        close = v.find(v[0], 1)
+        if close != -1:
+            return v[: close + 1]
+    return re.split(r"\s+#", v)[0].strip()
+
+
+def _unquote(value: str):
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        return value[1:-1]
+    return value
+
+
+def _scalar(value: str, origin, lineno):
+    v = _strip_comment(value)
+    if not v:
+        return ""
+    head = v[0]
+    if head in "|>":
+        raise CardFormatError(f"{origin}:{lineno} 块标量 '{head}' 不支持，{_SUBSET}")
+    if head == "{":
+        raise CardFormatError(f"{origin}:{lineno} 行内 map 写法不支持，{_SUBSET}")
+    if head in "&*":
+        raise CardFormatError(f"{origin}:{lineno} 锚点/别名不支持，{_SUBSET}")
+    if head == "[":
+        raise CardFormatError(f"{origin}:{lineno} 列表项不能再套一层 []，{_SUBSET}")
+    quoted = len(v) > 1 and v[0] in "\"'" and v[-1] == v[0]
+    if not quoted and ": " in v:
+        raise CardFormatError(f"{origin}:{lineno} 值里有 ': '，整个值要用引号包起来")
+    return _unquote(v)
+
+
+def _inline_list(value: str, origin, lineno):
+    inner = _strip_comment(value)[1:-1].strip()
+    items = []
+    for part in inner.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if part[0] in "[{":
+            raise CardFormatError(f"{origin}:{lineno} 行内列表里又套了一层，{_SUBSET}")
+        items.append(_unquote(part))
+    return items
+
+
+def _parse_pairs(lines, origin, start, end_marker, lineno0=1):
+    """按 CARD-CONVENTION 的子集读 `key: value`，返回 (meta, 结束行偏移或 None)。
+
+    frontmatter 与卡体 '## 边界' 节共用这一个 tokenizer：两处各写一遍迟早漂。
+    backlog.config.yml 是别人家的文件，仍走下面的宽容解析，不进这里。
+    """
+    meta, pending, awaiting = {}, None, False
+    for offset in range(start, len(lines)):
+        raw = lines[offset]
+        lineno = lineno0 + offset
+        if end_marker is not None and raw.strip() == end_marker:
+            return meta, offset
+        if not raw.strip():
+            continue
+        lead = raw[: len(raw) - len(raw.lstrip())]
+        if "\t" in lead:
+            raise CardFormatError(f"{origin}:{lineno} 用制表符缩进，改成空格")
+        stripped = raw.strip()
+        if stripped.startswith("#"):
+            # 单个 # 当 YAML 注释；'## ' 往上才是卡体的节标题，多半说明 '---' 忘了闭合
+            if end_marker is not None and re.match(r"^#{2,6}\s", stripped):
+                return meta, None
+            continue
+        if stripped.startswith("-"):
+            if not stripped.startswith("- "):
+                raise CardFormatError(f"{origin}:{lineno} '-项' 少空格：写成 '- 项'")
+            if pending is None:
+                raise CardFormatError(f"{origin}:{lineno} '- 项' 上面没有可挂靠的 key:")
+            if not awaiting:
+                raise CardFormatError(f"{origin}:{lineno} '{pending}' 已经有值，'- 项' 接不到它下面")
+            if meta[pending] is _PENDING:
+                meta[pending] = []
+            item = stripped[2:]
+            if re.match(r"^[\w.-]+:(\s|$)", item):
+                raise CardFormatError(f"{origin}:{lineno} 列表项里又开了键（嵌套结构），{_SUBSET}")
+            meta[pending].append(_scalar(item, origin, lineno))
+            continue
+        if lead:
+            why = "键下又套了键（嵌套 map）" if ":" in stripped else "缩进的续行属于多行值"
+            raise CardFormatError(f"{origin}:{lineno} {why}，{_SUBSET}")
+        m = re.match(r"^([\w-]+):(.*)$", stripped)
+        if not m:
+            raise CardFormatError(f"{origin}:{lineno} 看不懂的行，{_SUBSET}")
+        key, value = m.group(1), _strip_comment(m.group(2))
+        if key in meta:
+            raise CardFormatError(f"{origin}:{lineno} 重复键 '{key}'，后写的会静默盖掉前面的")
+        pending = key
+        if value == "":
+            meta[key] = _PENDING
+            awaiting = True
+        elif value.startswith("[") and value.endswith("]"):
+            meta[key] = _inline_list(value, origin, lineno)
+            awaiting = False
+        elif value.startswith("["):
+            raise CardFormatError(f"{origin}:{lineno} 行内列表缺 ']'，{_SUBSET}")
+        else:
+            meta[key] = _scalar(value, origin, lineno)
+            awaiting = False
+    return meta, None
+
+
+def _finish(meta):
+    return {k: ("" if v is _PENDING else v) for k, v in meta.items()}
+
+
+def parse_frontmatter(path: Path, text=None):
+    """解析 Backlog 卡的 frontmatter；子集外的写法抛 CardFormatError 并带行号。"""
+    if text is None:
+        text = path.read_text(encoding="utf-8")
+    if text.startswith("\ufeff"):
+        raise CardFormatError(f"{_origin(path)}:1 文件带 BOM，请另存为无 BOM 的 UTF-8")
     if not text.startswith("---"):
         return None, text
-    lines = text.splitlines()[1:]
-    meta, current_key, body_start = {}, None, 0
-    for i, line in enumerate(lines):
-        if line.strip() == "---":
-            body_start = i + 1
-            break
-        m = re.match(r"^([\w-]+):\s*(.*)$", line)
-        if m and not line.startswith((" ", "\t")):
-            current_key = m.group(1)
-            val = re.split(r"\s+#", m.group(2).strip())[0].strip()
-            if val.startswith("[") and val.endswith("]"):
-                inner = val[1:-1].strip()
-                meta[current_key] = (
-                    [x.strip().strip('"').strip("'") for x in inner.split(",") if x.strip()]
-                    if inner else []
-                )
-            elif val == "":
-                meta[current_key] = []
-            else:
-                meta[current_key] = val.strip('"').strip("'")
-        elif line.lstrip().startswith("- ") and current_key is not None and isinstance(
-            meta.get(current_key), list
-        ):
-            meta[current_key].append(line.lstrip()[2:].strip().strip('"').strip("'"))
-    body = "\n".join(lines[body_start:])
-    return meta, body
+    lines = text.splitlines()
+    meta, end = _parse_pairs(lines, _origin(path), 1, "---")
+    if end is None:
+        raise CardFormatError(
+            f"{_origin(path)}:1 frontmatter 没有结束的 '---'，后面整段会被当成正文")
+    return _finish(meta), "\n".join(lines[end + 1:])
 
 
 def _yaml_scalar(text: str, key: str):
@@ -89,7 +200,7 @@ def _yaml_scalar(text: str, key: str):
 
 
 def _yaml_list_under(text: str, key: str):
-    """取某 key 下的 '- item' 列表或行内 [a, b]（浅层，容忍缩进）。"""
+    """取某 key 下的 '- item' 列表或行内 [a, b]。只用于 backlog 自己的配置文件（宽容）。"""
     items, in_block = [], False
     for line in text.splitlines():
         m = re.match(rf"^\s*{key}:\s*(.*)$", line)
@@ -127,28 +238,49 @@ def load_config():
     return ROOT / dirname / "tasks", columns
 
 
-def parse_boundary(body: str):
-    """提取卡体 '## 边界' 节的 allowed_paths / forbidden_paths。"""
+def parse_boundary(body: str, origin, body_first_line=1):
+    """提取卡体 '## 边界' 节的 allowed_paths / forbidden_paths（与 frontmatter 同一套子集）。"""
     m = re.search(r"^##\s*边界\s*$", body, re.M)
     if not m:
         return [], [], False
     rest = body[m.end():]
     nxt = re.search(r"^##\s+", rest, re.M)
     section = rest[: nxt.start()] if nxt else rest
-    return _yaml_list_under(section, "allowed_paths"), _yaml_list_under(
-        section, "forbidden_paths"
-    ), True
+    lineno0 = body_first_line + body[: m.end()].count("\n")
+    pairs, _ = _parse_pairs(section.splitlines(), origin, 0, None, lineno0=lineno0)
+    pairs = _finish(pairs)
+
+    def as_list(key):
+        val = pairs.get(key, [])
+        if val in ("", None):
+            return []
+        return val if isinstance(val, list) else [str(val)]
+
+    return as_list("allowed_paths"), as_list("forbidden_paths"), True
 
 
 def load_cards(tasks_dir: Path):
-    cards = []
+    """读卡目录。返回 (卡片, 格式错误) —— 写错的卡绝不静默跳过或给错值。"""
+    cards, errors = [], []
     if not tasks_dir.exists():
-        return cards
+        return cards, errors
     for p in sorted(tasks_dir.glob("*.md")):
-        meta, body = parse_frontmatter(p)
-        if not meta or "id" not in meta:  # 非卡片文件（如 README）
+        text = _read_text(p)
+        if text is None:
             continue
-        allowed, forbidden, has_boundary = parse_boundary(body)
+        if not (text.startswith("---") or text.startswith("\ufeff---")):
+            continue  # 不是卡片（如目录说明 README）
+        try:
+            meta, body = parse_frontmatter(p, text)
+            if not meta or "id" not in meta:
+                continue
+            lines = text.splitlines()
+            body_first_line = lines.index("---", 1) + 2  # 卡体首行的 1-based 行号
+            allowed, forbidden, has_boundary = parse_boundary(
+                body, _origin(p), body_first_line=body_first_line)
+        except CardFormatError as e:
+            errors.append(str(e))
+            continue
         assignees = meta.get("assignee") or []
         if isinstance(assignees, str):
             assignees = [assignees]
@@ -162,7 +294,7 @@ def load_cards(tasks_dir: Path):
             "forbidden": forbidden,
             "has_boundary": has_boundary,
         })
-    return cards
+    return cards, errors
 
 
 def iter_files():
@@ -187,11 +319,14 @@ def check_names():
     return not bad
 
 
-def check_tasks(cards, columns):
+def check_tasks(cards, columns, card_errors=()):
     ok = True
+    for err in card_errors:
+        ok = False
+        print(f"[卡格式] {err}")
     if not cards:
         print("[任务卡] 无任务卡")
-        return True
+        return True if not card_errors else False
     doing_by = {}
     for c in cards:
         problems = []
@@ -341,13 +476,13 @@ def main():
     run_all = not (args.names or args.tasks or args.diff or args.stale)
 
     tasks_dir, columns = load_config()
-    cards = load_cards(tasks_dir)
+    cards, card_errors = load_cards(tasks_dir)
 
     ok = True
     if run_all or args.names:
         ok &= check_names()
     if run_all or args.tasks:
-        ok &= check_tasks(cards, columns)
+        ok &= check_tasks(cards, columns, card_errors)
     if run_all or args.diff:
         ok &= check_diff(cards)
     if run_all or args.stale:

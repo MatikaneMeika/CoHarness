@@ -2,6 +2,7 @@
 
 只在骨架库自己的测试里用，不进任何骨架分发物（ADR-10：分发面保持纯标准库零依赖）。
 """
+import importlib.util
 import os
 import shutil
 import subprocess
@@ -18,6 +19,21 @@ HOOK_SRC = SKELETON / "scripts" / "hooks" / "pre-commit"
 # 测试身份用 -c 注入，不读也不改用户全局配置
 GIT_ID = ["-c", "user.name=coharness-test", "-c", "user.email=coharness-test@invalid",
           "-c", "commit.gpgsign=false", "-c", "core.autocrlf=false"]
+
+
+def load_check_module():
+    """把骨架里的 check.py 当模块载入，只用于解析器的单元测试（不跑它的 main）。"""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("coh_check", CHECK_SRC)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def load_cards_fixture(name):
+    """取 tests/fixtures 下的夹具路径。"""
+    return REPO / "tests" / "fixtures" / name
 
 
 def run(argv, cwd=None, native_env=False):

@@ -11,7 +11,7 @@
 2. **subprocess 全字面量**：所有子进程调用的参数列表均为硬编码字面量（`git` / `backlog` / `<当前解释器> scripts/check.py`，解释器取 `sys.executable` 而非 PATH 上的别名），shell=False，用户输入只作为工作目录（cwd）；子进程输出一律显式按 utf-8 解码
 3. **无动态执行**：不使用 eval / exec / 动态 import
 4. **文件操作范围**：`init` 只向目标目录写入骨架文件与适配指针；`sync` 只执行 `git pull --ff-only`；`check` / `improve` 只读项目文件；`doctor` 只探测 PATH
-5. **pre-commit 钩子**：仅执行 `python scripts/check.py`（本仓库自带、可读、约 300 行纯标准库），不做其他任何事
+5. **pre-commit 钩子**：仅执行 `python scripts/check.py`（本仓库自带、可读、五百行内纯标准库），不做其他任何事
 
 ## 供应链建议
 
