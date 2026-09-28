@@ -1,0 +1,8 @@
+# 由 CoHarness 装机带入：执法面的脚本与钩子必须逐字节可审计，换行钉在 LF
+* text=auto
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+scripts/hooks/pre-commit text eol=lf

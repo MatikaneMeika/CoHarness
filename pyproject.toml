@@ -1,0 +1,74 @@
+# CoHarness — 骨架库与工具链
+#
+# 打包原则（ADR-10：依赖面按分发面分层）：
+#   * 运行期零第三方依赖——wsc.py / maintain.py / evolve.py / scripts/check.py 全用标准库；
+#     python-frontmatter 只作为**开发期差分预言机**放在 dev extra，绝不进运行时路径。
+#   * 单文件模式必须继续可用：`curl -O .../wsc.py` 后 `python wsc.py init ...` 照旧工作，
+#     所以这里只是把整库装成包给想要 `wsc` 命令的人，不改动源码结构。
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "coharness"
+version = "1.1.0"
+description = "四套 Markdown 协作骨架 + 零依赖工具链：让多个 AI 工具在同一个仓库里不打架"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+keywords = ["agent", "harness", "backlog", "multi-agent", "pre-commit", "skeleton"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development :: Version Control :: Git",
+    "Topic :: Utilities",
+]
+
+[project.urls]
+Homepage = "https://github.com/MatikaneMeika/CoHarness"
+Changelog = "https://github.com/MatikaneMeika/CoHarness/blob/main/docs/CHANGELOG.md"
+Security = "https://github.com/MatikaneMeika/CoHarness/blob/main/SECURITY.md"
+
+[project.scripts]
+wsc = "coharness.wsc:main"
+coharness-maintain = "coharness.maintain:main"
+coharness-evolve = "coharness.evolve:main"
+
+# 开发期工具（差分预言机）。没装它们，`python -m unittest discover -s tests` 照样全绿，
+# 只是那 4 条对照用例自动 skip。
+[project.optional-dependencies]
+dev = ["python-frontmatter>=1.1.0", "PyYAML>=6.0"]
+
+[tool.setuptools]
+# 把仓库根当包根：源码文件仍留在原位，curl 单文件与 pip 安装共用同一份代码
+package-dir = { "coharness" = "." }
+packages = ["coharness"]
+include-package-data = false
+
+[tool.setuptools.package-data]
+# 打包用的 glob 走 unix 语义：`*` 不匹配以点开头的名字，所以 `.agent/` 与 `.gitignore`
+# 必须逐条写死；漏一条的后果是 pip 装出来的骨架缺文件而源码树里看不出来。
+# 由 tests/test_distribution_surface.py::test_package_data_covers_every_shipped_file 钉住。
+coharness = [
+    "0*/*.md",
+    "0*/.gitignore",
+    "0*/.gitattributes",
+    "0*/*/*.md",
+    "0*/*/*.py",
+    "0*/*/*.yml",
+    "0*/*/*/*.md",
+    "0*/.agent/*.md",
+    "0*/.agent/*/*.md",
+    "0*/scripts/hooks/pre-commit",
+    "ROUTER.md",
+    "SECURITY.md",
+    "CONTRIBUTING.md",
+    "README.md",
+    "README.en.md",
+    "LICENSE",
+    "docs/*.md",
+    "docs/rfcs/*.md",
+    "skills/collab-zone/SKILL.md",
+]

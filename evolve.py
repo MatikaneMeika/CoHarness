@@ -23,8 +23,11 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import wsc  # noqa: E402  同目录的开发/装机共享工具；ROOT 与调用形状都在那边
+try:                      # 装成包时（pip install coharness）走相对导入
+    from . import wsc
+except ImportError:       # curl 单文件 / clone 后直接跑脚本时的形状
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import wsc
 
 ROOT = wsc.ROOT
 _run = wsc._run

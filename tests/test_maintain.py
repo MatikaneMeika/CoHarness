@@ -69,6 +69,15 @@ class Maintain(unittest.TestCase):
         proto.write_text(proto.read_text(encoding="utf-8").replace(str(H.REPO), "<骨架库>"),
                          encoding="utf-8", newline="\n")
 
+    def test_lock_is_portable_no_machine_paths(self):
+        """指纹要能提交进项目仓库：里面不许有本机绝对路径。"""
+        proj = self.fresh("03")
+        self.assertEqual(maintain("lock", str(proj)).returncode, 0)
+        text = self.proj_lock(proj).read_text(encoding="utf-8")
+        self.assertNotIn(str(H.REPO), text)
+        self.assertNotIn(str(self.tmp), text)
+        self.assertIn("可以提交", H.out(maintain("lock", str(proj))))
+
     def test_lock_records_the_fingerprint(self):
         proj = self.fresh("03")
         r = maintain("lock", str(proj))

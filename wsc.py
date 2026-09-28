@@ -192,6 +192,15 @@ def discover_skeletons():
     )
 
 
+NO_SKELETON_HINT = (
+    "这里没找到骨架目录（{} 下没有 01- 到 04- 的目录）。\n"
+    "单文件模式只能跑项目内的日常命令（sync / check / claim / stats / improve / doctor）；"
+    "装机要拿到骨架本体，二选一：\n"
+    "  git clone https://github.com/MatikaneMeika/CoHarness.git  然后 python CoHarness/wsc.py init <骨架> <路径>\n"
+    "  pipx install coharness（或 pip install coharness）      然后 wsc init <骨架> <路径>"
+)
+
+
 def resolve_skeleton(name: str) -> Path:
     """支持全名、编号或任意段前缀匹配，如 solo / 03 / study / office。"""
     skeletons = discover_skeletons()
@@ -206,6 +215,8 @@ def resolve_skeleton(name: str) -> Path:
         return matches[0]
     if len(matches) > 1:
         sys.exit(f"骨架名 '{name}' 有歧义: {[m.name for m in matches]}")
+    if not skeletons:
+        sys.exit(f"未找到骨架 '{name}'。{NO_SKELETON_HINT.format(ROOT)}")
     sys.exit(
         f"未找到骨架 '{name}'。可用骨架: {[s.name for s in skeletons]}"
     )
@@ -352,8 +363,12 @@ def write_minimal_mode(dst: Path):
 
 
 def cmd_list(_args):
+    skeletons = discover_skeletons()
+    if not skeletons:
+        print(f"可用骨架: 无——{NO_SKELETON_HINT.format(ROOT)}")
+        return
     print("可用骨架:")
-    for s in discover_skeletons():
+    for s in skeletons:
         desc = ""
         readme = s / "AGENTS.md"
         if readme.exists():

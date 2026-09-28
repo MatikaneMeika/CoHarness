@@ -21,8 +21,13 @@
 
 ## 供应链建议
 
-- 引导安装用 `git clone`（全量、可审计）或 `curl` 单文件 `wsc.py`；**建议按 release tag 固定版本**下载，不要盲拉 main
+- 引导安装的两条路都可审计：`git clone` 整库（骨架与脚本都在，逐文件可读），或 `pipx install coharness` /
+  `pip install coharness`（包内容可用 `python -m zipfile -l` 打开 wheel 核对，清单由
+  `tests/test_packaging.py` 钉住——只装该装的，运行期零第三方依赖）。**建议按 release tag 固定版本**，不要盲拉 main
+- **不要指望只下载 `wsc.py` 单文件去装骨架**：装机要复制骨架本体，而骨架文件就在 `wsc.py` 旁边；
+  单文件只适合在已装好的项目里跑日常命令（`init` 会把这条边界直接说出来）
 - 实例化后先读一遍项目内 `AGENTS.md` 与 `scripts/check.py` 再开工——整个执法面就这两个文件加一个 pre-commit 钩子
+
 
 ## 实例化项目的数据安全
 

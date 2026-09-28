@@ -2,6 +2,30 @@
 
 > 格式：`- YYYY-MM-DD [晋升 I-xxx@来源项目] 摘要`；非晋升的本体演进用 `[演进]` 标签，缺陷修复用 `[缺陷修复]` 并附复现方式。只增不改。
 
+- 2026-09-28 [演进] **发布工程：pip 可装、边界说清、验收对照成文**（计划书 W3 的代码侧 + 第 7 节对照）：
+  ① 新增 `pyproject.toml`——三个面各给一个入口（`wsc` / `coharness-maintain` / `coharness-evolve`），
+  骨架与文档作 package-data 随包走，**运行期依赖列表为空**（`python-frontmatter` 只进 `dev` extra，
+  当差分预言机用，不进任何运行时路径，ADR-10）；`maintain.py`/`evolve.py` 改成双形态导入
+  （装成包走 `from . import wsc`，clone/curl 直跑走同目录 `import wsc`）。
+  本地实测：`uv build --wheel` → 干净 venv `pip install --no-build-isolation ./` →
+  `wsc list` 列四套骨架、`wsc init 03` 复制出 26 个文件、`wsc check` 全绿。
+  ② **改掉两条说谎的承诺**：README/SECURITY 原写"只下载 `wsc.py` 单文件即可 `init` 装骨架"——
+  骨架文件就在 `wsc.py` 旁边，单文件根本没有它们（复现：把 `wsc.py` 单独拷进空目录跑 `init`，
+  旧行为是报"可用骨架: []"却不解释）。现在文档写清边界，`init` 与 `list` 在无骨架目录时直接给出
+  `git clone` / `pipx install coharness` 两条可执行替代；顺手为四套骨架补 `.gitattributes`
+  （装机后首次 `git add` 的 24 条 CRLF 警告归零，执法面脚本与钩子在下游也钉 LF）。
+  ③ 装机指纹改为**可提交**：`maintain.py lock` 不再写本机绝对路径（队友与 CI 都要能看出 schema 漂了没）。
+  ④ W9 的"公开演示项目"落地为 `docs/demo/migrate_demo.py` + `docs/DEMO-migrate.md` 实跑记录
+  （v1 形态是本轮改动之前的真实样子：`<骨架库>` 散文占位符、旧认领句、`.cursorrules`、缺降级节；
+  dry-run 前后 `git status` 一致、`--yes` 前自动建 `coh-backup-*`、幂等、无仓库拒绝落盘）。
+  ⑤ 双语 README 互链；`.github/ISSUE_TEMPLATE` 两模板 + PR 模板 + `CONTRIBUTING.md` 在 W14 已备，
+  发布清单与草稿见 `docs/RELEASE-v1.1.0.md`（**打标 / Release / PyPI / Actions 首跑属对外动作，未执行**）。
+  ⑥ 九项验收指标逐条对照写在 `docs/ACCEPTANCE-v1.1.md`：已证 4 项（stats/claim/migrate/adapters），
+  部分成立 2 项（CI 本地绿但 Actions 未首跑、pip 已测但 pipx 与 Release 待执行 + 计时未在 CI 做），
+  机制就绪但数据待发布 2 项（CHANGELOG 三证的第一条、克隆→开工 CI 计时），明确未成立 1 项（社区 star/外部 PR）。
+  证据：新增 `tests/test_packaging.py` 6 条 + `tests/test_maintain.py` 加 1 条（指纹可移植）；
+  全套 206 条 OK（skipped=4，expected failures=1），带预言机跑同一命令 skipped=0
+
 - 2026-09-28 [演进] **适配语义桥、契约通知、社区文档三件**（计划书 W10 + W13 + W14）：
   ① `--adapter` 不再给各家写"同一句中文指针塞进五种文件名"，改为**按各家原生语法生成**——
   `.cursor/rules/coharness.mdc`（frontmatter `alwaysApply: true`）、`.windsurf/rules/coharness.md`

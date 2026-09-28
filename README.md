@@ -8,6 +8,8 @@
 
 ## 快速开始
 
+[English](README.en.md) · 中文
+
 ```bash
 git clone https://github.com/MatikaneMeika/CoHarness
 python CoHarness/wsc.py init <骨架> <目标路径>    # 骨架: solo / study / multi / doc，或 01-04
@@ -15,12 +17,17 @@ python CoHarness/wsc.py init <骨架> <目标路径>    # 骨架: solo / study /
 
 然后在项目里对 harness 说「开工：<任务描述>」。它会按项目内 AGENTS.md 里的约定干活。这套约定写一次，之后换工具、换会话都不用重讲。
 
-不想 clone 全库的话，也可以只下载 wsc.py 单文件（建议按 release tag 取，别盲拉 main）：
+想要一个能直接敲的 `wsc` 命令（骨架与三个脚本一起装进环境，运行期仍零第三方依赖）：
 
 ```bash
-curl -fsSL https://github.com/MatikaneMeika/CoHarness/raw/main/wsc.py -o wsc.py
-python wsc.py init <骨架> <目标路径>
+pipx install coharness     # 或 pip install coharness
+wsc init 03 ./my-project
 ```
+
+**只下载 `wsc.py` 一个文件是不够的**——装机要复制骨架本体，而骨架文件就在 `wsc.py` 旁边；
+单文件模式能跑的是**已在用的项目里的日常命令**（sync / check / claim / stats / improve / doctor），
+`init` 会当场把这条边界说清楚（`git clone` 整库，或 `pipx install coharness`，二选一）。
+本仓库不联网取模板：那条路会把"clone 即用"换成"运行时依赖远端"（理由见 `docs/EVOLUTION-PLAN.md` 的 ADR-10）。
 
 ## 会自己进化的模板
 
@@ -83,7 +90,7 @@ python maintain.py audit   <项目>   # 只读体检：钩子在不在/被没被
 python evolve.py  <项目> --out 记录.json   # 晋升审核：机器取客观证据，人填有效性与必要性
 ```
 
-仓库自带 199 条自测，跑起来不需要装任何东西：
+仓库自带 206 条自测，跑起来不需要装任何东西：
 
 ```bash
 python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows × py3.11/3.13 上跑同样的命令

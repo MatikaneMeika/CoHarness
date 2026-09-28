@@ -20,8 +20,11 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import wsc  # noqa: E402  复用 ROOT / _run / 骨架发现，不在本文件里重写一套
+try:                      # 装成包时（pip install coharness）走相对导入
+    from . import wsc
+except ImportError:       # curl 单文件 / clone 后直接跑脚本时的形状
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import wsc
 
 ROOT = wsc.ROOT
 _run = wsc._run
@@ -50,15 +53,16 @@ def cmd_lock(args):
     if skeleton is None:
         sys.exit(f"[lock] {project} 里找不到 AGENTS.md，看不出是哪套骨架")
     rev = wsc._git_field(["git", "rev-parse", "--short", "HEAD"], ROOT)
+    # 指纹里不写本机绝对路径：它是要提交进项目仓库的共享事实（队友与 CI 都要能看出 schema 漂了没）
     entry = {"skeleton": skeleton.name, "skeleton_commit": rev[1] if rev[0] == "ok" else "",
-             "schema": SCHEMA, "library": str(ROOT),
+             "schema": SCHEMA,
              "adapters": _adapters_present(project), "locked_at": f"{datetime.now():%Y-%m-%d %H:%M}",
              "check_sha256": _sha(project / "scripts" / "check.py")}
     f = project / LOCK_NAME
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(json.dumps(entry, ensure_ascii=False, indent=1) + "\n",
                  encoding="utf-8", newline="\n")
-    print(f"[lock] 已写 {f}")
+    print(f"[lock] 已写 {f}（这份指纹可以提交进项目仓库：不含本机路径）")
     for k in ("skeleton", "skeleton_commit", "schema", "check_sha256"):
         print(f"  {k} = {entry[k]}")
 
@@ -110,7 +114,7 @@ def up_ignore_telemetry(project: Path, apply_changes):
     if apply_changes:
         f.write_text((text.rstrip() + "\n\n# 本地运行记账（不进版本库）\n" + TELEMETRY_IGNORE + "\n"),
                      encoding="utf-8", newline="\n")
-    return [f"待改：{f.name} 追加 '{TELEMETRY_IGNORE}'"]
+    return [f"{'已追加' if apply_changes else '待追加'}：{f.name} 里补 '{TELEMETRY_IGNORE}'"]
 
 
 def up_library_paths(project: Path, apply_changes):
@@ -127,8 +131,8 @@ def up_library_paths(project: Path, apply_changes):
             p.write_text(new, encoding="utf-8", newline="\n")
     if not hits:
         return ["已到位：文档里的库路径都已代入本机绝对路径"]
-    verb = "已改写" if apply_changes else "待改写"
-    return [f"{verb}：{', '.join(hits)} 里还有 <骨架库>/<CoHarness>"]
+    return [f"{'已改写' if apply_changes else '待改写'}："
+            f"{', '.join(hits)}（原本写着 <骨架库>/<CoHarness>）"]
 
 
 def up_claim_line(project: Path, apply_changes):
@@ -146,7 +150,8 @@ def up_claim_line(project: Path, apply_changes):
             f"（同步+校验+提交+推送绑成一步，被抢就还原并列出可认领的卡）")
     if apply_changes:
         f.write_text(text.replace(m.group(0), line, 1), encoding="utf-8", newline="\n")
-    return ["待改：认领条款换成 wsc claim 首选（原句：'认领 = -a <标识> -s doing'）"]
+    return [f"{'已改为' if apply_changes else '待改'}：认领条款首选 wsc claim"
+            f"（原句：'{m.group(0)[:36]}…'）"]
 
 
 def up_degrade_section(project: Path, apply_changes):
@@ -168,8 +173,7 @@ def up_degrade_section(project: Path, apply_changes):
     section = section.replace("{{COHARNESS_LIB}}", str(ROOT))
     if apply_changes:
         f.write_text(text.rstrip() + "\n" + section, encoding="utf-8", newline="\n")
-    return [f"待补：从 {skeleton.name} 搬「降级行为」节进 AGENTS.md"]
-
+    return [f"{'已补' if apply_changes else '待补'}：从 {skeleton.name} 搬「降级行为」节进 AGENTS.md"]
 
 def up_native_adapters(project: Path, apply_changes):
     """v2→v3：旧单文件适配（.cursorrules / .windsurfrules）换成对应工具的原生目录格式。
