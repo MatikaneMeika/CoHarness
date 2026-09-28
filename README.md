@@ -60,6 +60,14 @@ python wsc.py doctor           # 依赖自检
 python wsc.py list             # 骨架列表
 ```
 
+仓库自带 86 条自测，跑起来不需要装任何东西：
+
+```bash
+python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows × py3.11/3.13 上跑同样的命令
+```
+
+覆盖的是承诺本身：check.py 的每条执法（命名、卡格式、认领冲突、改动挂卡、stale）、pre-commit 端到端拦与放、`wsc init` 在各种目标目录下的行为、四套骨架的目录地图与占位符是否自洽。另有一条差分测试拿 `python-frontmatter` 当预言机对照自写解析器——那是开发期的事，没装就自动跳过，不影响上面这条命令，也不进任何骨架。
+
 ## 工具怎么接
 
 多数主流 harness 会自动读项目根的 AGENTS.md（ZCode、Codex、Qoder、opencode、Copilot CLI 这些都是）。只认自家文件的工具，init 时加 `--adapter claude,gemini,cursor,copilot,windsurf`（或 all），会生成一行指针文件，内容就一句"读 AGENTS.md，以其为准"。支持 skills 的工具可以选装 `skills/collab-zone/`（复制过去、改一行路径），不装也不影响使用。

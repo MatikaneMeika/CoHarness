@@ -1,0 +1,43 @@
+name: CI
+
+# 两个 job 的分工：
+#   stdlib —— 分发物承诺的那条路径：不装任何包，`python -m unittest discover -s tests` 必须绿
+#   oracle —— 开发期差分预言机（python-frontmatter）真跑，验证自写子集解析器没读错
+#
+# 本机没有 act / docker，这个文件写下来但没在本地跑过 Actions；首次真跑发生在 push 之后。
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  stdlib:
+    name: 零依赖自测 ${{ matrix.os }} py${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: git 版本（钩子端到端测试要用 sh 跑 pre-commit）
+        run: git --version
+      - name: unittest（不安装任何依赖）
+        run: python -m unittest discover -s tests -v
+
+  oracle:
+    name: 差分预言机对照（python-frontmatter）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - name: 装开发期预言机（不进分发物）
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python python-frontmatter pyyaml
+      - name: 全套测试（此时差分用例不 skip）
+        run: .venv/bin/python -m unittest discover -s tests -v

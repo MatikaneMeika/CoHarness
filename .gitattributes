@@ -1,0 +1,6 @@
+# 执法面要能被逐字节审计：脚本与钩子的换行钉在 LF
+* text=auto
+*.py text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+scripts/hooks/pre-commit text eol=lf
