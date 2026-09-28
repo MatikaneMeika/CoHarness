@@ -2,6 +2,36 @@
 
 > 格式：`- YYYY-MM-DD [晋升 I-xxx@来源项目] 摘要`；非晋升的本体演进用 `[演进]` 标签，缺陷修复用 `[缺陷修复]` 并附复现方式。只增不改。
 
+- 2026-09-28 [演进] **骨架自己声明 schema，migrate 补齐计划书点名的三项 v1 遗留**（W9 自查续）：
+  四套骨架的项目卡新增 `| 骨架 schema | 3 |` 一行——计划书写的是"骨架文件头加 schema"，之前只把版本放在
+  `maintain.py` 常量与锁文件里，等于**没装过指纹的老项目说不清自己是哪版**；现在 schema 有三个来源，
+  `migrate` 会在标题行说明用的是哪个（`←指纹` / `←AGENTS.md 声明` / 都没有才按 v1 猜），
+  并由 `tests/test_maintain.py::test_skeleton_declares_its_schema_and_it_matches_maintain` 钉住
+  "骨架声明 == `maintain.SCHEMA`"，两个来源不许漂。
+  v1→v2 的步骤从四条补到七条，多出的三条正是计划书点名的演示内容：**删常驻规则卡 `T-000-board.md`**
+  （I-001 之后它是反模式）、**`backlog/config.yml` 改成本骨架四列 `statuses`**（真工具默认英文三列，
+  不改则 `-s doing` 被工具拒）、**刷新 I-001 之前那版不认识自授权的 `check.py`**
+  （只在缺 `SELF_AUTHORIZED` 这个明确旧版特征时覆盖，其它差异交 `audit` 报漂移，不静默改人家的执法脚本）。
+  `docs/demo/migrate_demo.py` 的 v1 夹具同步造出这三项遗留，演示实跑从"4 步待办"变"7 步待办"、
+  核对项 7→10 全 OK，`docs/DEMO-migrate.md` 按新实跑输出重写（不是手改文字）。
+  另修一处自查时暴露的顺序缺陷：`migrate --yes` 原来在"已是最新 schema"分支里提前返回，
+  非 git 仓库也就没机会被拒绝——现在建不了备份分支就**先拒**，再谈有没有步骤。
+
+- 2026-09-28 [缺陷修复] **对照计划书自查出的四处"说了但没做"**（我自己上一轮报"完成"时打的折扣，逐条补）：
+  ① A3 的"同类摩擦 **≥2 才允许进待审**"只被 `improve --cross` 数出来，没写进门禁口径——
+  `docs/EVOLUTION-PROCESS.md` 状态机"待审"行现在明确要求跨项目 ≥2，并指名去哪数；
+  复现方式：`grep ≥2` 在待审行原本为 0 命中，新增 `tests/test_improve.py::test_pending_review_gate_requires_cross_project_count`。
+  ② B3 承诺的机器客观维度里有 **fingerprint 校验**，`evolve.py` 一行都没实现——
+  现在每条待审项都带 `装机指纹` 结论（缺 / 在 / schema 漂移三态，缺时给出 `maintain.py lock` 命令），
+  记录 json 与终端输出各一份；`tests/test_evolve.py::test_fingerprint_check_distinguishes_missing_present_drifted`。
+  ③ C4 点名的两个 audit 检测器都没有：**`.agent/` 外的 improvements 写入痕迹**（按 `| I-0xx |` 表格形状扫，
+  命中即判"登记表写错位置"——写在别处的条目 improve/evolve 读不到，等于没登记）与
+  **merge/rebase 这类不跑钩子的入口**（列最近 merge 提交与 reflog 痕迹，只点名不定罪，是否非法看合成态那一条）；
+  `tests/test_maintain.py` 新增两条对应断言。
+  ④ C5 写了"Copilot 带 YAML 头"却只生成纯文本 `.github/copilot-instructions.md`——补上官方路径特定指令格式
+  `.github/instructions/coharness.instructions.md`（`applyTo: '**'`，格式取自 GitHub 官方文档），
+  `ADAPTERS` 随之改成"一家可多文件"，`adapters --verify` 现在检查 6 个产物。 验证：`python -m unittest discover -s tests` 214 条 OK（skipped=4，expected failures=1）；带预言机跑同一命令 214 条 OK（skipped=0）；`docs/demo/migrate_demo.py` 实跑 10 项核对全 OK。
+
 - 2026-09-28 [晋升 I-005@.coh-pilot-03] **所有权表优先于卡片边界：补齐口径同步与测试**（三证齐全的第一条晋升）。改动两处：`03-multi-harness-project/.agent/tasks/CARD-CONVENTION.md` 规则 1 下加子款——两源冲突以 `AGENTS.md` 单写者所有权表为准，卡只能收窄不能把表里"只读"扩成可写，扩权先改表走规则卡 + ADR，并**明写当前 `check.py` 没有读所有权表做自动拦截**（仍是纪律层约束）；`tests/test_protocol_smoke.py::test_i_ownership_precedence_is_one_voice_in_both_docs` 钉住两份文件都得说这条，并钉住"check.py 里没有读所有权表的代码"这个事实——将来谁加拦截，就必须同时把两份文档的说法改真。
   三证：diff 位置 `CARD-CONVENTION.md 规则 1 子款（2 行）+ tests/test_protocol_smoke.py（17 行）`，补丁 `D:/gongju/ai/VibeWorkspace/i005.patch`；来源项目 `.coh-pilot-03` I-005，触发事实为 `.coh-p2` 真会话 wt-b 提交 `58d9ce0`（照卡片边界改了 architect 独占的 `docs/ARCHITECTURE.md`）；测试运行标识 `trial-20260928-190816`（`evolve.py --apply-check` 的临时副本内 207 条 OK，skipped=7 = 3 条门禁 + 4 条预言机；副本新实例化项目全量 check rc=0）。审核存档连同机器取证与主观两维落在 `docs/audits/I-005-所有权表优先.md`。
   **如实记下流程偏差**：本条的裁决句本体（`03-multi-harness-project/AGENTS.md:36`）早在 commit `a90cf0c` 就已写回，而当时台账仍是「待审」——先写回、后审核，开的正是这条管线最该避免的先例。本次审核不掩盖它：CHANGELOG 与本行即为追认记录，补齐的是另外两处；往后晋升以 `--verify-record` 作硬门禁（缺「用户批准」一格就红，本轮已实测该格为空时确实红）。

@@ -85,12 +85,12 @@ python wsc.py list             # 骨架列表
 
 ```bash
 python maintain.py lock    <项目>   # 记装机指纹（骨架名 + 本体 commit + schema + check.py 哈希）
-python maintain.py migrate <项目>   # 默认 dry-run；加 --yes 先建备份分支再落盘
-python maintain.py audit   <项目>   # 只读体检：钩子在不在/被没被改、指纹漂移、main 合成态合不合法
+python maintain.py migrate <项目>   # 按 schema 差值升级：默认 dry-run，加 --yes 先建备份分支再落盘
+python maintain.py audit   <项目>   # 只读体检：钩子在否/被没被改、指纹漂移、登记表写错位置、merge 这类不跑钩子的入口、main 合成态合不合法
 python evolve.py  <项目> --out 记录.json   # 晋升审核：机器取客观证据，人填有效性与必要性
 ```
 
-仓库自带 207 条自测，跑起来不需要装任何东西：
+仓库自带 214 条自测，跑起来不需要装任何东西：
 
 ```bash
 python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows × py3.11/3.13 上跑同样的命令
@@ -100,7 +100,7 @@ python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows × 
 
 ## 工具怎么接
 
-多数主流 harness 会自动读项目根的 AGENTS.md（ZCode、Codex、Qoder、opencode、Copilot CLI 这些都是）。只认自家文件的工具，init 时加 `--adapter claude,gemini,cursor,copilot,windsurf`（或 all）——生成的是各家**原生格式**（`.cursor/rules/coharness.mdc` 带 `alwaysApply`、`.windsurf/rules/coharness.md` 带 `trigger: always_on`、`CLAUDE.md`/`GEMINI.md` 用 `@AGENTS.md` 导入），内容只有指针与工具元数据，不复制第二份规则；`wsc adapters --verify` 当场查这一点。支持 skills 的工具可以选装 `skills/collab-zone/`（复制过去、改一行路径），不装也不影响使用。
+多数主流 harness 会自动读项目根的 AGENTS.md（ZCode、Codex、Qoder、opencode、Copilot CLI 这些都是）。只认自家文件的工具，init 时加 `--adapter claude,gemini,cursor,copilot,windsurf`（或 all）——生成的是各家**原生格式**（`.cursor/rules/coharness.mdc` 带 `alwaysApply`、`.windsurf/rules/coharness.md` 带 `trigger: always_on`、`CLAUDE.md`/`GEMINI.md` 用 `@AGENTS.md` 导入、Copilot 给两份：全局 `.github/copilot-instructions.md` + 路径特定 `.github/instructions/coharness.instructions.md`（YAML 头 `applyTo`）），内容只有指针与工具元数据，不复制第二份规则；`wsc adapters --verify` 当场查这一点。支持 skills 的工具可以选装 `skills/collab-zone/`（复制过去、改一行路径），不装也不影响使用。
 
 出现分歧时的裁决顺序：项目规则 > spec-kit 产物 > 任务卡 > 会话里的口头约定。
 

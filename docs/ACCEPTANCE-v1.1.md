@@ -1,7 +1,7 @@
 # 验收对照 — 优化计划书第 7 节的九项指标（截至 2026-09-28）
 
 口径只有一条：**本地能证的给证据，需要外部条件的写明"未成立"**，不混为已交付。
-全套自测：`python -m unittest discover -s tests` → **207 条 OK**（skipped=4 为差分预言机用例，
+全套自测：`python -m unittest discover -s tests` → **214 条 OK**（skipped=4 为差分预言机用例，
 装了 dev extra 后 skipped=0；expected failures=1 是 `I-004`）。
 
 | # | 阶段 | 指标 | 基线 | 目标 | 现在 | 证据 / 缺什么 |
@@ -12,7 +12,7 @@
 | 4 | P2 | telemetry / stats | 不可用 | 报告稳定生成，反哺登记门槛 | **已成立** | `tests/test_stats.py` 12 条（写入形状、`--no-track`、`COHARNESS_NO_TRACK`、不进版本库、遵循率算法、只读性、返工信号阈值与跨作者标注、stale 转述、坏行不致命）；反哺通道：`wsc improve --cross` + `evolve.py` 的普遍性取证（`tests/test_registry_cross.py` 10 条、`tests/test_evolve.py` 12 条） |
 | 5 | P2 | CHANGELOG 真实晋升 ≥1 条带三证 | 0 条 | ≥1 条带三证 | **已成立（第一条 I-005）** | `docs/CHANGELOG.md` 的 `[晋升 I-005@.coh-pilot-03]` 是第一条带满三证的行（run=trial-20260928-190816，存档 `docs/audits/I-005-所有权表优先.md`），同一条里也如实记下了 `a90cf0c` 先写回后审核的偏差。门禁本身：`evolve.py --verify-record` 要求主观两项 + 四项证据（含用户批准）齐，缺任一即红（`tests/test_evolve.py::test_missing_proof_blocks_promotion`）。更早的 I-001/I-002/I-003 发生在门禁之前，CHANGELOG 只增不改所以不回写 |
 | 6 | P2 | 并发 claim：一方失败且干净回滚 | 双写可能 | 一方失败且干净回滚 | **已成立（两层证据）** | 本地：`tests/test_claim.py::test_two_processes_claiming_the_same_card_exactly_one_wins`（真双进程）+ `test_parallel_race::test_b`（worktree 拓扑，xfail 已摘）。外部：`.coh-p4` 两个 `qodercli` 真会话抢同一张卡，a 进 main、b 被拒且未提交未推送（`docs/CHANGELOG.md` 演练取证行、`docs/rfcs/RFC-0001-认领原子化.md`） |
-| 7 | P2 | migrate 公开演示项目 1 个 | 无 | 公开演示项目 1 个 | **已成立（脚本 + 实跑记录）** | `docs/demo/migrate_demo.py`（clone 后可直接跑，零网络）+ `docs/DEMO-migrate.md` 的实跑输出；v1→v2→v3 每一步都对应本轮真实改动，含 dry-run 不写盘、备份分支、幂等、拒绝无仓库落盘（`tests/test_maintain.py` 15 条） |
+| 7 | P2 | migrate 公开演示项目 1 个 | 无 | 公开演示项目 1 个 | **已成立（脚本 + 实跑记录）** | `docs/demo/migrate_demo.py`（clone 后可直接跑，零网络）+ `docs/DEMO-migrate.md` 的实跑输出；v1→v2→v3 每一步都对应本轮真实改动，含 dry-run 不写盘、备份分支、幂等、拒绝无仓库落盘（`tests/test_maintain.py` 20 条） |
 | 8 | P3 | adapters verify：五工具 lint 全过 | 一行字 | 五工具 lint 全过 | **已成立** | `tests/test_adapters.py` 11 条：五家原生位置与语法（`.cursor/rules/*.mdc` 的 `alwaysApply`、`.windsurf/rules/*.md` 的 `trigger: always_on`、`CLAUDE.md`/`GEMINI.md` 的 `@AGENTS.md`、Copilot 纯文本）+ `adapters --verify` 对干净装机 rc=0、对"复制规则正文/缺 frontmatter/旧单文件残留"各判红；语法来源写在 `SOURCES` 里 |
 | 9 | P3 | 社区：≥50 star、≥1 外部 PR | 1 star | ≥50 star、≥1 外部 PR | **未成立（需要发布与时间）** | 前置件已就绪：`CONTRIBUTING.md`、Issue/PR 模板、RFC 档案、SECURITY 披露路径。本机登记表当前只有 1 条实例指纹（`.coh-p4/proj`），ADR-3 的"≥50 指纹"重启条件离成立还很远——这一格我不粉饰 |
 
@@ -25,6 +25,17 @@
   数字从文档撤掉，改由 `tests/test_distribution_surface.py` 用 AST + 行数上限钉住
   （分发面只用标准库、无网络符号、无 eval/exec；`wsc.py` ≤1250、`check.py` ≤650、
   `evolve.py` ≤400、`maintain.py` ≤700），并断言文档里不许再出现写死的行数。
+
+## 自查后仍存的两处口径差（不粉饰）
+
+计划书某些句子的实现形状与原话不完全一致，记录在此：
+
+- **W6 遥测字段**：原文写 `{ts, harness_id, checks_run, violations, card}`。实现是
+  `{ts, harness, checks{names/tasks/diff/stale 各自布尔}, rc, card, ms}`——没记"违规条数"而记"哪几项过没过"，
+  因为遵循率按检查项算比按条数算更稳（一条违规可能刷出多行输出）。字段名与 `SECURITY.md` 第 6 条一致。
+- **W5 的"与 ROUTER/骨架文件的机械冲突检测"**：实现到的是"提议落点预判 + 落点文件里已有多少行提到同一批路径"
+  这一层（`evolve.py` 的 `兼容性提示`），**不是**语义级矛盾判定——真正判断"新条款是否与既有条款打架"仍归五条标准里的
+  兼容性一条，由审核人判。要做成语义级检测需要先把规则文本结构化，那是另一件事。
 
 ## 仍未闭口的（下一轮候选）
 

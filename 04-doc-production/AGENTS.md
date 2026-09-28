@@ -6,6 +6,7 @@
 
 | 项 | 内容 |
 |---|---|
+| 骨架 schema | 3 |
 | 文档名 | {{DOC_NAME}} |
 | 读者 | {{AUDIENCE}} |
 | 字数目标 | {{WORD_TARGET}} |

@@ -186,7 +186,7 @@ def up_native_adapters(project: Path, apply_changes):
         f = project / old
         if not f.exists():
             continue
-        rel = wsc.ADAPTERS[name][0]
+        rel = wsc.ADAPTERS[name][0][0]
         notes.append(f"{'已迁移' if apply_changes else '待迁移'} {old} → {rel}")
         if apply_changes:
             wsc.write_adapters(project, name)
@@ -199,9 +199,74 @@ def up_native_adapters(project: Path, apply_changes):
     return ["跳过：项目里没有适配指针（装机时没要 --adapter，不该凭空生成）"]
 
 
+def declared_schema(project: Path):
+    """从项目 AGENTS.md 的项目卡读声明的骨架 schema；老项目没这行 → 算 1。
+
+    有了它，没装过指纹的项目也能说清自己是哪一版骨架，migrate 不必一律按 v1 猜。
+    """
+    f = project / "AGENTS.md"
+    if not f.exists():
+        return None
+    m = re.search(r"^\|\s*骨架 schema\s*\|\s*(\d+)\s*\|", f.read_text(encoding="utf-8"), re.M)
+    return int(m.group(1)) if m else None
+
+
+def up_drop_resident_card(project: Path, apply_changes):
+    """v1 遗留：常驻规则卡 T-000-board.md。I-001 晋升后它是反模式，留着会诱使人长持它。"""
+    f = project / "backlog" / "tasks" / "T-000-board.md"
+    if not f.exists():
+        return ["已到位：没有常驻规则卡（认领与登记已属自授权改动）"]
+    if apply_changes:
+        f.unlink()
+    return [f"{'已删除' if apply_changes else '待删除'}：{f.relative_to(project).as_posix()}"
+            "（常驻卡作废，见 I-001）"]
+
+
+def up_backlog_statuses(project: Path, apply_changes):
+    """v1 遗留：backlog/config.yml 的看板列。真工具默认英文三列，本骨架要四列且键名是 statuses。"""
+    f = project / "backlog" / "config.yml"
+    if not f.exists():
+        return ["跳过：项目里没有 backlog/config.yml（未装 backlog CLI 或最小模式）"]
+    text = f.read_text(encoding="utf-8")
+    want = "statuses: [todo, doing, review, done]"
+    if re.search(r"(?m)^statuses:\s*\[?\s*todo,\s*doing,\s*review,\s*done", text.replace("'", "").replace('"', "")):
+        return ["已到位：statuses 已是 todo/doing/review/done 四列"]
+    if re.search(r"(?m)^(columns|statuses):", text):
+        new = re.sub(r"(?m)^(columns|statuses):.*$", want, text)
+    else:
+        new = text.rstrip() + "\n" + want + "\n"
+    if apply_changes:
+        f.write_text(new, encoding="utf-8", newline="\n")
+    return [f"{'已改写' if apply_changes else '待改写'}：backlog/config.yml → {want}"
+            "（真工具默认 To Do/In Progress/Done，不改则 `-s doing` 被拒）"]
+
+
+def up_refresh_check_py(project: Path, apply_changes):
+    """v1 遗留：老项目的 check.py 没有"卡与登记自授权"，认领与登记会被自己锁死。
+
+    只在这一个条件下覆盖：项目里的 check.py 缺 SELF_AUTHORIZED 标记（说明确是旧版）。
+    其它差异一律交给 audit 报漂移，不静默覆盖——本地改过的执法脚本要人决定怎么处理。
+    """
+    skeleton = _guess_skeleton(project)
+    src = skeleton / "scripts" / "check.py" if skeleton else None
+    dst = project / "scripts" / "check.py"
+    if not src or not src.exists() or not dst.exists():
+        return ["跳过：项目不带 scripts/check.py（这一档骨架没有卡片层执法）"]
+    text = dst.read_text(encoding="utf-8")
+    if "SELF_AUTHORIZED" in text:
+        return ["已到位：check.py 含卡与登记自授权（I-001 晋升产物）"]
+    if apply_changes:
+        import shutil
+        shutil.copyfile(str(src), str(dst))
+    return [f"{'已刷新' if apply_changes else '待刷新'}：scripts/check.py 是 I-001 之前的旧版，"
+            "缺自授权（会锁死认领与登记）；其余差异不自动覆盖，由 audit 报漂移"]
+
+
 UPGRADES = {
-    1: ("补 .gitignore 的本地记账项 + 代入骨架库绝对路径 + 认领首选 wsc claim + 补降级行为节",
-        (up_ignore_telemetry, up_library_paths, up_claim_line, up_degrade_section)),
+    1: ("本地记账进 .gitignore + 库路径代入绝对值 + 认领首选 wsc claim + 补降级行为节 + "
+        "删常驻卡 + 看板列改四列 statuses + 刷新缺自授权的旧 check.py",
+        (up_ignore_telemetry, up_library_paths, up_claim_line, up_degrade_section,
+         up_drop_resident_card, up_backlog_statuses, up_refresh_check_py)),
     2: ("适配指针升级为各工具原生目录格式（.cursor/rules、.windsurf/rules），清掉旧单文件",
         (up_native_adapters,)),
 }
@@ -216,9 +281,12 @@ def cmd_migrate(args):
     lock = read_lock(project)
     if isinstance(lock, dict) and "_坏掉" in lock:
         sys.exit(f"[migrate] {lock['_坏掉']}（先跑 maintain.py lock 重写指纹）")
-    schema = (lock or {}).get("schema", 1)
+    schema = (lock or {}).get("schema") or declared_schema(project) or 1
+    source = "指纹" if (lock or {}).get("schema") else ("AGENTS.md 声明" if declared_schema(project) else "无来源，按 v1")
     steps = _pending_steps(schema)
-    print(f"== migrate {project}（当前 schema={schema}，本体 schema={SCHEMA}）==")
+    print(f"== migrate {project}（当前 schema={schema}←{source}，本体 schema={SCHEMA}）==")
+    if args.yes and not (project / ".git").exists():
+        sys.exit("[migrate] 项目不是 git 仓库，建不了备份分支——先 git init 再 --yes")
     if not steps and schema >= SCHEMA:
         print("已是最新 schema，无升级步骤。")
         return
@@ -298,6 +366,39 @@ def cmd_audit(args):
             issues.append("check.py 漂移")
         else:
             print(f"[执法面] check.py 与指纹一致（{cur}）")
+
+    # 计划书 W12 点名的两个检测器：登记表写错地方的痕迹、以及 merge/rebase 这类不跑钩子的入口
+    stray = []
+    for p in sorted(project.rglob("*.md")):
+        rel = p.relative_to(project).as_posix()
+        if rel.startswith(".agent/") or ".git" in p.parts:
+            continue
+        try:
+            body = p.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if re.search(r"(?m)^\|\s*I-\d+\s*\|", body):
+            stray.append(rel)
+    if stray:
+        print("[登记表] 有 improvements 形状的表格写在 .agent/ 之外：" + "、".join(stray))
+        print("  [违规] 登记条目只认 `.agent/improvements.md`——写在别处的条目 improve/evolve 读不到，等于没登记")
+        issues.append("登记表写错位置")
+    else:
+        print("[登记表] 未在 .agent/ 外发现登记痕迹")
+
+    merges = _run(["git", "log", "--merges", "--oneline", "-n", "10"], project)
+    n_merges = len([l for l in (merges.stdout or "").splitlines() if l.strip()]) \
+        if merges.returncode == 0 else 0
+    rebases = [l for l in (_run(["git", "reflog", "-n", "50"], project).stdout or "").splitlines()
+               if "rebase" in l or "reset:" in l or "merge" in l]
+    if n_merges or rebases:
+        print(f"[入口] 最近 {n_merges} 个 merge 提交、reflog 里 {len(rebases)} 条 rebase/reset/merge 记录"
+              "——这些路径都不跑 pre-commit")
+        for line in merges.stdout.splitlines()[:3] if merges.returncode == 0 else []:
+            print(f"  {line}")
+        print("  合成态是否因此变非法，看下面一条；本轮不据此定罪，只点名待复查的入口")
+    else:
+        print("[入口] 最近没有 merge/rebase 痕迹（pre-commit 覆盖得到的提交都在钩子后面）")
 
     if (project / "scripts" / "check.py").exists():
         r = _run([sys.executable, "scripts/check.py"], project, timeout=300)

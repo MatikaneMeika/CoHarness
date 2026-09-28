@@ -88,7 +88,7 @@ project: `maintain.py` (install fingerprint, schema migration, read-only audit) 
 
 ## Self-tests
 
-207 tests, no install required:
+214 tests, no install required:
 
 ```bash
 python -m unittest discover -s tests
@@ -102,8 +102,8 @@ and `tests/test_packaging.py` — that the shipped scripts import only the stand
 network calls, use no `eval`/`exec`, stay inside their line budget, and that the wheel ships the
 skeletons and nothing from the development surface.
 
-Two gate tests re-run the whole suite inside a temporary copy (that is what `--apply-check` is for), so
-the suite takes roughly eight minutes end to end.
+Three gate tests re-run the whole suite inside a temporary copy (that is what `--apply-check` is for), so a
+full run takes on the order of ten minutes; every other promise is checked by the fast tests.
 
 ## Safety
 

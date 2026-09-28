@@ -35,6 +35,7 @@ load_ledger = wsc.load_ledger
 friction_key = wsc._friction_key
 scan_registry = wsc._scan_registry_ledgers
 TRIAL_ENV = "COHARNESS_TRIAL"
+LOCK_NAME = ".agent/skeleton.lock"
 
 
 def _run_env(argv, cwd, env, timeout=1800):
@@ -136,10 +137,35 @@ def _machine_findings(cells, project, groups):
             "提议落点": landing, "落点文件已有的相关条款": overlap}
 
 
+def fingerprint(project: Path):
+    """装机指纹校验：读项目的 .agent/skeleton.lock，与骨架本体的 schema / commit 比对。
+
+    指纹缺失不是错误（登记表之前的老项目就没有），但它意味着 migrate 与 audit 没有可比基准，
+    所以机器取证里要显式说出来，而不是让审核人以为"没提就是没问题"。
+    """
+    import json
+    import maintain
+    f = project / LOCK_NAME
+    if not f.exists():
+        return {"指纹": "缺", "建议": f"跑 python {ROOT / 'maintain.py'} lock <项目>"}
+    try:
+        lock = json.loads(f.read_text(encoding="utf-8"))
+    except ValueError:
+        return {"指纹": "读不懂", "路径": str(f)}
+    if not isinstance(lock, dict):
+        return {"指纹": "格式不对", "路径": str(f)}
+    out = {"指纹": "在", "schema": lock.get("schema"), "装机骨架": lock.get("skeleton"),
+           "装机时本体 commit": lock.get("skeleton_commit")}
+    if lock.get("schema") != maintain.SCHEMA:
+        out["漂移"] = f"schema {lock.get('schema')} ≠ 本体 {maintain.SCHEMA} → 跑 maintain.py migrate"
+    return out
+
+
 def _entry_record(cells, project, groups):
     return {"id": cells[0], "日期": cells[1], "类别": cells[2], "场景": cells[3],
             "问题": cells[4], "提议": cells[5], "证据": cells[6], "状态": cells[7],
             "来源项目": str(project),
+            "装机指纹": fingerprint(project),
             "机器取证": _machine_findings(cells, project, groups),
             "主观评估": {"有效性": None, "必要性": None, "理由": ""},
             "结论": None,
@@ -149,6 +175,9 @@ def _entry_record(cells, project, groups):
 def _print_findings(rec):
     m = rec["机器取证"]
     print(f"  {rec['id']} [{rec['状态']}] 类别={rec['类别']} 场景={rec['场景']}")
+    fp = rec.get("装机指纹", {})
+    note = "；".join(f"{k}={v}" for k, v in fp.items() if k != "指纹")
+    print(f"      装机指纹：{fp.get('指纹', '?')}" + (f"（{note}）" if note else ""))
     print(f"      问题：{rec['问题']}")
     print(f"      提议：{rec['提议']}")
     if len(m["同类摩擦项目"]) >= 2:

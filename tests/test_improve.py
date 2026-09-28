@@ -61,6 +61,14 @@ class ImproveList(unittest.TestCase):
         self.assertIn("状态", text)
         self.assertNotIn("待处理改进 1 条", text)
 
+    def test_pending_review_gate_requires_cross_project_count(self):
+        """待审这一行必须写着"同类摩擦 ≥2"，否则 improve --cross 数出来的门槛没人依据。"""
+        doc = (H.REPO / "docs" / "EVOLUTION-PROCESS.md").read_text(encoding="utf-8")
+        row = [l for l in doc.splitlines() if l.startswith("| 待审 ")][0]
+        self.assertIn("≥2", row, "待审的进入条件没引用跨项目计数")
+        self.assertIn("improve --cross", row, "要写明去哪个数")
+
+
     def test_shipped_templates_have_no_entries(self):
         for skeleton in ("01-solo-code", "02-study-office", "03-multi-harness-project",
                          "04-doc-production"):

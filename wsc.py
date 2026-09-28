@@ -64,28 +64,35 @@ NEXT_STEPS = {
     ],
 }
 
-# 非 AGENTS.md 标准的工具适配指针：内容一律一行，指向 AGENTS.md（不构成第二权威）
-NATIVE = "各工具原生语法实测确认（2026-09）：见 tests/test_adapters.py 的 SOURCES 注释"
+# 每家一个列表：有的工具一个入口不够（Copilot 既有全局文件也有路径特定文件）。
+# 各家语法按实测核对，来源记在 tests/test_adapters.py 的 SOURCES；产物只含指针与工具元数据。
 ADAPTERS = {
-    "claude": ("CLAUDE.md",
-               "CoHarness 适配指针。规则唯一权威是 AGENTS.md，本文件不复制第二份。\n\n"
-               "@AGENTS.md\n"),                      # Claude Code 的 @ 导入语法
-    "gemini": ("GEMINI.md",
-               "CoHarness 适配指针。规则唯一权威是 AGENTS.md，本文件不复制第二份。\n\n"
-               "@AGENTS.md\n"),                      # Gemini CLI 的上下文文件同样支持 @ 导入
-    "cursor": (".cursor/rules/coharness.mdc",
-               "---\ndescription: CoHarness 协作规则指针（规则本体在 AGENTS.md）\n"
-               "globs:\nalwaysApply: true\n---\n\n"
-               "本项目协作规则唯一权威是 `AGENTS.md` 与 `.agent/`；本文件只作指针，不复制规则正文。\n"),
-    "copilot": (".github/copilot-instructions.md",
-                "CoHarness 适配指针。项目协作规则唯一权威是仓库根的 `AGENTS.md` 与 `.agent/`；"
-                "本文件只作指针，不复制规则正文。\n"),
-    "windsurf": (".windsurf/rules/coharness.md",
-                 "---\ntrigger: always_on\n---\n\n"
-                 "CoHarness 适配指针：规则唯一权威是 `AGENTS.md` 与 `.agent/`，本文件不复制第二份。\n"),
-    "zcode": (None, None),      # 原生读 AGENTS.md
-    "codex": (None, None),      # 原生
-    "qoder": (None, None),      # 原生读 AGENTS.md
+    "claude": [("CLAUDE.md",
+                "CoHarness 适配指针。规则唯一权威是 AGENTS.md，本文件不复制第二份。\n\n"
+                "@AGENTS.md\n")],                      # Claude Code 的 @ 导入语法
+    "gemini": [("GEMINI.md",
+                "CoHarness 适配指针。规则唯一权威是 AGENTS.md，本文件不复制第二份。\n\n"
+                "@AGENTS.md\n")],                      # Gemini CLI 的上下文文件同样支持 @ 导入
+    "cursor": [(".cursor/rules/coharness.mdc",
+                "---\ndescription: CoHarness 协作规则指针（规则本体在 AGENTS.md）\n"
+                "globs:\nalwaysApply: true\n---\n\n"
+                "本项目协作规则唯一权威是 `AGENTS.md` 与 `.agent/`；本文件只作指针，不复制规则正文。\n")],
+    "copilot": [
+        (".github/copilot-instructions.md",
+         "CoHarness 适配指针。项目协作规则唯一权威是仓库根的 `AGENTS.md` 与 `.agent/`；"
+         "本文件只作指针，不复制规则正文。\n"),
+        # 路径特定指令的官方格式：.github/instructions/*.instructions.md + YAML 头 applyTo
+        (".github/instructions/coharness.instructions.md",
+         "---\napplyTo: '**'\n---\n\n"
+         "CoHarness 适配指针：协作规则唯一权威是仓库根的 `AGENTS.md` 与 `.agent/`，"
+         "本文件只作指针，不复制第二份规则。\n"),
+    ],
+    "windsurf": [(".windsurf/rules/coharness.md",
+                  "---\ntrigger: always_on\n---\n\n"
+                  "CoHarness 适配指针：规则唯一权威是 `AGENTS.md` 与 `.agent/`，本文件不复制第二份。\n")],
+    "zcode": [],       # 原生读 AGENTS.md
+    "codex": [],       # 原生
+    "qoder": [],       # 原生读 AGENTS.md
 }
 LEGACY_ADAPTERS = (".cursorrules", ".windsurfrules")   # Wave 8 前的单文件写法，仍被兼容但不是标准
 
@@ -95,8 +102,7 @@ def adapter_targets(spec):
         [s.strip() for s in spec.split(",") if s.strip()]
     out = []
     for n in names:
-        rel = ADAPTERS.get(n, (None, None))[0]
-        if rel:
+        for rel, _body in ADAPTERS.get(n, []):
             out.append((n, rel))
     return out
 
@@ -114,7 +120,8 @@ def write_adapters(dst: Path, spec: str):
             print(f"  [跳过] {rel} 已存在")
             continue
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(ADAPTERS[name][1], encoding="utf-8", newline="\n")
+        body = next(b for r, b in ADAPTERS[name] if r == rel)
+        p.write_text(body, encoding="utf-8", newline="\n")
         made.append(rel)
     return made
 
@@ -133,8 +140,9 @@ def cmd_adapters(args):
         return
     if not args.verify:
         print("支持的 adapter（生成用 `wsc init ... --adapter <名>`，逗号分隔或 all）:")
-        for name, (rel, _body) in ADAPTERS.items():
-            print(f"  {name:<9} {rel or '（原生读 AGENTS.md，无需适配文件）'}")
+        for name, files in ADAPTERS.items():
+            print(f"  {name:<9} " + ("、".join(rel for rel, _b in files)
+                                     if files else "（原生读 AGENTS.md，无需适配文件）"))
         print(f"\n旧格式（不再生成）：{', '.join(LEGACY_ADAPTERS)}")
         print("自检：python wsc.py adapters --verify <项目>")
         return
@@ -171,7 +179,7 @@ def cmd_adapters(args):
     for legacy in LEGACY_ADAPTERS:
         if (project / legacy).exists():
             print(f"  [旧格式] {legacy} 仍在——工具还兼容它，但标准位置已换成 "
-                  f"{ADAPTERS['cursor'][0]} / {ADAPTERS['windsurf'][0]}")
+                  f"{ADAPTERS['cursor'][0][0]} / {ADAPTERS['windsurf'][0][0]}")
             problems.append(f"{legacy}: 旧单文件规则还在，建议迁到 .cursor/rules / .windsurf/rules")
     if not checked:
         print("  没有任何适配指针（装机时加 --adapter claude,cursor,... 生成）")

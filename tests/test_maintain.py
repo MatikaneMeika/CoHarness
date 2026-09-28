@@ -61,6 +61,8 @@ class Maintain(unittest.TestCase):
         text = re.split(r"\n## 降级行为", text)[0]
         text = text.replace("wsc.py claim", "task edit -s doing")
         text = text.replace(str(H.REPO), "<CoHarness>")
+        # v1 的项目卡里没有 schema 声明行——留着会让 migrate 误判成已最新
+        text = re.sub(r"(?m)^\|\s*骨架 schema\s*\|\s*\d+\s*\|\n", "", text)
         agents.write_text(text + "\n", encoding="utf-8", newline="\n")
         gi = proj / ".gitignore"
         gi.write_text(gi.read_text(encoding="utf-8").replace(".agent/telemetry.jsonl", "telemetry.off"),
@@ -236,6 +238,94 @@ class Maintain(unittest.TestCase):
         self.assertNotEqual(a.returncode, 0)
         self.assertIn("main 合成态违规", H.out(a))
         self.assertIn("认领冲突", H.out(a))
+
+    def test_skeleton_declares_its_schema_and_it_matches_maintain(self):
+        """骨架自己在项目卡里声明 schema，且必须与 maintain.SCHEMA 一致——两个来源不许漂。"""
+        import maintain
+        pattern = r"^\|\s*骨架 schema\s*\|\s*(\d+)\s*\|"
+        for sk in ("01-solo-code", "02-study-office", "03-multi-harness-project",
+                   "04-doc-production"):
+            text = (H.REPO / sk / "AGENTS.md").read_text(encoding="utf-8")
+            m = re.search(pattern, text, re.M)
+            self.assertTrue(m, f"{sk} 的项目卡没声明骨架 schema")
+            self.assertEqual(int(m.group(1)), maintain.SCHEMA,
+                             f"{sk} 声明的 schema 与 maintain.SCHEMA 不一致")
+
+    def test_migrate_covers_the_named_v1_residue(self):
+        """计划书点名的三项 v1 遗留：常驻规则卡、英文看板列、缺自授权的旧 check.py。"""
+        proj = H.make_project(self.tmp)
+        (proj / "backlog" / "tasks" / "T-000-board.md").write_text(
+            "---\nid: T-000\ntitle: 常驻规则卡\nstatus: todo\nassignee: []\n---\n\n"
+            "## 边界\nallowed_paths:\n  - docs/\nforbidden_paths:\n  - AGENTS.md\n",
+            encoding="utf-8", newline="")
+        (proj / "backlog" / "config.yml").write_text(
+            "columns: [To Do, In Progress, Done]\n", encoding="utf-8", newline="")
+        check = proj / "scripts" / "check.py"
+        check.write_text(check.read_text(encoding="utf-8").replace("SELF_AUTHORIZED", "OLD_NAME"),
+                         encoding="utf-8", newline="")
+        agents = proj / "AGENTS.md"
+        agents.write_text(re.sub(r"(?m)^\|\s*骨架 schema\s*\|\s*\d+\s*\|\n", "",
+                                 agents.read_text(encoding="utf-8")),
+                          encoding="utf-8", newline="")
+        H.git_repo(proj)
+        H.git(proj, "config", "user.name", "v1")
+        H.git(proj, "config", "user.email", "v1@invalid")
+        dry = maintain("migrate", str(proj))
+        out = H.out(dry)
+        for needle in ("待删除", "T-000-board.md", "待改写", "statuses", "待刷新"):
+            self.assertIn(needle, out)
+        self.assertTrue((proj / "backlog" / "tasks" / "T-000-board.md").exists(), "dry-run 不删文件")
+        self.assertEqual(maintain("migrate", str(proj), "--yes").returncode, 0)
+        self.assertFalse((proj / "backlog" / "tasks" / "T-000-board.md").exists())
+        self.assertIn("statuses: [todo, doing, review, done]",
+                      (proj / "backlog" / "config.yml").read_text(encoding="utf-8"))
+        self.assertIn("SELF_AUTHORIZED", check.read_text(encoding="utf-8"))
+        # 落盘后指纹记到当前 schema：再跑一次不该重复改文件，也不该再报待办
+        again = H.out(maintain("migrate", str(proj)))
+        self.assertIn("已是最新 schema", again)
+        self.assertNotIn("待", again.split("== migrate", 1)[-1])
+
+    def test_schema_can_come_from_the_project_card(self):
+        """没有指纹的老项目：migrate 该从 AGENTS.md 的声明读 schema，而不是硬按 v1 猜。"""
+        proj = self.fresh("03")
+        out = H.out(maintain("migrate", str(proj)))
+        self.assertIn("AGENTS.md 声明", out)
+        self.assertIn("当前 schema=3", out)
+
+    def test_audit_flags_a_ledger_written_outside_agent(self):
+        proj = self.fresh("03")
+        (proj / "docs" / "改进台账.md").write_text(
+            "| 编号 | 日期 | 类别 | 场景 | 问题 | 提议 | 证据 | 状态 |\n"
+            "|---|---|---|---|---|---|---|---|\n"
+            "| I-001 | 2026-09-28 | 规则 | 认领 | 问题 | 提议 | 证据 | 登记 |\n",
+            encoding="utf-8", newline="")
+        r = maintain("audit", str(proj))
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("登记表写错位置", H.out(r))
+        self.assertIn("改进台账.md", H.out(r))
+
+    def test_audit_names_merge_entries_without_convicting_them(self):
+        """merge 不跑钩子——audit 点名这条入口，但不因为"有 merge"就定罪。"""
+        proj = self.fresh("03")
+        base = H.git(proj, "rev-parse", "HEAD").stdout.strip()
+        H.git(proj, "branch", "side", base)
+        H.write_card(proj, "T-101", status="doing", assignee="[ma]", allowed=["  - docs/"])
+        H.git(proj, "add", "backlog/tasks/T-101.md")
+        self.assertEqual(H.git(proj, "commit", "-q", "-m", "主干：领 T-101").returncode, 0)
+        side = self.tmp / "side"
+        self.assertEqual(H.git(proj, "worktree", "add", "-q", str(side), "side").returncode, 0)
+        H.write_card(side, "T-102", status="doing", assignee="[sb]", allowed=["  - code/"])
+        H.git(side, "add", "backlog/tasks/T-102.md")
+        self.assertEqual(H.git(side, "commit", "-q", "-m", "分支：领 T-102").returncode, 0)
+        m = H.git(proj, "merge", "-q", "--no-edit", "side")
+        self.assertEqual(m.returncode, 0, msg=H.out(m))
+        self.assertEqual(maintain("lock", str(proj)).returncode, 0)   # 别让"缺指纹"混进这条断言
+        r = maintain("audit", str(proj))
+        out = H.out(r)
+        self.assertIn("[入口] 最近 1 个 merge 提交", out)
+        self.assertIn("都不跑 pre-commit", out)
+        self.assertNotIn("钩子被改", out)
+        self.assertEqual(r.returncode, 0, msg="只有 merge 痕迹不构成问题：" + out)
 
     def test_audit_without_lock_still_runs(self):
         proj = self.fresh("03")

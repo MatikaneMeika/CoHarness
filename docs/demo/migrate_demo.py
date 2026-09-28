@@ -33,7 +33,12 @@ def maintain(*args, cwd=None):
 
 
 def build_v1(root: Path) -> Path:
-    """把 03 骨架复制成"本轮改动之前"的样子：散文占位符、旧认领句、旧适配文件、缺降级节。"""
+    """把 03 骨架复制成"本轮改动之前"的样子，migrate 才有东西可做。
+
+    每一项都是真出现过的 v1 形态，不是为了让步骤好看而编的：散文占位符、旧认领句、
+    `.cursorrules` 单文件、缺记账忽略、没有降级节、常驻规则卡、英文三列看板、
+    以及 I-001 之前那版不认识自授权的 check.py。
+    """
     src = REPO / "03-multi-harness-project"
     proj = root / src.name
     shutil.copytree(src, proj, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
@@ -41,6 +46,7 @@ def build_v1(root: Path) -> Path:
     text = agents.read_text(encoding="utf-8").split("\n## 降级行为")[0]
     text = text.replace("wsc.py claim", "task edit -s doing")
     text = text.replace("{{COHARNESS_LIB}}", "<骨架库>")          # v1 的写法：下游猜不出路径
+    text = text.replace("| 骨架 schema | 3 |\n", "")               # v1 的项目卡没有这行声明
     agents.write_text(text + "\n## 工作方式\n\n（略）\n", encoding="utf-8", newline="\n")
     proto = proj / ".agent" / "workflows" / "parallel-protocol.md"
     proto.write_text(proto.read_text(encoding="utf-8").replace("{{COHARNESS_LIB}}", "<骨架库>"),
@@ -49,6 +55,15 @@ def build_v1(root: Path) -> Path:
     gi.write_text(gi.read_text(encoding="utf-8").replace(".agent/telemetry.jsonl", "telemetry.off"),
                   encoding="utf-8", newline="\n")
     (proj / ".cursorrules").write_text("旧版 Cursor 单文件规则\n", encoding="utf-8", newline="\n")
+    (proj / "backlog" / "tasks" / "T-000-board.md").write_text(
+        "---\nid: T-000\ntitle: 常驻规则卡\nstatus: todo\nassignee: []\n---\n\n"
+        "## 边界\nallowed_paths:\n  - docs/\nforbidden_paths:\n  - AGENTS.md\n",
+        encoding="utf-8", newline="\n")
+    (proj / "backlog" / "config.yml").write_text(
+        "columns: [To Do, In Progress, Done]\n", encoding="utf-8", newline="\n")
+    check = proj / "scripts" / "check.py"
+    check.write_text(check.read_text(encoding="utf-8").replace("SELF_AUTHORIZED", "OLD_NAME"),
+                     encoding="utf-8", newline="\n")
     ident = ["-c", "user.name=demo", "-c", "user.email=demo@invalid",
              "-c", "commit.gpgsign=false", "-c", "core.autocrlf=false"]
     sh(["git", "init", "-q", "--initial-branch=main"], proj)
@@ -94,6 +109,11 @@ def main():
             "文档里的库路径已代入绝对路径": "<骨架库>" not in (proj / "AGENTS.md").read_text(encoding="utf-8"),
             "认领句已升级为 wsc claim": "wsc.py claim" in (proj / "AGENTS.md").read_text(encoding="utf-8"),
             "指纹记到当前 schema": '"schema": 3' in lock.read_text(encoding="utf-8"),
+            "常驻规则卡已清掉": not (proj / "backlog" / "tasks" / "T-000-board.md").exists(),
+            "看板列已改成本骨架四列": "statuses: [todo, doing, review, done]"
+                                 in (proj / "backlog" / "config.yml").read_text(encoding="utf-8"),
+            "旧版 check.py 已刷新为含自授权的那版": "SELF_AUTHORIZED"
+                                        in (proj / "scripts" / "check.py").read_text(encoding="utf-8"),
         }
         for name, ok in checks.items():
             print(f"  [{'OK' if ok else 'FAIL'}] {name}")

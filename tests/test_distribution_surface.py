@@ -17,7 +17,7 @@ SHIPPED = (H.WSC, H.CHECK_SRC)                  # 分发面：随骨架进每个
 DEV = (H.REPO / "evolve.py",)                    # 开发面：审骨架本体
 MAINT = (H.REPO / "maintain.py",)                # 维护面：管已实例化项目的指纹/迁移/体检
 ALL = SHIPPED + DEV + MAINT
-FIRST_PARTY = {"wsc"}                            # 同目录自带模块
+FIRST_PARTY = {"wsc", "maintain"}                 # 同目录自带模块（evolve 读指纹会 import maintain）
 # 行数上限：只防"无人再读得动"，不防正常生长；超了先删冗余或按面分层拆出去，别抬数字。
 # wsc.py 比 check.py 宽是因为 README 承诺"curl 一个文件就能装机"，下游命令不许散到多文件；
 # check.py 才是复制进每个项目的那一份，最严。新增能力一律进 maintain.py / evolve.py。

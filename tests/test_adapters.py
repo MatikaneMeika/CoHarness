@@ -10,6 +10,8 @@ from pathlib import Path
 import helpers as H
 
 SOURCES = {
+    "copilot": ".github/copilot-instructions.md 纯文本；路径特定指令走 "
+               ".github/instructions/*.instructions.md + YAML 头 applyTo（docs.github.com 官方模板）",
     "cursor": ".cursor/rules/*.mdc + frontmatter(description/globs/alwaysApply)，"
               "Cursor 官方论坛《A Deep Dive into Cursor Rules (>0.45)》与 .mdc 实例库",
     "windsurf": ".windsurf/rules/*.md + frontmatter(trigger: always_on)；"
@@ -34,7 +36,8 @@ class Adapters(unittest.TestCase):
     def test_all_five_native_locations_are_written(self):
         dst = self.init_all()
         for rel in ("CLAUDE.md", "GEMINI.md", ".cursor/rules/coharness.mdc",
-                    ".github/copilot-instructions.md", ".windsurf/rules/coharness.md"):
+                    ".github/copilot-instructions.md", ".github/instructions/coharness.instructions.md",
+                    ".windsurf/rules/coharness.md"):
             self.assertTrue((dst / rel).is_file(), f"缺 {rel}")
         for legacy in (".cursorrules", ".windsurfrules"):
             self.assertFalse((dst / legacy).exists(), f"不该再生成旧格式 {legacy}")
@@ -42,7 +45,8 @@ class Adapters(unittest.TestCase):
     def test_each_pointer_is_thin_and_points_at_agents(self):
         dst = self.init_all()
         for rel in ("CLAUDE.md", "GEMINI.md", ".cursor/rules/coharness.mdc",
-                    ".github/copilot-instructions.md", ".windsurf/rules/coharness.md"):
+                    ".github/copilot-instructions.md", ".github/instructions/coharness.instructions.md",
+                    ".windsurf/rules/coharness.md"):
             lines = [l for l in (dst / rel).read_text(encoding="utf-8").splitlines() if l.strip()]
             self.assertLessEqual(len(lines), 8, f"{rel} 有 {len(lines)} 行，不像指针")
             self.assertIn("AGENTS.md", (dst / rel).read_text(encoding="utf-8"),
@@ -55,6 +59,10 @@ class Adapters(unittest.TestCase):
         self.assertIn("alwaysApply: true", cursor)
         windsurf = (dst / ".windsurf" / "rules" / "coharness.md").read_text(encoding="utf-8")
         self.assertIn("trigger: always_on", windsurf)
+        copilot = (dst / ".github" / "instructions" / "coharness.instructions.md")
+        self.assertTrue(copilot.read_text(encoding="utf-8").startswith("---"),
+                        "Copilot 路径特定指令必须有 YAML 头（官方格式）")
+        self.assertIn("applyTo: '**'", copilot.read_text(encoding="utf-8"))
         claude = (dst / "CLAUDE.md").read_text(encoding="utf-8")
         self.assertIn("@AGENTS.md", claude, "Claude 的导入语法是 @路径")
 
@@ -64,7 +72,7 @@ class Adapters(unittest.TestCase):
         self.assertEqual(r.returncode, 0, msg=H.out(r))
         out = H.out(r)
         self.assertIn("都只含指针与工具元数据", out)
-        self.assertEqual(out.count("[已装]"), 5)
+        self.assertEqual(out.count("[已装]"), 6, "Copilot 有两个产物：全局文件 + 路径特定指令")
 
     def test_verify_catches_a_second_authority(self):
         dst = self.init_all()

@@ -169,6 +169,31 @@ class EvolveTool(unittest.TestCase):
         r = self.run_evo("--verify-record", str(rec))
         self.assertEqual(r.returncode, 0, msg=H.out(r))
 
+    def test_fingerprint_check_distinguishes_missing_present_drifted(self):
+        """机器取证要读装机指纹：缺就说缺，schema 漂了就点名（缺口 B3 的 fingerprint 校验）。"""
+        import importlib
+        ev = importlib.import_module("evolve")
+        proj = self.projects[0]
+        self.assertEqual(ev.fingerprint(proj)["指纹"], "缺")
+        self.assertEqual(ev._run([sys.executable, H.REPO / "maintain.py",
+                                 "lock", str(proj)], H.REPO).returncode, 0)
+        fp = ev.fingerprint(proj)
+        self.assertEqual(fp["指纹"], "在")
+        import maintain
+        self.assertEqual(fp["schema"], maintain.SCHEMA)
+        self.assertNotIn("漂移", fp)
+        lock = proj / ".agent" / "skeleton.lock"
+        lock.write_text(lock.read_text(encoding="utf-8").replace('"schema": 3', '"schema": 1'),
+                        encoding="utf-8", newline="")
+        drifted = ev.fingerprint(proj)
+        self.assertIn("漂移", drifted)
+        self.assertIn("migrate", drifted["漂移"])
+        self.ledger(proj, [row("I-001", "认领原子化", "见 tests/test_claim.py")])
+        out = H.out(self.run_evo(str(proj), "--out", str(self.tmp / "fp.json")))
+        self.assertIn("装机指纹", out)
+        rec = json.loads((self.tmp / "fp.json").read_text(encoding="utf-8"))
+        self.assertTrue(all("装机指纹" in e for e in rec["条目"]), "每条记录都得带指纹结论")
+
     @unittest.skipIf(IN_TRIAL, "试装副本里的自测不再递归试装")
     def test_apply_check_refuses_a_patch_that_does_not_fit(self):
         p = self.tmp / "bad.diff"
