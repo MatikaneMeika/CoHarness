@@ -92,8 +92,25 @@ class TestCardFormat(TempProjectCase):
         self.assertCheck(["--tasks"], 1, "认领冲突", "zcode-0926a")
 
     def test_two_harnesses_parallel_is_legal(self):
-        H.write_card(self.proj, "T-011", assignee="[zcode-0926a]")
-        H.write_card(self.proj, "T-012", assignee="[codex-0926b]")
+        H.write_card(self.proj, "T-011", assignee="[zcode-0926a]", allowed=["  - docs/"])
+        H.write_card(self.proj, "T-012", assignee="[codex-0926b]", allowed=["  - scripts/"])
+        self.assertCheck(["--tasks"], 0, "[任务卡] 通过（2 张）")
+
+    def test_overlapping_boundaries_are_blocked(self):
+        # AGENTS.md 所有权表与 CARD-CONVENTION 规则 3：两卡 allowed_paths 有交集就不能并行
+        H.write_card(self.proj, "T-013", assignee="[zcode-0926a]", allowed=["  - docs/"])
+        H.write_card(self.proj, "T-014", assignee="[codex-0926b]", allowed=["  - docs/"])
+        self.assertCheck(["--tasks"], 1, "边界交集不得并行", "T-013.md", "T-014.md", "docs × docs")
+
+    def test_nested_boundary_overlap_is_blocked(self):
+        H.write_card(self.proj, "T-015", assignee="[zcode-0926a]", allowed=["  - code/"])
+        H.write_card(self.proj, "T-016", assignee="[codex-0926b]", allowed=["  - code/server/"])
+        self.assertCheck(["--tasks"], 1, "边界交集不得并行", "code × code/server")
+
+    def test_todo_cards_may_overlap(self):
+        # 只有同时在 doing/review 的两张卡才构成交集冲突
+        H.write_card(self.proj, "T-017", status="todo", allowed=["  - docs/"])
+        H.write_card(self.proj, "T-018", status="todo", allowed=["  - docs/"])
         self.assertCheck(["--tasks"], 0, "[任务卡] 通过（2 张）")
 
     def test_stale_is_advisory_only(self):

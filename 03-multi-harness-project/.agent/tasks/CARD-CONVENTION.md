@@ -54,6 +54,6 @@ forbidden_paths:
 
 1. `allowed_paths` 是**代码与文档改动**的唯一授权：进入本次提交的改动超出即越权，pre-commit 拦截（判暂存集，没 `git add` 的不算；仓库的首个提交不执法）
 2. **卡片文件（`backlog/tasks/*.md`）与 `.agent/improvements.md` 属自授权改动**：认领、状态流转、改进登记直接 commit + push main，不再要求被某张卡覆盖；`forbidden_paths` 默认含 `AGENTS.md` 与 `.agent/`（规则文件不许随实现卡改），看板目录不在其列
-3. 两卡的 `allowed_paths` 有交集 → 不能并行，回 pm 切分边界（目前只有文字纪律，check.py 不查交集）
+3. 两卡的 `allowed_paths` 有交集 → 不能并行，回 pm 切分边界（`check.py` 当场拦：两张 doing/review 卡交集 = `[任务卡] 边界交集不得并行`）
 4. 状态流转优先走 `backlog task edit`（要先把 `backlog/config.yml` 的 `statuses` 改成上面四列，真工具默认是 `To Do/In Progress/Done`）；没装 CLI 时手改卡片文件同样合法
 5. stale 规则：doing/review 超 24h 无新 commit，integrator 可改派（改派也走 `backlog task edit`）

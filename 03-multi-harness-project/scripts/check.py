@@ -322,6 +322,21 @@ def check_names():
     return not bad
 
 
+def norm_prefix(p):
+    return str(p).strip().rstrip("/") or "."
+
+
+def boundary_intersection(allowed_a, allowed_b):
+    """两卡 allowed_paths 的前缀交集（AGENTS.md 所有权表与 CARD-CONVENTION 规则 3 的承诺）。"""
+    hits = []
+    for x in allowed_a:
+        for y in allowed_b:
+            xn, yn = norm_prefix(x), norm_prefix(y)
+            if xn == yn or xn == "." or yn == "." or xn.startswith(yn + "/") or yn.startswith(xn + "/"):
+                hits.append(f"{xn} × {yn}")
+    return hits
+
+
 def check_tasks(cards, columns, card_errors=()):
     ok = True
     for err in card_errors:
@@ -362,6 +377,14 @@ def check_tasks(cards, columns, card_errors=()):
             print(f"[任务卡] 认领冲突：{who} 同时持有多张 doing 卡（一 harness 一张）:")
             for n in names:
                 print(f"  - {n}")
+    onAir = [c for c in cards if c["status"] in ("doing", "review")]
+    for i, a in enumerate(onAir):
+        for b in onAir[i + 1:]:
+            hits = boundary_intersection(a["allowed"], b["allowed"])
+            if hits:
+                ok = False
+                print(f"[任务卡] 边界交集不得并行：{a['name']} × {b['name']} → "
+                      f"{', '.join(sorted(set(hits)))}")
     if ok:
         print(f"[任务卡] 通过（{len(cards)} 张）")
     return ok

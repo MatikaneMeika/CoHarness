@@ -157,9 +157,8 @@ class LoudFailureReachesExitCode(unittest.TestCase):
         self.assertIn("title 为空", out)
 
     def test_valid_cards_pass_the_rules_too(self):
-        # 只放 assignee 互不冲突的两张：basic(doing/zcode) 与 quotes(review/codex)
+        # 只放一张：两张 doing 卡若边界相同，会被"边界交集不得并行"判违规
         self.put("basic.md", "good")
-        self.put("quotes.md", "good")
         res = H.check(self.proj, "--tasks")
         self.assertEqual(res.returncode, 0, msg=H.out(res))
         self.assertNotIn("[卡格式]", H.out(res))

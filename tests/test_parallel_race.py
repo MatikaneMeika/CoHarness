@@ -88,9 +88,8 @@ class RaceGround(unittest.TestCase):
         self.assertIn("assignee: [h-a]", self.main_card("T-001"),
                       "期望：A 的先占不被静默覆盖（现实：被 -X theirs 吃掉且无人报警）")
 
-    @unittest.expectedFailure
-    def test_c_overlapping_boundaries_must_not_run_in_parallel(self):
-        """I-003：两张卡 allowed_paths 完全重叠时，协议说不能并行，执法目前一个字都没说。"""
+    def test_c_overlapping_boundaries_are_blocked_at_claim(self):
+        """I-003 已晋升：两张 allowed_paths 交集的卡同时在做，执法当场拒绝（原来只靠 git 撞车）。"""
         p = self.proj / "backlog" / "tasks" / "T-003.md"
         shutil.copyfile(self.proj / "backlog" / "tasks" / "T-001.md", p)
         p.write_text(p.read_text(encoding="utf-8").replace("T-001", "T-003"), encoding="utf-8")
@@ -99,17 +98,9 @@ class RaceGround(unittest.TestCase):
         H.git(self.proj, "push", "-q", "origin", "HEAD:main")
         self.assertEqual(self.claim("wt-a", "T-001", "h-a").returncode, 0)
         self.assertEqual(self.push("wt-a").returncode, 0)
-        self.assertEqual(self.claim("wt-b", "T-003", "h-b").returncode, 0)
-        self.assertEqual(self.push("wt-b").returncode, 0)
-        for wt, cid in (("wt-a", "a.py"), ("wt-b", "b.py")):
-            f = self.tmp / wt / "docs" / cid
-            f.write_text(f"{wt}\n", encoding="utf-8")
-            self.assertEqual(H.git(self.tmp / wt, "add", f"docs/{cid}").returncode, 0)
-            r = H.git(self.tmp / wt, "commit", "-q", "-m", f"{wt} 在重叠边界里交工")
-            self.assertEqual(r.returncode, 0, msg=H.out(r))
-        second = H.git(self.tmp / "wt-b", "push", "-q", "origin", "HEAD:main")
-        self.assertNotEqual(second.returncode, 0,
-                            "期望：重叠边界的并行改动被执法拦住（现实：只靠 git 撞车兜住）")
+        second = self.claim("wt-b", "T-003", "h-b")
+        self.assertNotEqual(second.returncode, 0, msg=H.out(second))
+        self.assertIn("边界交集不得并行", H.out(second))
 
     @unittest.expectedFailure
     def test_d_main_must_never_hold_an_illegal_board(self):
