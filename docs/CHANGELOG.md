@@ -2,6 +2,8 @@
 
 > 格式：`- YYYY-MM-DD [晋升 I-xxx@来源项目] 摘要`；非晋升的本体演进用 `[演进]` 标签，缺陷修复用 `[缺陷修复]` 并附复现方式。只增不改。
 
+- 2026-09-28 [缺陷修复] **晋升门禁每过一次，就在用户真实登记表里留一条死记录**（复现：本机 `~/.coharness/projects.json` 里躺着 4 条 `…/Temp/coh-trial-*/proj`，目录早被门禁自己删掉了；来源是 `evolve.py --apply-check` 手工跑的那几次，包括 I-005 那次真晋升）：`apply_check` 末尾"从打了补丁的副本新实例化一个项目、跑一次全量 `wsc check`"这一步是 I-004 的最小实现，它用的是**原样继承来的环境**，而 `wsc init` 会把新项目追加进 `COHARNESS_HOME` 指向的登记表。测试里跑看不出来（登记表已被 `tests/helpers.py` 隔离），**手跑门禁时**写的就是真表——登记表的用途是让 `improve --cross` 扫遍本机实例，多一条死记录就多一处"扫过但跳过"，而这类污染只会由最该干净的那个动作留下。修法：那一步的 `init`/`check` 把 `COHARNESS_HOME` 指到临时副本里面，跑完连着副本一起删。断言挂在已有的门禁用例上（那条本来就要跑完整套，加断言不额外花时间）：`tests/test_evolve.py::test_apply_check_passes_a_doc_only_patch` 判"调用方登记表里不许出现 `coh-trial` 路径"。**红绿两态都实测**：还原修复后单跑该用例判红，输出里就是那条 `coh-trial-687901vv\proj`；装回修复判绿。
+
 - 2026-09-28 [缺陷修复] **文档里写死的实测数字又烂了四处，这次交给机器去数**（复现：改动前跑 `python -m unittest discover -s tests -p test_distribution_surface.py -k docs_declare`，它判出全量 214≠216、`test_protocol_smoke.py` 8≠9、`test_packaging.py` 6≠7、`test_evolve.py` 12≠13）：上一轮刚把会腐烂的**行数**从文档清掉，这轮对照计划书自查发现**条数**是同一个病——加一条断言、加一个测试文件，五个文档里的手写数字就同时过期，最离谱的是发布草稿写"199→206 条零依赖自测"，那是**同一轮里的两个中间快照**，不是 v1.0→v1.1 的对照（v1.0 连一套可跑测试都没有，`tests/` 是本轮 `8f74102` 才建的）。条数和"骨架装出几个文件"是面向用户的承诺，值得写死，但写死就得有红了会报警的东西兜着：新增 `tests/test_distribution_surface.py::test_docs_declare_the_real_self_test_count`（用与 CLI 同一个 `discover` 入口数，全量条数和"`tests/test_x.py` N 条"两种写法一起对齐，并顺手断言文档引用的测试模块真存在）与 `tests/test_packaging.py::test_documented_init_file_count_matches_reality`（**真跑一次 `wsc init 03` 再数**：本轮给四套骨架补 `.gitattributes`，26 就变 27，这种数靠手写记不住）。五份文档共 11 处数字按实跑改真，全套自测 214→216 条。
 
 - 2026-09-28 [演进] **骨架自己声明 schema，migrate 补齐计划书点名的三项 v1 遗留**（W9 自查续）：

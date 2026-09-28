@@ -240,10 +240,15 @@ def apply_check(patch):
         print(f"    {line}")
     # I-004 的最小实现：合并之后必须有人复查一次全量检查——这里当场补一次
     trial_proj = tmp / "proj"
-    init = _run([sys.executable, str(lib / "wsc.py"), "init", "03", str(trial_proj)], lib)
+    # 实例化会往本机登记表追加一条，指向这个注定被删的临时目录：
+    # 把登记表留在副本里跑，否则每过一次门禁就在用户真实登记表上留一条死记录
+    init_env = dict(os.environ, COHARNESS_HOME=str(tmp / "coh-home"))
+    init = _run_env([sys.executable, str(lib / "wsc.py"), "init", "03", str(trial_proj)],
+                    lib, init_env)
     verdict = "（未能实例化测试项目，跳过复查）"
     if init.returncode == 0:
-        full = _run([sys.executable, str(lib / "wsc.py"), "check", str(trial_proj)], lib)
+        full = _run_env([sys.executable, str(lib / "wsc.py"), "check", str(trial_proj)],
+                        lib, init_env)
         verdict = f"rc={full.returncode}"
     print(f"  套上补丁后新实例化项目全量 check：{verdict}")
     _rmtree(tmp)

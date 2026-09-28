@@ -36,6 +36,14 @@ def run_evolve(*args, extra_env=None, timeout=180):
                  timeout=timeout)
 
 
+def registered_paths(home):
+    """读某个 COHARNESS_HOME 下的登记表，返回登记过的路径列表（没有表就是空）。"""
+    f = Path(home) / "projects.json"
+    if not f.is_file():
+        return []
+    return [e.get("path", "") for e in json.loads(f.read_text(encoding="utf-8"))]
+
+
 def make_patch(repo, rel, old, new):
     """在工作树外造一个 -p1 可套的统一差异（difflib 直出，路径头写成 a/<rel> b/<rel>）。"""
     tmp = H.tmp_dir()
@@ -217,6 +225,10 @@ class EvolveTool(unittest.TestCase):
         self.assertNotIn("（试装补丁用的标记）",
                          (H.REPO / "docs" / "EVOLUTION-PROCESS.md").read_text(encoding="utf-8"),
                          "试装只发生在临时副本，本体一个字都不能动")
+        dirt = [p for p in registered_paths(self.env_home) if "coh-trial" in p]
+        self.assertEqual(dirt, [],
+                         "门禁实例化出来的是用完就删的临时项目，登记进调用方登记表就是"
+                         "每过一次门禁留一条死记录（本机登记表里原有 4 条这样的）")
 
     @unittest.skipIf(IN_TRIAL, "试装副本里的自测不再递归试装")
     def test_apply_check_refuses_a_patch_that_breaks_tests(self):
