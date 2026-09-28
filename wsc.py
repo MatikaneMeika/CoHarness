@@ -342,24 +342,41 @@ def cmd_check(args):
         sys.exit(f"（执行失败: {e}）")
 
 
+LEDGER_STATUSES = ("登记", "试点中", "待审", "已晋升", "已驳回")
+UNFINISHED = LEDGER_STATUSES[:3]
+
+
 def cmd_improve(args):
     """列出项目改进登记表中的非终态条目（登记/试点中/待审）。纯读文件，不改任何东西。"""
     project = Path(args.project).resolve() if args.project else Path.cwd()
     f = project / ".agent" / "improvements.md"
     if not f.exists():
         sys.exit(f"未找到 {f}（该骨架不含改进登记表，或项目未实例化）")
-    pending = []
-    for line in f.read_text(encoding="utf-8").splitlines():
-        if not line.startswith("| I-"):
+    pending, warnings = [], []
+    for lineno, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+        s = line.strip()
+        if not (s.startswith("|") and s.endswith("|")):
             continue
-        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        cells = [c.strip() for c in s.strip("|").split("|")]
         if len(cells) < 8:
-            print(f"  [格式异常，原样保留] {line}")
             continue
-        if cells[7] not in ("已晋升", "已驳回"):
+        head = cells[0]
+        if head in ("编号", "") or set(head) <= set("-: "):
+            continue  # 表头与分隔行
+        if not re.match(r"^I-\d+$", head):
+            warnings.append(f"  [编号不合约定] 第 {lineno} 行 '{head}'："
+                            f"登记条目要写成 I-xxx（自 I-001 递增）")
+            continue
+        if cells[7] not in LEDGER_STATUSES:
+            warnings.append(f"  [状态存疑] {head}：'{cells[7]}' 不在状态机里（"
+                            f"{' / '.join(LEDGER_STATUSES)}）")
+            continue
+        if cells[7] in UNFINISHED:
             pending.append(cells)
+    for w in warnings:
+        print(w)
     if not pending:
-        print("无待处理改进（全部已晋升/驳回）。")
+        print("无待处理改进（全部已晋升/驳回；登记条目的编号与状态见骨架库 docs/EVOLUTION-PROCESS.md）。")
         return
     print(f"待处理改进 {len(pending)} 条（{f}）:")
     for c in pending:
