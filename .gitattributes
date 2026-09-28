@@ -1,5 +1,7 @@
 # 执法面要能被逐字节审计：脚本与钩子的换行钉在 LF
 * text=auto
+.gitattributes text eol=lf
+.gitignore text eol=lf
 *.py text eol=lf
 *.md text eol=lf
 *.yml text eol=lf

@@ -1,1 +1,6 @@
 __pycache__/
+# 本地打包与安装的必然残留（pip install ./ 与 uv build 都会造）
+build/
+dist/
+*.egg-info/
+.venv*/
