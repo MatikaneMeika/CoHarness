@@ -5,7 +5,7 @@
 - **只有模板与协议文本**：骨架规则、流程文档、两个 Python 工具脚本。不含任何用户数据、凭据或机器特定信息。
 - **实例化后的项目是独立仓库**：你在 CoHarness 骨架上创建的项目，其代码与数据归你自己的 git 仓库所有；CoHarness 不收集、不上传任何内容——运行统计与本机登记表都只落在本地文件里（细节见下面"行为边界"第 5、6 条），随时可关可删
 
-## wsc.py 与 check.py 的行为边界（可审计）
+## wsc.py、check.py 与 evolve.py 的行为边界（可审计）
 
 1. **零网络**：两个脚本自身都不含任何 HTTP 客户端、不发起网络请求；对外连接只经由用户自己配置的 git 远端（`sync` 的 `pull`、`claim` 的 `fetch`/`push`），推哪个远端由用户的仓库配置决定。下载 CoHarness 本身（curl/git clone）是用户主动行为
 2. **subprocess 全字面量 argv、无 shell**：所有子进程调用都以参数列表传（`git` / `backlog` / `<当前解释器> scripts/check.py`，解释器取 `sys.executable` 而非 PATH 上的别名），`shell=False`；用户输入只作为独立 argv 元素（如 `claim` 的卡号与标识会进 commit message 这一参数）或工作目录，绝不拼进命令行字符串；子进程输出一律显式按 utf-8 解码
@@ -14,6 +14,8 @@
 5. **唯一的项目外写入**：`init` 成功后往 `~/.coharness/projects.json` 追加一条本机登记（项目路径 + 骨架名 + 骨架库 commit + 时间），给 `improve --cross` 当扫描清单用。纯本地明文 json，不含文件名之外的内容、不上传、可随时删除；不想写在家目录就设 `COHARNESS_HOME=<你想放的目录>`，写不进去（只读家目录等）只打印提示，不影响装机
 6. **本地运行记账**：`check` 每次执行往**项目内** `.agent/telemetry.jsonl` 追加一行（时间、harness 标识、跑了哪几项检查、通过与否、当时在做的卡、耗时）。它是 `wsc stats` 的数据源：只写这一个文件、不联网、不出项目目录，且已在骨架 `.gitignore` 里——不进版本库、不会把工作区弄脏。想关掉：`scripts/check.py --no-track`，或设环境变量 `COHARNESS_NO_TRACK=1`；删掉该文件即回到零持久化痕迹
 7. **pre-commit 钩子**：仅执行 `<能用的解释器> scripts/check.py`（本仓库自带、可读、纯标准库；行数上限由 `tests/test_distribution_surface.py` 钉住，超了测试就红，文档不再手写具体数字）。解释器按 `python` / `python3` / `py -3` 顺序探测，每个都真跑一次 `-c "import sys"` 确认可用——因为 Windows 上 `python3` 常是商店占位符；三个都不行就 exit 1 拦住提交，不静默放过
+8. **`evolve.py` 在开发面，不在分发面**：它是骨架库维护者的晋升审核工具（读项目登记表、跨本机实例数同类摩擦、在**临时副本**里试装补丁跑自测），因此不随 `wsc init` 进任何下游项目，`curl` 单文件模式也带不动它。它同样只用标准库、不出网；对下游项目只读，唯一的写是你指定的 `--out` 记录文件；`--apply-check` 只在系统临时目录里动，本体一个字不改，临时目录跑完即删
+9. **审计者视角**：想知道这些承诺是不是真的，跑 `python -m unittest discover -s tests`——`tests/test_distribution_surface.py` 会用 AST 检查两脚本的 import 全在标准库、无网络符号、无 eval/exec、行数在上限内，并检查文档里没留下已经腐烂的手写数字
 
 ## 供应链建议
 

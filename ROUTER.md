@@ -48,7 +48,7 @@
 
 ## 自我迭代
 
-骨架用着不顺手（规则缺口 / 能力缺口）→ 项目内 `.agent/improvements.md` 登记 → 本项目试点 → **「evolve <项目路径>」**：按 `docs/EVOLUTION-PROCESS.md` 五条标准审核，用户批准后写回本体并记入 `docs/CHANGELOG.md`。`wsc.py improve <项目>` 可机械列出待审条目。
+骨架用着不顺手（规则缺口 / 能力缺口）→ 项目内 `.agent/improvements.md` 登记 → 本项目试点 → **「evolve <项目路径>」**：跑库侧审核工具 `python <库>\evolve.py <项目> [--out 记录.json]`，机器取客观证据、人判有效性与必要性，标准见 `docs/EVOLUTION-PROCESS.md`；晋升前必须过 `evolve.py --apply-check 补丁.diff`（临时副本试装 + 全套自测）与 `evolve.py --verify-record 记录.json`（三证 + 用户批准缺一即红）。用户批准后写回本体并记入 `docs/CHANGELOG.md`。只想快速看待审条目用 `wsc.py improve <项目>`，跨项目数同类摩擦加 `--cross`。
 
 ## 推荐能力（晋升产物，按需取用）
 

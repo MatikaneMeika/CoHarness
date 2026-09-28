@@ -475,20 +475,12 @@ def cmd_improve_cross(args):
         sys.exit(f"本机登记表是空的（{registry_path()}）：先用 wsc init 实例化骨架，"
                  f"或设 COHARNESS_HOME 指向已有登记表")
     print(f"== 跨项目改进统计（本机登记表 {registry_path()}）==")
-    groups, scanned, missing = {}, 0, 0
-    for entry in reg:
-        proj = Path(entry.get("path", ""))
-        f = proj / ".agent" / "improvements.md"
-        if not f.exists():
-            missing += 1
-            print(f"  [跳过] {proj}（无 .agent/improvements.md，路径可能已移走）")
-            continue
-        scanned += 1
-        rows, pending, warnings = load_ledger(f)
-        for w in warnings:
-            print(f"  {proj.name}:{w}")
-        for cells in pending:
-            groups.setdefault(_friction_key(cells), []).append((proj.name, cells))
+    groups, scanned, skipped, _paths, warns = _scan_registry_ledgers()
+    for w in warns:
+        print(f"  {w}")
+    for proj in skipped:
+        print(f"  [跳过] {proj}（无 .agent/improvements.md，路径可能已移走）")
+    missing = len(skipped)
     if not groups:
         print(f"扫描 {scanned} 个实例：无非终态条目，没有可统计的摩擦。")
         return
@@ -502,6 +494,25 @@ def cmd_improve_cross(args):
             print(f"    - {pname} {cells[0]}（{cells[7]}）：{cells[3]}")
     print("\n机械计数只回答「出现过几次」；有效性/必要性/副作用三条标准见 "
           f"{ROOT / 'docs' / 'EVOLUTION-PROCESS.md'}。")
+
+
+def _scan_registry_ledgers():
+    """{同类键: [(项目名, 条目)]} + 扫描统计；evolve 与 improve --cross 共用同一份计数。"""
+    groups, scanned, skipped, paths, warns = {}, 0, [], set(), []
+    for entry in read_registry():
+        proj = Path(entry.get("path", ""))
+        f = proj / ".agent" / "improvements.md"
+        if not f.exists():
+            skipped.append(str(proj))
+            continue
+        scanned += 1
+        paths.add(str(proj.resolve()))
+        _, pending, warnings = load_ledger(f)
+        for w in warnings:
+            warns.append(f"{proj.name}:{w}")
+        for cells in pending:
+            groups.setdefault(_friction_key(cells), []).append((proj.name, cells))
+    return groups, scanned, skipped, paths, warns
 
 
 def cmd_improve(args):

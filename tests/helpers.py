@@ -2,6 +2,7 @@
 
 只在骨架库自己的测试里用，不进任何骨架分发物（ADR-10：分发面保持纯标准库零依赖）。
 """
+import atexit
 import os
 import shutil
 import subprocess
@@ -20,16 +21,21 @@ HOOK_SRC = SKELETON / "scripts" / "hooks" / "pre-commit"
 GIT_ID = ["-c", "user.name=coharness-test", "-c", "user.email=coharness-test@invalid",
           "-c", "commit.gpgsign=false", "-c", "core.autocrlf=false"]
 
+# 本机登记表也不能落到用户家目录：测试里的 wsc init 一律写到这个临时 HOME
+COH_HOME = Path(tempfile.mkdtemp(prefix="coh-home-"))
+atexit.register(shutil.rmtree, str(COH_HOME), True)
 
-def run(argv, cwd=None, native_env=False, extra_env=None):
+
+def run(argv, cwd=None, native_env=False, extra_env=None, timeout=180):
     # PYTHONIOENCODING 只统一子进程 stdio 编码，不改 locale 首选编码，
     # 这样 wsc 内部 subprocess(text=True) 的解码缺陷仍能被测出（见 test_console_encoding）
     env = dict(os.environ) if native_env else dict(os.environ, PYTHONIOENCODING="utf-8")
+    env.setdefault("COHARNESS_HOME", str(COH_HOME))
     if extra_env:
         env.update(extra_env)
     return subprocess.run([str(a) for a in argv], cwd=str(cwd) if cwd is not None else None,
                           capture_output=True, text=True, encoding="utf-8",
-                          errors="replace", timeout=180, shell=False, env=env)
+                          errors="replace", timeout=timeout, shell=False, env=env)
 
 
 def check(project, *args):

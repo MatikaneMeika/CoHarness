@@ -19,8 +19,13 @@ description: CoHarness 一句话调度与自我迭代入口。当用户说「开
 
 ## evolve <项目路径>（骨架改进审核）
 
-1. 读 `<项目>/.agent/improvements.md`，筛状态 ∈ {登记, 试点中, 待审} 的条目（或先跑 `python <WS>/wsc.py improve <项目>`）
-2. 逐条按 `<WS>/docs/EVOLUTION-PROCESS.md` 的五条标准评估：晋升 / 继续试点 / 驳回，逐条给理由；拿不准就驳回
-3. 晋升候选：向用户展示将改动哪些本体文件、改什么 → **等用户批准**
-4. 批准后：改 `<WS>` 对应文件 → `docs/CHANGELOG.md` 顶部记行 → 库内 git commit（一个晋升一个 commit）→ 回写项目登记表状态
+1. `python <WS>/evolve.py <项目> --rubric` 印五条标准；`python <WS>/evolve.py <项目> --out 记录.json`
+   拿机器取证（状态机合法性、同类摩擦跨项目计数、证据能否翻出来、提议落点）
+2. 你只填记录里的两个主观维度（有效性、必要性）与结论（晋升 / 继续试点 / 驳回），逐条给理由；
+   拿不准就驳回——**驳回是一等公民**
+3. 晋升候选：先 `python <WS>/evolve.py --apply-check 补丁.diff`（临时副本套补丁 + 全套自测 +
+   新实例全量 check，红的不许写回），再 `--verify-record 记录.json`（缺主观项或四项证据即红）
+4. 向用户展示将改哪些本体文件、改什么 → **等用户批准**；批准后改 `<WS>` 对应文件 →
+   `docs/CHANGELOG.md` 顶部记行（带三证）→ 库内 git commit（一个晋升一个 commit）→
+   回写项目登记表状态 → 写回后再跑一次全量自测与 `wsc.py check <项目>`
 5. 能力缺口类（类别=能力）：晋升去处是 ROUTER.md 推荐能力节，不写骨架规则；npm/winget 依赖同步对应骨架 NEXT_STEPS
