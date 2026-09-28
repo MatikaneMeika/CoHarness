@@ -40,7 +40,7 @@ forbidden_paths:
 
 ## 规则
 
-1. `allowed_paths` 是**唯一**改动授权：diff 超出即越权，pre-commit 拦截
+1. `allowed_paths` 是**唯一**改动授权：进入本次提交的改动超出即越权，pre-commit 拦截（判暂存集，没 `git add` 的不算；仓库的首个提交不执法）
 2. `forbidden_paths` 默认含 `AGENTS.md`、`.agent/`、`backlog/`（规则与看板文件不允许随卡改）
 3. 两卡的 `allowed_paths` 有交集 → 不能并行，回 pm 切分边界
 4. 状态流转只有 `backlog task edit`，**不手改文件**；认领/状态提交直接进 main（见 parallel-protocol）

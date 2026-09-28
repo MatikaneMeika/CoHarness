@@ -8,7 +8,7 @@
     python scripts/check.py               # 全部检查（stale 仅提示，不影响退出码）
     python scripts/check.py --names       # 仅命名规范
     python scripts/check.py --tasks       # 仅任务卡格式 / 边界节 / 认领冲突
-    python scripts/check.py --diff        # 仅改动挂卡检查（需要 git）
+    python scripts/check.py --diff        # 仅改动挂卡（判本次提交暂存的改动，需要 git）
     python scripts/check.py --stale       # 仅 stale 卡报告（advisory）
 
 退出码：0 = 通过；1 = 存在违规（stale 提示不算违规，不拦截提交）。
@@ -229,21 +229,32 @@ def check_tasks(cards, columns):
     return ok
 
 
-def git_changed_files():
+def _git_out(args):
+    """跑 git，返回 (是否成功, stdout)。git 不可用或不在仓库内时成功位为 False。"""
     try:
-        out = subprocess.run(
-            ["git", "status", "--porcelain"],
-            cwd=ROOT, capture_output=True, text=True, check=True,
-        ).stdout
-    except (subprocess.CalledProcessError, FileNotFoundError):
+        r = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=60, shell=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return False, ""
+    return r.returncode == 0, (r.stdout or "")
+
+
+def staged_files():
+    """本次提交将纳入的改动（含删除；重命名取新路径）。
+
+    判据必须是暂存集而不是工作区：`git status` 会把没 add 的文件、以及被折叠成
+    目录的未跟踪项都算进来，全新实例化的项目连第一个提交都拦掉。
+    """
+    ok, out = _git_out(["-c", "core.quotepath=false", "diff", "--cached",
+                        "--name-only", "--no-ext-diff"])
+    if not ok:
         return None
-    files = []
-    for line in out.splitlines():
-        if len(line) > 3:
-            rel = line[3:].strip().strip('"')
-            rel = rel.split(" -> ")[-1]  # rename 取新名
-            files.append(rel.replace("\\", "/"))
-    return files
+    return [ln.strip().replace("\\", "/") for ln in out.splitlines() if ln.strip()]
+
+
+def has_commits():
+    ok, out = _git_out(["rev-parse", "--verify", "-q", "HEAD"])
+    return ok and bool(out.strip())
 
 
 def path_covered(rel: str, prefixes):
@@ -258,12 +269,15 @@ def path_covered(rel: str, prefixes):
 
 
 def check_diff(cards):
-    changed = git_changed_files()
+    changed = staged_files()
     if changed is None:
         print("[改动挂卡] 跳过（不是 git 仓库或 git 不可用）")
         return True
+    if not has_commits():
+        print("[改动挂卡] 首次入库（仓库还没有提交）：不执法；此后每次提交都必须在卡内")
+        return True
     if not changed:
-        print("[改动挂卡] 通过（工作区干净）")
+        print("[改动挂卡] 通过（暂存区没有改动）")
         return True
     ok = True
     for rel in changed:
