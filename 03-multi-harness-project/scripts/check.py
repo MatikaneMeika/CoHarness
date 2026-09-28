@@ -346,6 +346,9 @@ def check_tasks(cards, columns, card_errors=()):
         ok = False
         print(f"[卡格式] {err}")
     if not cards:
+        if minimal_mode():
+            print("[任务卡] 最小模式：无 backlog/tasks，卡片执法关闭（清单在 TODO.md）")
+            return True
         print("[任务卡] 无任务卡")
         return True if not card_errors else False
     doing_by = {}
@@ -443,10 +446,23 @@ def is_self_authorized(rel, tasks_rel):
         tasks_rel and rel.startswith(tasks_rel + "/") and rel.endswith(".md"))
 
 
+def minimal_mode():
+    """`wsc init --minimal` 的形态：没有 backlog/tasks，任务清单在 TODO.md。
+
+    卡片层执法（改动挂卡、认领冲突、边界交集）都以任务卡为前提，没卡就全量报违规等于
+    把项目锁死；所以这里显式关闭并说明关闭了什么——AGENTS.md 的「最小模式」节写着同样的话。
+    命名规范、卡格式（有卡才判）、登记管线与钩子本身不受影响。
+    """
+    return not (ROOT / "backlog" / "tasks").is_dir() and (ROOT / "TODO.md").exists()
+
+
 def check_diff(cards, tasks_rel=""):
     changed = staged_files()
     if changed is None:
         print("[改动挂卡] 跳过（不是 git 仓库或 git 不可用）")
+        return True
+    if minimal_mode() and not cards:
+        print("[改动挂卡] 最小模式关闭（无任务卡可挂；清单见 TODO.md）")
         return True
     if not has_commits():
         print("[改动挂卡] 首次入库（仓库还没有提交）：不执法；此后每次提交都必须在卡内")

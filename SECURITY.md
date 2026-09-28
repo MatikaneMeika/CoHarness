@@ -15,7 +15,9 @@
 6. **本地运行记账**：`check` 每次执行往**项目内** `.agent/telemetry.jsonl` 追加一行（时间、harness 标识、跑了哪几项检查、通过与否、当时在做的卡、耗时）。它是 `wsc stats` 的数据源：只写这一个文件、不联网、不出项目目录，且已在骨架 `.gitignore` 里——不进版本库、不会把工作区弄脏。想关掉：`scripts/check.py --no-track`，或设环境变量 `COHARNESS_NO_TRACK=1`；删掉该文件即回到零持久化痕迹
 7. **pre-commit 钩子**：仅执行 `<能用的解释器> scripts/check.py`（本仓库自带、可读、纯标准库；行数上限由 `tests/test_distribution_surface.py` 钉住，超了测试就红，文档不再手写具体数字）。解释器按 `python` / `python3` / `py -3` 顺序探测，每个都真跑一次 `-c "import sys"` 确认可用——因为 Windows 上 `python3` 常是商店占位符；三个都不行就 exit 1 拦住提交，不静默放过
 8. **`evolve.py` 在开发面，不在分发面**：它是骨架库维护者的晋升审核工具（读项目登记表、跨本机实例数同类摩擦、在**临时副本**里试装补丁跑自测），因此不随 `wsc init` 进任何下游项目，`curl` 单文件模式也带不动它。它同样只用标准库、不出网；对下游项目只读，唯一的写是你指定的 `--out` 记录文件；`--apply-check` 只在系统临时目录里动，本体一个字不改，临时目录跑完即删
-9. **审计者视角**：想知道这些承诺是不是真的，跑 `python -m unittest discover -s tests`——`tests/test_distribution_surface.py` 会用 AST 检查两脚本的 import 全在标准库、无网络符号、无 eval/exec、行数在上限内，并检查文档里没留下已经腐烂的手写数字
+9. **`maintain.py` 在维护面**：管已实例化项目的装机指纹与升级。写盘只有两处——`.agent/skeleton.lock`（`lock` 子命令）和 `migrate --yes` 显式升级；`migrate` 默认 dry-run 且落盘前自动建备份分支，`audit` 全程只读。它不联网、只用标准库
+10. **最小模式（`init --minimal`）关掉了什么**：卡片层执法（改动挂卡、认领冲突、边界交集）依赖任务卡，没卡时 `check.py` 显式打印"最小模式关闭"并放行，命名规范与登记管线照常执法。关掉与留下的都在项目 `AGENTS.md` 的「最小模式」节里写着；补一张卡进 `backlog/tasks/` 即恢复执法——执法读文件，不读工具
+11. **审计者视角**：想知道这些承诺是不是真的，跑 `python -m unittest discover -s tests`——`tests/test_distribution_surface.py` 会用 AST 检查三个脚本的 import 全在标准库或同目录模块、无网络符号、无 eval/exec、行数在上限内，并检查文档里没留下已经腐烂的手写数字
 
 ## 供应链建议
 

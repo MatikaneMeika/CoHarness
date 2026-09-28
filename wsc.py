@@ -106,7 +106,7 @@ def resolve_skeleton(name: str) -> Path:
     )
 
 
-def instantiate(src: Path, dst: Path):
+def instantiate(src: Path, dst: Path, skip_names=()):
     copied, skipped = [], []
     for p in sorted(src.rglob("*")):
         if not p.is_file():
@@ -114,6 +114,8 @@ def instantiate(src: Path, dst: Path):
         if "__pycache__" in p.parts or p.suffix == ".pyc":
             continue  # 运行残留不进骨架
         rel = p.relative_to(src)
+        if skip_names and set(rel.parts) & set(skip_names):
+            continue  # --minimal：整棵 backlog/ 不装
         target = dst / rel
         if target.exists():
             skipped.append(rel)
@@ -233,6 +235,37 @@ def write_adapters(dst: Path, spec: str):
     return made
 
 
+MINIMAL_TODO = """# TODO — 最小模式看板（没有 backlog 也能开工）
+
+一行一项：`- [ ]` 待办，`- [x]` 做完。想让 ID 稳定就在行首写 `T-001：`。
+要恢复卡片执法（改动挂卡 / 认领冲突 / 边界交集）：装 backlog CLI，或直接建
+`backlog/tasks/` 放卡——check.py 认文件，不认工具。
+
+- [ ] T-001：把第一个需求写成一行
+"""
+
+MINIMAL_NOTE = """
+## 最小模式（装机时选了 --minimal）
+
+- 没有 `backlog/`，任务清单在本文件同级的 `TODO.md`
+- **关闭的执法**：卡片格式、改动挂卡、认领冲突、边界交集——这些都依赖任务卡
+- **仍在执法**：命名规范、`.agent/improvements.md` 登记管线、pre-commit 钩子本身
+- 升级路径：`python {lib}/wsc.py init <骨架> <新的空目录>`（不带 --minimal），
+  或装 backlog CLI / 手建 `backlog/tasks/` 放卡，check.py 自动恢复卡片执法
+"""
+
+
+def write_minimal_mode(dst: Path):
+    """最小模式产物：TODO.md 清单 + AGENTS.md 里写明关了什么、留了什么。"""
+    (dst / "TODO.md").write_text(MINIMAL_TODO, encoding="utf-8", newline="\n")
+    agents = dst / "AGENTS.md"
+    if agents.exists():
+        text = agents.read_text(encoding="utf-8")
+        if "## 最小模式" not in text:
+            agents.write_text(text.rstrip() + "\n" + MINIMAL_NOTE.format(lib=ROOT),
+                              encoding="utf-8", newline="\n")
+
+
 def cmd_list(_args):
     print("可用骨架:")
     for s in discover_skeletons():
@@ -286,8 +319,11 @@ def cmd_init(args):
         sys.exit(f"目标目录非空: {dst}\n（骨架只能复制到空目录或新目录，避免覆盖现有规则；仅含 .git 的目录允许）")
     dst.mkdir(parents=True, exist_ok=True)
 
-    copied, skipped = instantiate(src, dst)
-    print(f"已实例化骨架 [{src.name}] -> {dst}")
+    minimal = bool(getattr(args, "minimal", False))
+    skip = ("backlog",) if minimal else ()
+    copied, skipped = instantiate(src, dst, skip_names=skip)
+    mode = "（最小模式：不装 backlog/，任务清单走 TODO.md）" if minimal else ""
+    print(f"已实例化骨架 [{src.name}]{mode} -> {dst}")
     print(f"  复制 {len(copied)} 个文件" + (f"，跳过已存在 {len(skipped)} 个" if skipped else ""))
 
     status, note = install_pre_commit(dst)
@@ -321,7 +357,14 @@ def cmd_init(args):
         print("无待填占位符。")
 
     steps = NEXT_STEPS.get(src.name)
-    if steps:
+    if minimal:
+        write_minimal_mode(dst)
+        print("  最小模式产物：TODO.md + AGENTS.md 的「最小模式」节（写清了关掉哪些执法）")
+        if steps:
+            print("\n最小模式跳过的依赖（哪天要并行/边界执法再装）:")
+            for line in steps:
+                print(f"    [可选] {line}")
+    elif steps:
         print(f"\n依赖安装（自检: python {ROOT / 'wsc.py'} doctor）:")
         for line in steps:
             print(f"  {line}")
@@ -367,7 +410,16 @@ def cmd_sync(args):
         out = f"（执行失败: {e}）"
     print(f"[pull] {out}")
 
-    if shutil.which("backlog"):
+    if (project / "TODO.md").exists() and not (project / "backlog" / "tasks").is_dir():
+        todo = (project / "TODO.md").read_text(encoding="utf-8")
+        open_items = [l.strip() for l in todo.splitlines() if l.strip().startswith("- [ ]")]
+        done_items = [l.strip() for l in todo.splitlines() if l.strip().startswith("- [x]")]
+        print(f"[看板] 最小模式 TODO.md：{len(open_items)} 项待办 / {len(done_items)} 项已完成")
+        for line in open_items[:12]:
+            print(f"  {line}")
+        if len(open_items) > 12:
+            print(f"  …另有 {len(open_items) - 12} 项")
+    elif shutil.which("backlog"):
         try:
             r = _run(["backlog", "task", "list"], project)
             out = (r.stdout or r.stderr).strip()
@@ -635,7 +687,79 @@ def cmd_stats(args):
         print("  项目不带 scripts/check.py，无 stale 报告")
 
 
-def cmd_doctor(_args):
+DEGRADE = {
+    "backlog": {
+        "丢了什么": "看板 CLI（backlog board / task list / task edit）与它的自动提交",
+        "降级行为": "卡还是 md 文件：`wsc sync` 回落读 `backlog/tasks/*.md`，"
+                    "手工建卡/改卡照旧被 check.py 执法；零依赖起步用 `init --minimal` 的 TODO.md 清单",
+        "执法变化": "无（卡片层执法读文件，不读工具）",
+        "probe": ("any", ["backlog/tasks", "TODO.md"]),
+    },
+    "specify": {
+        "丢了什么": "spec-kit 的 /speckit-specify|clarify|plan|tasks 流程命令",
+        "降级行为": "手工五步拆解：需求 → 技术口径 → 边界(allowed/forbidden) → 验收清单 → 交接说明，"
+                    "照样写成卡与 spec 文档，pm 角色转卡这步由人做",
+        "执法变化": "无；只是规格产物的格式没人替你校验，边界要自己写准",
+        "probe": ("file", [".agent/workflows", "AGENTS.md"]),
+    },
+    "worktrunk": {
+        "丢了什么": "`git-wt` 的便捷工作树管理（Windows 下工作树并行靠它省事）",
+        "降级行为": "用原生 `git worktree add` 建工作树，或退成普通分支 + 串行干活——"
+                    "**一个 harness 一个工作目录**这条不变，两条 harness 不许共居同一 clone",
+        "执法变化": "无（pre-commit 在共享的 .git/hooks 里，worktree 照样过钩子）",
+        "probe": ("dir", [".git"]),
+    },
+    "node": {
+        "丢了什么": "npm 生态（backlog.md 是 npm 包）",
+        "降级行为": "同上：手建卡片文件；或换 uv/pipx 侧的等价工具，规则不变",
+        "执法变化": "无",
+        "probe": ("any", ["backlog/tasks", "TODO.md"]),
+    },
+}
+
+
+def _probe_ok(project: Path, kind, names):
+    for n in names:
+        p = project / n
+        if kind == "dir" and p.is_dir():
+            return p
+        if kind == "file" and p.exists():
+            return p
+        if kind == "any" and p.exists():
+            return p
+    return None
+
+
+def cmd_doctor(args):
+    if getattr(args, "explain", None):
+        for key in args.explain.split(","):
+            spec = DEGRADE.get(key.strip())
+            if spec is None:
+                print(f"[doctor --explain] 没有登记过 '{key}' 的降级行为，可选项：{', '.join(DEGRADE)}")
+                continue
+            print(f"{key} 没装时:")
+            for label in ("丢了什么", "降级行为", "执法变化"):
+                print(f"  {label}：{spec[label]}")
+        return
+    if getattr(args, "simulate_missing", None):
+        project = Path(args.project).resolve() if getattr(args, "project", None) else Path.cwd()
+        for key in args.simulate_missing.split(","):
+            spec = DEGRADE.get(key.strip())
+            if spec is None:
+                print(f"[simulate] 没有 '{key}' 的降级规格，可选项：{', '.join(DEGRADE)}")
+                continue
+            kind, names = spec["probe"]
+            hit = _probe_ok(project, kind, names)
+            print(f"{key} 缺失时演练（项目 {project}）：")
+            print(f"  丢了什么：{spec['丢了什么']}")
+            print(f"  降级路径：{spec['降级行为']}")
+            if hit:
+                print(f"  [可用] 回落产物在位：{hit.relative_to(project).as_posix()}")
+            else:
+                print(f"  [不可用] 项目里找不到 {names} 中任何一个——"
+                      f"照上面那条路补一个（`init --minimal` 会生成 TODO.md）")
+        return
+
     tools = [
         ("git", "git", None),
         ("node", "node", None),
@@ -645,20 +769,22 @@ def cmd_doctor(_args):
         ("specify", "specify", "uv tool install specify-cli"),
         ("worktrunk", "git-wt", "winget install max-sixty.worktrunk"),
     ]
-    missing = 0
+    missing = []
     print("依赖自检（03 需要 backlog/specify/git-wt；02 backlog 可选；01/04 零依赖）:")
     for label, cmd, hint in tools:
         path = shutil.which(cmd)
         if path:
             print(f"  [OK]    {label:<10} {path}")
         else:
-            missing += 1
+            missing.append(label)
             line = f"  [缺失]  {label:<10}"
             if hint:
                 line += f"安装: {hint}"
             print(line)
     if missing:
-        print(f"\n{missing} 项缺失。按需安装即可——对应骨架不用到齐也能开工，缺的走回落路径。")
+        print(f"\n{len(missing)} 项缺失：{', '.join(missing)}")
+        print("按需安装即可——不用到齐也能开工，缺的走回落路径：")
+        print(f"  python {ROOT / 'wsc.py'} doctor --explain {','.join(m for m in missing if m in DEGRADE)}")
     else:
         print("\n全部就绪。")
 
@@ -824,6 +950,8 @@ def main():
     p_init.add_argument("skeleton", help="骨架名或前缀，如 solo-code / 03")
     p_init.add_argument("target", help="目标项目路径")
     p_init.add_argument("--adapter", help="生成工具适配指针，逗号分隔: claude,gemini,cursor,copilot,windsurf 或 all")
+    p_init.add_argument("--minimal", action="store_true",
+                        help="零外部依赖起步：不装 backlog/，任务清单用 TODO.md（卡片执法随之关闭）")
     p_sync = sub.add_parser("sync", help="开工协议：pull + 看板 + stale")
     p_sync.add_argument("project", nargs="?", help="项目路径（默认当前目录）")
     p_check = sub.add_parser("check", help="跑项目 check.py")
@@ -840,7 +968,11 @@ def main():
     p_stats = sub.add_parser("stats", help="本地运行统计：规则遵循率 / 返工信号 / stale 分布")
     p_stats.add_argument("project", nargs="?", help="项目路径（默认当前目录）")
     p_stats.add_argument("--days", type=int, default=7, help="返工信号回溯天数（默认 7）")
-    sub.add_parser("doctor", help="依赖自检")
+    p_doc = sub.add_parser("doctor", help="依赖自检")
+    p_doc.add_argument("project", nargs="?", help="演练降级路径时使用的项目路径")
+    p_doc.add_argument("--explain", help="打印某个依赖缺失后的降级行为（逗号分隔），如 backlog,specify")
+    p_doc.add_argument("--simulate-missing", metavar="依赖名",
+                       help="假装该依赖没装：在指定项目里核对回落产物是否真在位")
     args = ap.parse_args()
 
     if args.cmd is None:

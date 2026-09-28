@@ -91,3 +91,19 @@ AGENTS.md / .agent/ 规则文件 > spec-kit 产物 > 任务卡内容 > 会话中
 - **specify 初始化**：对每个在场工具各跑一次 `specify init --integration <名>`
 
 原则：`AGENTS.md` 是唯一权威，任何工具专属文件只放一行指针，**不写第二份规则**。
+## 降级行为（依赖没装时）
+
+装机顺序无所谓，缺一项就照这一节走回落路径；`python {{COHARNESS_LIB}}/wsc.py doctor --explain backlog,specify,worktrunk,node`
+会把同样的话打给你看，`--simulate-missing=<项> <项目>` 还能核对回落产物在不在位。
+
+- **`backlog` 没装**：卡片仍是 md 文件。`wsc sync` 回落读 `backlog/tasks/*.md`；手工建卡照样被
+  `scripts/check.py` 执法（认领唯一、边界交集、卡格式都在文件层）。零依赖起步可
+  `wsc init 03 <空目录> --minimal`——任务清单换 `TODO.md`，代价是卡片层执法随之关闭（AGENTS.md 会写明关闭了哪几条）
+- **`specify` 没装**：规格流程手工五步——需求 → 技术口径 → 边界（allowed/forbidden） → 验收清单 → 交接说明，
+  产物与转卡由 pm 角色手写；执法不变，只是没人替你校验规格格式
+- **`git-wt`（Worktrunk）没装**：用原生 `git worktree add`。**一个 harness 一个工作目录**这条不许破，
+  两个 harness 禁止共居同一 clone；pre-commit 装在共享的 `.git/hooks` 里，工作树照样过钩子
+- **`node` 没装**：npm 系工具（backlog.md）装不上，走上一条 backlog 的回落路径
+
+组件版本按实测钉住：Backlog.md 1.53.0（`statuses` 键、默认英文三列需手改、卡文件名 `t-<n> - <标题>.md`、
+`--agent-instructions` 会往 AGENTS.md 注入 24 行——本骨架要求填 `none`）。

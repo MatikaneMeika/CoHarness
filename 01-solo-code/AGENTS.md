@@ -41,3 +41,8 @@ docs/         CHANGELOG 等长期文档
 4. 收尾：更新任务卡状态 + 追加 CHANGELOG
 
 规则本身要改时（如命令变了、目录变了），直接改本文件并在 CHANGELOG 记一行，**不要**新建任何"规则补充说明"文档。
+## 降级行为（依赖没装时）
+
+本骨架刻意零外部依赖：唯一必需的是 `git`（没有它 pre-commit 与改动挂卡自动跳过，只剩命名规范）。
+不需要 `backlog` / `specify` / `git-wt` / `node`——一个人一个仓库，看板与并行都不是这一档要解决的问题。
+想升级：改用 `03` 骨架（`python {{COHARNESS_LIB}}/wsc.py init 03 <空目录>`），或装 backlog CLI 给本仓库加看板。

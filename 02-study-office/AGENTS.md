@@ -52,3 +52,9 @@ docs/                  要求清单等长期文档
 5. 跑不通的代码不进 `deliverables/code/`——先走 debug 流程
 6. 任务卡（可选，交付型多任务/多人分工时用）：Backlog CLI，格式见 `.agent/tasks/CARD-CONVENTION.md`；持续型/办公型不用卡
 7. **发现骨架问题就登记**：规则缺失/冲突造成返工、同类摩擦 ≥2 次、或缺 skill/MCP 时，在 `.agent/improvements.md` 登记一行（门槛见该文件头部）；试点改动只落本项目，晋升本体走 evolve 审核
+## 降级行为（依赖没装时）
+
+- **`backlog` 没装**（本骨架把它列为可选）：交付任务清单照 `docs/` 与 `error-log.md` 走，
+  不建看板也不影响执法——这一档没有卡片层执法。要多人/多任务并行时再 `npm i -g backlog.md && backlog init`
+- **`node` 没装**：装不了 backlog，同上；交付物生成不依赖 npm
+- 没有 `specify` / `git-wt` 的需求：本骨架不做规格流水线，也不假设多 harness 并行

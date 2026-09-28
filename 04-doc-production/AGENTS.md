@@ -36,3 +36,7 @@ delivery-checklist.md  交付核验清单（checker 维护）
 - 从零写 → `.agent/workflows/doc-from-scratch.md`
 - 改稿 → `.agent/workflows/revision.md`
 - 交付前 → checker 按 `delivery-checklist.md` 逐项核验，全 ✅ 才能交付
+## 降级行为（依赖没装时）
+
+本骨架零外部依赖：稿件清单走 `.agent/tasks/` 与 `source/` 章节文件，`check.py` 读文件不读工具。
+不需要 `backlog` / `specify` / `git-wt` / `node`；要看板时按 03 的方式装 backlog CLI，卡片格式两档通用。

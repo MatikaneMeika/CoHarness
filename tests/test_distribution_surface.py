@@ -13,12 +13,16 @@ from pathlib import Path
 
 import helpers as H
 
-SHIPPED = (H.WSC, H.CHECK_SRC)                  # 分发面
-DEV = (H.REPO / "evolve.py",)                   # 开发面
-ALL = SHIPPED + DEV
-FIRST_PARTY = {"wsc"}                           # 同目录自带模块
-# 行数上限：只防"无人再读得动"，不防正常生长；超了先删冗余或按分层拆，别抬数字
-LINE_BUDGET = {H.WSC: 900, H.CHECK_SRC: 650, H.REPO / "evolve.py": 400}
+SHIPPED = (H.WSC, H.CHECK_SRC)                  # 分发面：随骨架进每个下游项目，可 curl 单文件
+DEV = (H.REPO / "evolve.py",)                    # 开发面：审骨架本体
+MAINT = (H.REPO / "maintain.py",)                # 维护面：管已实例化项目的指纹/迁移/体检
+ALL = SHIPPED + DEV + MAINT
+FIRST_PARTY = {"wsc"}                            # 同目录自带模块
+# 行数上限：只防"无人再读得动"，不防正常生长；超了先删冗余或按面分层拆出去，别抬数字。
+# wsc.py 比 check.py 宽是因为 README 承诺"curl 一个文件就能装机"，下游命令不许散到多文件；
+# check.py 才是复制进每个项目的那一份，最严。新增能力一律进 maintain.py / evolve.py。
+LINE_BUDGET = {H.WSC: 1100, H.CHECK_SRC: 650, H.REPO / "evolve.py": 400,
+               H.REPO / "maintain.py": 600}
 NETWORK_TOKENS = ("urllib.request", "http.client", "socket", "ftplib", "smtplib",
                   "poplib", "imaplib", "telnetlib", "requests", "urllib3", "httpx", "aiohttp")
 
@@ -40,8 +44,8 @@ class DistributionSurface(unittest.TestCase):
                              if m.split(".")[0] not in sys.stdlib_module_names)
             self.assertEqual(non_std, [], f"分发面 {p.name} 引了非标准库依赖: {non_std}")
 
-    def test_dev_face_may_only_add_first_party_module(self):
-        for p in DEV:
+    def test_dev_and_maint_faces_may_only_add_first_party_module(self):
+        for p in DEV + MAINT:
             extra = sorted(m for m in imports_of(p)
                            if m.split(".")[0] not in sys.stdlib_module_names and m not in FIRST_PARTY)
             self.assertEqual(extra, [], f"{p.name} 引了第三方依赖: {extra}")

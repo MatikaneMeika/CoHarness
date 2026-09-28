@@ -57,6 +57,7 @@ python wsc.py init <骨架> <目标路径>
 ## 日常命令
 
 ```bash
+python wsc.py init <骨架> <目标路径> [--minimal]  # 装机；--minimal = 零外部依赖起步（清单走 TODO.md）
 python wsc.py sync <项目>      # 开工先跑：pull + 看板摘要 + stale 卡报告
 python wsc.py claim <项目> T-001 <标识>  # 原子认领：同步+校验+写卡+提交+推 main 绑成一步，被抢就还原
 python wsc.py check <项目>     # 全量体检（命名、卡格式、改动挂卡、认领冲突、边界交集）
@@ -64,10 +65,21 @@ python wsc.py improve <项目>   # 列出待审的骨架改进
 python wsc.py improve --cross  # 扫本机登记过的全部实例，按同类摩擦出机械计数（晋升门槛 ≥2 次的证据源）
 python wsc.py stats <项目>     # 本地运行统计：规则遵循率 / 返工信号 / stale 分布（数据只来自项目内文件与 git log）
 python wsc.py doctor           # 依赖自检
+python wsc.py doctor --explain backlog,specify   # 这些依赖没装时降级成什么、执法怎么变
+python wsc.py doctor --simulate-missing backlog <项目>  # 核对回落产物真在不在位
 python wsc.py list             # 骨架列表
 ```
 
-仓库自带 152 条自测，跑起来不需要装任何东西：
+维护与审核是另外两个入口（都不随骨架进下游项目）：
+
+```bash
+python maintain.py lock    <项目>   # 记装机指纹（骨架名 + 本体 commit + schema + check.py 哈希）
+python maintain.py migrate <项目>   # 默认 dry-run；加 --yes 先建备份分支再落盘
+python maintain.py audit   <项目>   # 只读体检：钩子在不在/被没被改、指纹漂移、main 合成态合不合法
+python evolve.py  <项目> --out 记录.json   # 晋升审核：机器取客观证据，人填有效性与必要性
+```
+
+仓库自带 180 条自测，跑起来不需要装任何东西：
 
 ```bash
 python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows × py3.11/3.13 上跑同样的命令
