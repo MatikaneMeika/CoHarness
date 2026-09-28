@@ -74,40 +74,54 @@ def _utf8_streams():
             stream.reconfigure(encoding="utf-8", errors="replace")
 
 
+MSVCRT_PFX = {"H": "left", "P": "up", "K": "up", "M": "right", "N": "down",
+              "J": "down", "Q": "ENT", "S": "BS"}
+MSVCRT_KEYS = {"\r": "ENT", "\n": "ENT", "\x1b": "ESC", "\x08": "BS", "\x7f": "BS"}
+POSIX_KEYS = {"\r": "ENT", "\n": "ENT", "\x7f": "BS", "\x08": "BS"}
+POSIX_SEQ = {"[A": "up", "[B": "down", "[C": "right", "[D": "left"}
+
+
+def decode_msvcrt(ch, ch2=""):
+    """Windows 读键的解码（纯函数，可测；IO 留在 read_key 里）。"""
+    if ch in ("\x00", "\xe0"):
+        return MSVCRT_PFX.get(ch2, "")
+    return MSVCRT_KEYS.get(ch, ch)
+
+
+def decode_posix(ch, rest=""):
+    if ch == "\x1b":
+        return POSIX_SEQ.get(rest, "ESC")
+    return POSIX_KEYS.get(ch, ch)
+
+
 def read_key(timeout):
-    """读一个键；非 TTY（管道/CI）直接返回 None，让调用方回落 --plain。"""
+    """读一个键；非 TTY 的跑法由 main() 挡在 --plain，不会走到这里。"""
     try:
         import msvcrt                                  # Windows
-        msvcrt.flush()
         start = time.time()
         while time.time() - start < timeout:
             if msvcrt.kbhit():
                 ch = msvcrt.getwch()
                 if ch in ("\x00", "\xe0"):
-                    ch2 = msvcrt.getwch()
-                    return {"H": "left", "P": "up", "K": "up", "M": "right",
-                            "N": "down", "J": "down", "Q": "ENT", "S": "BS"}.get(ch2, ch)
-                return {"\r": "ENT", "\n": "ENT", "\x1b": "ESC", "\x08": "BS",
-                        "\x7f": "BS"}.get(ch, ch)
+                    return decode_msvcrt(ch, msvcrt.getwch())
+                return decode_msvcrt(ch)
             time.sleep(0.05)
         return "tick"
     except ImportError:
         pass
+    import select
     import termios
     import tty
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
     try:
         tty.setcbreak(fd)
-        import select
         r, _, _ = select.select([sys.stdin], [], [], timeout)
         if not r:
             return "tick"
         ch = sys.stdin.read(1)
-        if ch == "\x1b":
-            ch2 = sys.stdin.read(2)
-            return {"[A": "up", "[B": "down", "[C": "right", "[D": "left"}.get(ch2, "ESC")
-        return {"\r": "ENT", "\n": "ENT", "\x7f": "BS", "\x08": "BS"}.get(ch, ch)
+        rest = sys.stdin.read(2) if ch == "\x1b" else ""
+        return decode_posix(ch, rest)
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 

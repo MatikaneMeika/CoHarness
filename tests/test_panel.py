@@ -9,6 +9,7 @@
 import shutil
 import subprocess
 import sys
+import types
 import unittest
 from pathlib import Path
 
@@ -293,6 +294,85 @@ class EndToEnd(unittest.TestCase):
         data = tomllib.loads((H.REPO / "pyproject.toml").read_text(encoding="utf-8"))
         self.assertEqual(data["project"]["scripts"]["coharness-panel"], "coharness.panel:main")
         self.assertTrue(hasattr(panel_mod, "main"))
+
+
+class TerminalIO(unittest.TestCase):
+    """补的一课：全屏模式在 Windows 上第一次读键就崩（`msvcrt.flush()` 根本不存在），
+    而所有测试都走 --plain，所以整整一轮都没发现。读键的解码必须是纯函数才可测。"""
+
+    @unittest.skipUnless(sys.platform.startswith("win"), "msvcrt 分支只在 Windows 上跑")
+    def test_read_key_returns_tick_without_a_console(self):
+        self.assertEqual(panel_mod.read_key(0.05), "tick")
+
+    def test_msvcrt_key_decoding(self):
+        self.assertEqual(panel_mod.decode_msvcrt("\r"), "ENT")
+        self.assertEqual(panel_mod.decode_msvcrt("\x00", "P"), "up")
+        self.assertEqual(panel_mod.decode_msvcrt("\xe0", "M"), "right")
+        self.assertEqual(panel_mod.decode_msvcrt("j"), "j")
+
+    def test_posix_key_decoding(self):
+        self.assertEqual(panel_mod.decode_posix("\x1b", "[A"), "up")
+        self.assertEqual(panel_mod.decode_posix("\x1b", "[B"), "down")
+        self.assertEqual(panel_mod.decode_posix("\x1b", "x"), "ESC")
+        self.assertEqual(panel_mod.decode_posix("\x7f"), "BS")
+
+
+class InteractiveLoop(unittest.TestCase):
+    """把 main() 的循环整条跑一遍：渲染 → 读键 → 换页 → 重建快照。
+
+    真终端里截图只能证明"看着对"，证不了按键与刷新；这里用假 stdin/stdout 与脚本化的
+    read_key 驱动，所以 CI 上（没有控制台）也一样跑得动。
+    """
+
+    def setUp(self):
+        self.tmp = H.tmp_dir()
+        self.addCleanup(H.rmtree, self.tmp)
+        self.proj = self.tmp / "proj"
+        self.assertEqual(H.wsc("init", "03", str(self.proj)).returncode, 0)
+        make_card(self.proj, "T-020", items=("- [x] 一条", "- [ ] 另一条"))
+
+    def _run(self, keys):
+        import io
+        script = list(keys)
+        seen = []
+
+        def fake_read_key(timeout):
+            if not script:
+                return "q"
+            seen.append(script[0])
+            return script.pop(0)
+
+        class FakeStdin:
+            @staticmethod
+            def isatty():
+                return True
+
+        fake_sys = types.SimpleNamespace(stdin=FakeStdin(), stdout=io.StringIO(),
+                                        stderr=io.StringIO(), path=sys.path)
+        real_sys, real_key = panel_mod.sys, panel_mod.read_key
+        panel_mod.sys, panel_mod.read_key = fake_sys, fake_read_key
+        try:
+            rc = panel_mod.main(["--project", str(self.proj)])
+        finally:
+            panel_mod.sys, panel_mod.read_key = real_sys, real_key
+        return rc, fake_sys.stdout.getvalue(), seen
+
+    def test_keys_walk_the_three_pages_and_quit(self):
+        rc, out, keys = self._run(["ENT", "BS", "ENT", "q"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(keys, ["ENT", "BS", "ENT", "q"])
+        self.assertIn("任务看板", out)                       # 第二页
+        self.assertIn("T-020", out)
+        self.assertIn("验收清单", out)                       # 第三页（Enter 之后）
+        self.assertIn("[#", out)                             # 一条已勾的进度条
+        self.assertIn("\033[2J", out, "全屏模式要清屏重绘")
+        self.assertIn("\033[?25h", out, "退出时必须把光标找回来")
+
+    def test_down_then_enter_opens_the_selected_card(self):
+        rc, out, _ = self._run(["down", "ENT", "q"])
+        self.assertEqual(rc, 0)
+        self.assertIn("T-020", out)
+        self.assertNotIn("Traceback", out)
 
 
 if __name__ == "__main__":

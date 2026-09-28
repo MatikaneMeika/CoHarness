@@ -1,12 +1,12 @@
 # 验收对照 — 优化计划书第 7 节的九项指标（截至 2026-09-28）
 
 口径只有一条：**本地能证的给证据，需要外部条件的写明"未成立"**，不混为已交付。
-全套自测：`python -m unittest discover -s tests` → **237 条 OK**（skipped=4 为差分预言机用例，
+全套自测：`python -m unittest discover -s tests` → **242 条 OK**（skipped=4 为差分预言机用例，
 装了 dev extra 后 skipped=0；expected failures=1 是 `I-004`）。
 
 | # | 阶段 | 指标 | 基线 | 目标 | 现在 | 证据 / 缺什么 |
 |---|---|---|---|---|---|---|
-| 1 | P1 | CI 协议冒烟 | 无 | 全绿（含标注的 xfail） | **已跑 17 次，最新一次实测 failing——这是我的活，不是你的** | 剧本 `.github/workflows/ci.yml`（`on: push` + ubuntu/windows × py3.11/3.13 + oracle job）。原先写"本机无 act/docker，结果只有 push 后才存在"，把"我读不到"当成了"没发生"：仓库是公开的，**状态无需登录就能读**——`curl` 取 `actions/workflows/ci.yml/badge.svg` 实测返回 `failing`，Actions 页共 17 次运行，最新一次对应 `1885195`。差的是 job 级日志：未认证 REST API 被本机出口 IP 限流（403 rate limit），`gh` 又未登录，所以定位根因要先 `gh auth login` 一次。本地两条腿依旧全绿（237 条，零依赖 + 预言机）。`tests/test_protocol_smoke.py` 9 条硬断言 + `tests/test_parallel_race.py` 3 硬 1 xfail |
+| 1 | P1 | CI 协议冒烟 | 无 | 全绿（含标注的 xfail） | **已跑 17 次，最新一次实测 failing——这是我的活，不是你的** | 剧本 `.github/workflows/ci.yml`（`on: push` + ubuntu/windows × py3.11/3.13 + oracle job）。原先写"本机无 act/docker，结果只有 push 后才存在"，把"我读不到"当成了"没发生"：仓库是公开的，**状态无需登录就能读**——`curl` 取 `actions/workflows/ci.yml/badge.svg` 实测返回 `failing`，Actions 页共 17 次运行，最新一次对应 `1885195`。差的是 job 级日志：未认证 REST API 被本机出口 IP 限流（403 rate limit），`gh` 又未登录，所以定位根因要先 `gh auth login` 一次。本地两条腿依旧全绿（242 条，零依赖 + 预言机）。`tests/test_protocol_smoke.py` 9 条硬断言 + `tests/test_parallel_race.py` 3 硬 1 xfail |
 | 2 | P1 | 安装渠道 | git clone only | pipx + Release v1.1.0 | **pip 与隔离工具安装均已实测；tag 与 Release 待你登录** | `pyproject.toml` + `tests/test_packaging.py` 7 条；干净 venv 里 `pip install --no-build-isolation ./` → `wsc list` / `wsc init 03` 复制 27 文件 / `wsc check` 全绿。本轮补测等价路径：`uv build --wheel` 出 `coharness-1.1.0-py3-none-any.whl` → `uv tool install --from <wheel> coharness`（`UV_TOOL_DIR`/`UV_TOOL_BIN_DIR` 指到 D 盘，不碰 C）→ 装出来的 `wsc list` 列四套骨架、`wsc init 03` 复制 27 个文件（与上面钉住的数一致）、`wsc check` 全部通过 ✓，跑完已卸载并清痕迹。**如实分开**：pipx 本体这台机器没有该命令，字面路径仍未验，这条记的是"pipx 的等价隔离安装实测通过"；tag/Release 属对外动作，等 CI 绿再打（红的 commit 上打 tag 等于给发布物挂个已知坏的状态） |
 | 3 | P1 | clone → 首次"开工" | 未测 | ≤ 5 分钟（CI 计时） | **本地实测 2.6 秒；CI 计时未做** | 本地路径克隆 → `wsc init 03` → 首次 commit → `wsc sync` 合计 2594 ms（含 init 装钩子）。**这是 2026-09-28 本机单次实测，不是统计量**，换机器换盘就会变，所以不进断言。CI 里的计时步骤没加——要它成立得先有 #1 的 Actions 首跑 |
 | 4 | P2 | telemetry / stats | 不可用 | 报告稳定生成，反哺登记门槛 | **已成立** | `tests/test_stats.py` 12 条（写入形状、`--no-track`、`COHARNESS_NO_TRACK`、不进版本库、遵循率算法、只读性、返工信号阈值与跨作者标注、stale 转述、坏行不致命）；反哺通道：`wsc improve --cross` + `evolve.py` 的普遍性取证（`tests/test_registry_cross.py` 10 条、`tests/test_evolve.py` 13 条） |
