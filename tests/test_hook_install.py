@@ -71,6 +71,29 @@ class HookInstall(unittest.TestCase):
         self.assertFalse((H.hooks_dir(outer) / "pre-commit").exists(),
                          "不许把项目钩子装进外层仓库")
 
+    def test_clone_then_sync_installs_the_hook(self):
+        """钩子不入版本库：clone 出来的项目默认零执法，开工第一步要自愈补上。"""
+        src = self.tmp / "src"
+        H.git_repo(src, bootstrap=False)
+        self.init(src)
+        H.git(src, "add", "-A")
+        H.git(src, "commit", "-q", "-m", "骨架入库").returncode
+        clone = self.tmp / "clone"
+        H.git(self.tmp, "clone", "-q", str(src), str(clone))
+        self.assertFalse((H.hooks_dir(clone) / "pre-commit").exists(),
+                         "前提：git clone 不会带上 .git/hooks 里的钩子")
+        res = H.wsc("sync", str(clone))
+        self.assertEqual(res.returncode, 0, H.out(res))
+        self.assertIn("补装", H.out(res))
+        self.assertTrue((H.hooks_dir(clone) / "pre-commit").exists())
+        # 违规改动在补装后的 clone 里会被拦
+        (clone / "报告-final.md").write_text("x", encoding="utf-8")
+        H.git(clone, "add", "报告-final.md")
+        bad = H.git(clone, "commit", "-q", "-m", "违规命名")
+        self.assertNotEqual(bad.returncode, 0, msg=H.out(bad))
+        again = H.wsc("sync", str(clone))
+        self.assertNotIn("补装", H.out(again), "已装好时不该重复打印")
+
     def test_existing_hook_is_not_overwritten(self):
         dst = self.tmp / "kept"
         H.git_repo(dst, bootstrap=False)

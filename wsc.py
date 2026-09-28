@@ -273,11 +273,25 @@ def cmd_init(args):
             print(f"  {line}")
 
 
+HOOK_NOTICES = {
+    "not-a-repo": "目标不是 git 仓库根",
+    "outer-repo": "目标不是仓库根（属外层仓库）",
+    "git-missing": "找不到 git 命令",
+}
+
+
 def cmd_sync(args):
     project = Path(args.project).resolve() if args.project else Path.cwd()
     if not project.exists():
         sys.exit(f"项目路径不存在: {project}")
     print(f"== sync {project} ==")
+
+    # 钩子不入版本库：clone 出来的项目默认没有执法，开工第一步顺手补装
+    status, note = install_pre_commit(project)
+    if status == "installed":
+        print(f"[钩子] 本次开工补装进 {note}")
+    elif status in HOOK_NOTICES:
+        print(f"[钩子] 未装（{HOOK_NOTICES[status]}）：check.py 不会被自动触发")
 
     try:
         r = _run(["git", "pull", "--ff-only"], project)
