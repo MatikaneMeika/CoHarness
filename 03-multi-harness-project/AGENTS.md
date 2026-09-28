@@ -33,6 +33,7 @@
 | 其余共享契约（接口定义等） | architect | 只读，变更走 ADR |
 
 并行工作的前提是**路径不重叠**：两卡 `allowed_paths` 有交集时必须串行，或由 pm 先切分边界。
+本表与卡片 `allowed_paths` 都是授权来源且**以本表为准**：卡可以把本表里属于你的路径收窄，不能把标"只读"的路径扩成可写——要扩先改本表（走规则卡 + ADR）。
 
 ## 全局禁令（违反 = 直接返工；本节为 constitution 底稿来源，见 docs/CONSTITUTION-SOURCE.md）
 
