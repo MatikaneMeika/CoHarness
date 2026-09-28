@@ -23,9 +23,10 @@ def tracked_shippables():
     out = subprocess.run(["git", "ls-files"], cwd=str(H.REPO), capture_output=True,
                          text=True, encoding="utf-8", errors="replace").stdout
     files = set(out.split())
-    # docs/demo/ 是演示与取证脚本，只在 clone 里跑，不进 wheel（不进下游项目）
+    # docs/demo/ 与 docs/audits/ 是演示脚本和晋升审核存档，只在 clone 里用，不进 wheel
+    dev_only = ("docs/demo/", "docs/audits/")
     keep = {f for f in files if f.startswith(("01-", "02-", "03-", "04-", "skills/", "docs/"))
-            and not f.startswith("docs/demo/")}
+            and not f.startswith(dev_only)}
     keep |= {"ROUTER.md", "SECURITY.md", "CONTRIBUTING.md", "README.md", "LICENSE"}
     return keep
 

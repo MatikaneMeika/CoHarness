@@ -108,6 +108,23 @@ class ProtocolSmoke(unittest.TestCase):
         res = self.commit(proj, "已认领者交工", ["docs/ARCHITECTURE.md"])
         self.assertEqual(res.returncode, 0, msg=H.out(res))
 
+    def test_i_ownership_precedence_is_one_voice_in_both_docs(self):
+        """I-005：所有权表 > 卡片边界这条裁决顺序，两份文件都得说，且不许假装已经执法。
+
+        演练里真 harness 读到自己项目内的"冲突裁决顺序"却照卡片扩权改了 architect 独占的
+        docs/ARCHITECTURE.md——只有一处写了优先级等于没写。
+        """
+        agents = (H.SKELETON / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("以本表为准", agents, "所有权表的裁决句不见了")
+        conv = (H.SKELETON / ".agent" / "tasks" / "CARD-CONVENTION.md").read_text(encoding="utf-8")
+        self.assertIn("以 `AGENTS.md` 的单写者所有权表为准", conv,
+                      "卡片约定里没同步这条优先级，两处会各说一套")
+        # 钉住"仍未执法"这个事实：check.py 里没有读所有权表的代码。
+        # 哪天加了拦截，就得同时把两份文档里"仍是纪律层约束"的说法改真。
+        check_src = (H.SKELETON / "scripts" / "check.py").read_text(encoding="utf-8")
+        self.assertNotIn('"AGENTS.md"', check_src,
+                         "check.py 已经在读所有权表了，文档别说它还不管")
+
     def test_h_no_resident_card_in_skeleton(self):
         """死锁的根因是"唯一授权来源是一张必须长持的卡"，路修通后它不该再出现。"""
         self.assertFalse((H.SKELETON / BOARD).exists())

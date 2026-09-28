@@ -2,6 +2,11 @@
 
 > 格式：`- YYYY-MM-DD [晋升 I-xxx@来源项目] 摘要`；非晋升的本体演进用 `[演进]` 标签，缺陷修复用 `[缺陷修复]` 并附复现方式。只增不改。
 
+- 2026-09-28 [晋升 I-005@.coh-pilot-03] **所有权表优先于卡片边界：补齐口径同步与测试**（三证齐全的第一条晋升）。改动两处：`03-multi-harness-project/.agent/tasks/CARD-CONVENTION.md` 规则 1 下加子款——两源冲突以 `AGENTS.md` 单写者所有权表为准，卡只能收窄不能把表里"只读"扩成可写，扩权先改表走规则卡 + ADR，并**明写当前 `check.py` 没有读所有权表做自动拦截**（仍是纪律层约束）；`tests/test_protocol_smoke.py::test_i_ownership_precedence_is_one_voice_in_both_docs` 钉住两份文件都得说这条，并钉住"check.py 里没有读所有权表的代码"这个事实——将来谁加拦截，就必须同时把两份文档的说法改真。
+  三证：diff 位置 `CARD-CONVENTION.md 规则 1 子款（2 行）+ tests/test_protocol_smoke.py（17 行）`，补丁 `D:/gongju/ai/VibeWorkspace/i005.patch`；来源项目 `.coh-pilot-03` I-005，触发事实为 `.coh-p2` 真会话 wt-b 提交 `58d9ce0`（照卡片边界改了 architect 独占的 `docs/ARCHITECTURE.md`）；测试运行标识 `trial-20260928-190816`（`evolve.py --apply-check` 的临时副本内 207 条 OK，skipped=7 = 3 条门禁 + 4 条预言机；副本新实例化项目全量 check rc=0）。审核存档连同机器取证与主观两维落在 `docs/audits/I-005-所有权表优先.md`。
+  **如实记下流程偏差**：本条的裁决句本体（`03-multi-harness-project/AGENTS.md:36`）早在 commit `a90cf0c` 就已写回，而当时台账仍是「待审」——先写回、后审核，开的正是这条管线最该避免的先例。本次审核不掩盖它：CHANGELOG 与本行即为追认记录，补齐的是另外两处；往后晋升以 `--verify-record` 作硬门禁（缺「用户批准」一格就红，本轮已实测该格为空时确实红）。
+  门禁自身的另一条实证：本次第一版补丁被 `--apply-check` 判红——新用例把"仍未执法"错断成"`check.py` 源码里不出现『所有权表』"，而它在注释里出现两处；断言写错了对象，副本内 207 条跑出 1 条 FAILED，改精确断言后才过。
+
 - 2026-09-28 [演进] **发布工程：pip 可装、边界说清、验收对照成文**（计划书 W3 的代码侧 + 第 7 节对照）：
   ① 新增 `pyproject.toml`——三个面各给一个入口（`wsc` / `coharness-maintain` / `coharness-evolve`），
   骨架与文档作 package-data 随包走，**运行期依赖列表为空**（`python-frontmatter` 只进 `dev` extra，
