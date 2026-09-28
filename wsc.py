@@ -24,6 +24,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 PLACEHOLDER_RE = re.compile(r"\{\{([A-Z][A-Z0-9_]*)\}\}")
+LIB_PATH_TOKEN = "{{COHARNESS_LIB}}"
 
 
 def _utf8_streams():
@@ -117,8 +118,23 @@ def instantiate(src: Path, dst: Path):
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(p, target)
+        fill_library_path(target)
         copied.append(rel)
     return copied, skipped
+
+
+def fill_library_path(target: Path):
+    """把 {{COHARNESS_LIB}} 换成本机骨架库路径：文档里的命令要能直接复制粘贴执行。
+
+    写成 `<骨架库>` 时下游 harness 拿到的是个谜语——它不知道库在哪，认领命令就只能靠猜。
+    """
+    try:
+        text = target.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return
+    if LIB_PATH_TOKEN not in text:
+        return
+    target.write_text(text.replace(LIB_PATH_TOKEN, str(ROOT)), encoding="utf-8", newline="\n")
 
 
 def collect_placeholders(dst: Path, copied):

@@ -16,7 +16,7 @@
 
 ## 认领（先到先得）
 
-1. **首选一条命令**：`python <CoHarness>/wsc.py claim <项目> T-xxx <harness标识>`
+1. **首选一条命令**：`python {{COHARNESS_LIB}}/wsc.py claim <项目> T-xxx <harness标识>`
    —— 它把"fetch + 变基 + 读卡校验 + 写卡 + 过项目 check.py + commit + push main"绑成一步，
    任何一步不成都还原，不会留下半截认领；被抢则退出并列出此刻可认领的卡
 2. 手工路径（用 backlog CLI 或不带 wsc 时）：`backlog task edit T-xxx -a <harness标识> -s doing`

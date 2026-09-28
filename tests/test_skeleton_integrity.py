@@ -90,6 +90,26 @@ class SkeletonIntegrity(unittest.TestCase):
                                  f"{sk}/{src.relative_to(proj)} 用了卡里没有的占位符 "
                                  f"{sorted(names - card_names)}")
 
+    def test_library_path_is_resolved_at_instantiation(self):
+        """`{{COHARNESS_LIB}}` 由 wsc init 代入本机骨架库路径：文档里的命令要能直接复制执行。
+
+        原来写的是 `<骨架库>`/`<CoHarness>` 这种散文占位符，下游 harness 不知道库在哪，
+        认领/体检命令只能靠猜——承诺等于没写。
+        """
+        lib = str(H.REPO)
+        for sk, proj in self.projects.items():
+            for src in sorted(proj.rglob("*.md")):
+                self.assertNotIn("{{COHARNESS_LIB}}", src.read_text(encoding="utf-8"),
+                                 f"{sk}/{src.relative_to(proj)} 里的库路径没被代入")
+            self.assertNotIn("<骨架库>", (proj / "AGENTS.md").read_text(encoding="utf-8"))
+        agents = (self.projects["03-multi-harness-project"] / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn(f"python {lib}/wsc.py claim", agents)
+        protocol = (self.projects["03-multi-harness-project"] / ".agent" / "workflows" /
+                    "parallel-protocol.md").read_text(encoding="utf-8")
+        self.assertIn(f"python {lib}/wsc.py claim", protocol)
+        raw = (H.SKELETON / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("{{COHARNESS_LIB}}", raw, "骨架本体保留占位符，只实例化时代入")
+
     def test_skeletons_ship_no_run_residue(self):
         for sk in SKELETONS:
             junk = [p for p in (H.REPO / sk).rglob("*")
