@@ -8,7 +8,7 @@
 
 - `docs/requirements-checklist.md`（已确认）
 - `deliverables/data/` 真实实验数据
-- `{{REPORT_TEMPLATE}}` 模板结构与格式要求
+- `{{FORMAT_TEMPLATE}}` 登记的模板结构与格式要求
 
 ## 输出物
 

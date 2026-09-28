@@ -29,7 +29,7 @@
 
 ## 维护模式（匹配角色干活）
 
-1. 每次**先跑** `python <库>\wsc.py sync <路径>`（pull + 看板摘要 + stale 报告；01/04/05 无看板则跳过）
+1. 每次**先跑** `python <库>\wsc.py sync <路径>`（pull + 看板摘要 + stale 报告；01/04 无看板则跳过）
 2. 读项目 `AGENTS.md`，按其"工作方式"节定位 workflow；03 多 harness 另按 `.agent/workflows/parallel-protocol.md` 认领开工
 3. **按任务性质套角色**（同一会话可身兼多角，但实现与审查必须分开两轮）：
 

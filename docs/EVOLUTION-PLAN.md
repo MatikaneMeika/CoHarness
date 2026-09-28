@@ -118,3 +118,15 @@
 - `backlog.config.yml` 列配置的精确键名（当前为宽容解析，解析失败回落默认四列，不影响执法）
 - `specify init` 四集成（zcode/codex/qodercli/generic）实操、git-wt 双 worktree 并行实操
 
+## 2026-09-28 补注（不改动上面带日期的原文）
+
+- 正文提到的"05 骨架"从未建立（:30、:81 的 05 在 01-04 之外）；`ROUTER.md` 的同类笔误已就地改正，
+  本文件保留原文只加本条注。
+- :95 的"20 个文件"是当时的 03 计数。本轮给四套骨架补齐了目录地图声明却从不创建的路径
+  （01 `src/`+`tests/`、02 `docs/notes.md`、03 `code/`+`backlog/tasks/`+`docs/reviews/`+`docs/regression/`、
+  04 `docs/CHANGELOG.md`），计数已变，以 `wsc init` 的输出为准；
+  `tests/test_skeleton_integrity.py` 会钉住"声明的路径必须真存在、引用的文件必须真在、
+  占位符必须在项目卡里能解释"这三条。
+- :117-119 三条待验项仍未验（本机不装 backlog / specify / git-wt，也不为此装）。
+  其中"真实 frontmatter 与 check.py 解析的兼容"这条现在有了开发期差分预言机与子集夹具兜着
+  （见本文件 ADR-10 与 `tests/fixtures/`）。

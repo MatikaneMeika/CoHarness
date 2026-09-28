@@ -1,12 +1,12 @@
 ---
 id: T-001
-title:
+title: （填任务标题）
 status: todo        # todo | doing | review | done
-created: {{DATE}}
+created: YYYY-MM-DD
 allowed_paths:
   - src/
 acceptance:
-  -
+  - （填可验证条目）
 ---
 
 ## 需求

@@ -1,14 +1,14 @@
 ---
 id: T-001
-title:
+title: （填本章要解决什么）
 status: todo        # todo | doing | review | done
-created: {{DATE}}
+created: YYYY-MM-DD
 chapter:            # 负责章节，如 source/03-市场分析.md
 word_target:        # 本章字数
-materials:          # 依赖的素材
-  []
+materials:
+  - （填依赖的素材）
 acceptance:
-  -
+  - （填可验证条目）
 ---
 
 ## 需求

@@ -2,12 +2,12 @@
 
 只在骨架库自己的测试里用，不进任何骨架分发物（ADR-10：分发面保持纯标准库零依赖）。
 """
-import importlib.util
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import types
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -21,14 +21,6 @@ GIT_ID = ["-c", "user.name=coharness-test", "-c", "user.email=coharness-test@inv
           "-c", "commit.gpgsign=false", "-c", "core.autocrlf=false"]
 
 
-def load_check_module():
-    """把骨架里的 check.py 当模块载入，只用于解析器的单元测试（不跑它的 main）。"""
-    spec = importlib.util.spec_from_file_location("coh_check", CHECK_SRC)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
 def run(argv, cwd=None, native_env=False, extra_env=None):
     # PYTHONIOENCODING 只统一子进程 stdio 编码，不改 locale 首选编码，
     # 这样 wsc 内部 subprocess(text=True) 的解码缺陷仍能被测出（见 test_console_encoding）
@@ -40,11 +32,6 @@ def run(argv, cwd=None, native_env=False, extra_env=None):
                           errors="replace", timeout=180, shell=False, env=env)
 
 
-def native_cli(*args, cwd=None):
-    """按本机真实控制台环境跑 wsc.py（不注入 PYTHONIOENCODING）。"""
-    return run([sys.executable, WSC, *args], cwd=cwd, native_env=True)
-
-
 def check(project, *args):
     """跑项目里的 scripts/check.py（ROOT 由脚本自身位置决定，所以必须跑副本）。"""
     return run([sys.executable, Path(project) / "scripts" / "check.py", *args], cwd=project)
@@ -52,6 +39,11 @@ def check(project, *args):
 
 def wsc(*args, cwd=None):
     return run([sys.executable, WSC, *args], cwd=cwd)
+
+
+def native_cli(*args, cwd=None):
+    """按本机真实控制台环境跑 wsc.py（不注入 PYTHONIOENCODING）。"""
+    return run([sys.executable, WSC, *args], cwd=cwd, native_env=True)
 
 
 def git(cwd, *args):
@@ -62,9 +54,21 @@ def out(res):
     return (res.stdout or "") + (res.stderr or "")
 
 
+def load_check_module():
+    """把骨架里的 check.py 载入内存做解析器单元测试。
+
+    不用 importlib 的 from_file_location：那会在骨架目录留下 __pycache__，
+    而"骨架混入运行残留"正是 EVOLUTION-PLAN.md:113 记过的坑。
+    """
+    src = CHECK_SRC.read_text(encoding="utf-8")
+    mod = types.ModuleType("coh_check_under_test")
+    mod.__file__ = str(CHECK_SRC)
+    exec(compile(src, str(CHECK_SRC), "exec"), mod.__dict__)
+    return mod
+
+
 def tmp_dir():
-    d = Path(tempfile.mkdtemp(prefix="coh-test-"))
-    return d
+    return Path(tempfile.mkdtemp(prefix="coh-test-"))
 
 
 def rmtree(path):

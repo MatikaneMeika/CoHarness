@@ -6,7 +6,7 @@
 ## 允许改动
 
 - `backlog/`（建卡，经 `backlog task create`）
-- `docs/` 下 spec-kit 产物之外的需求澄清记录（`docs/rfc/`，仅当不走 spec-kit 时）
+- `docs/` 下 spec-kit 产物之外的需求澄清记录（`docs/rfc/` 目录按需自建，仅当不走 spec-kit 时）
 - 不改代码、不改其他规则文件
 
 ## 桥接：/speckit-tasks 产出 → Backlog 卡
