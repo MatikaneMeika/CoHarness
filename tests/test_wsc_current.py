@@ -1,0 +1,115 @@
+"""钉住 wsc.py 现有行为：init 的三种目标、适配指针、improve、doctor、sync 不崩。"""
+import sys
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import helpers as H
+
+POINTER = "读 AGENTS.md，以其为准。"
+ADAPTER_FILES = ["CLAUDE.md", "GEMINI.md", ".cursorrules", ".github/copilot-instructions.md",
+                 ".windsurfrules"]
+
+
+class TempCase(unittest.TestCase):
+    def setUp(self):
+        self.tmp = H.tmp_dir()
+        self.addCleanup(H.rmtree, self.tmp)
+
+
+class TestInit(TempCase):
+    def test_list_shows_four_skeletons(self):
+        text = H.out(H.wsc("list"))
+        for name in ("01-solo-code", "02-study-office", "03-multi-harness-project",
+                     "04-doc-production"):
+            self.assertIn(name, text)
+
+    def test_init_empty_dir(self):
+        dst = self.tmp / "proj"
+        dst.mkdir()
+        res = H.wsc("init", "multi", str(dst))
+        self.assertEqual(res.returncode, 0, H.out(res))
+        self.assertTrue((dst / "AGENTS.md").exists())
+        self.assertTrue((dst / "scripts" / "check.py").exists())
+        text = H.out(res)
+        self.assertIn("待填占位符", text)
+        self.assertIn("{{PROJECT_NAME}}", text)
+        self.assertIn("依赖安装", text)
+
+    def test_init_refuses_non_empty_dir(self):
+        dst = self.tmp / "busy"
+        dst.mkdir()
+        (dst / "已有规则.md").write_text("x", encoding="utf-8")
+        res = H.wsc("init", "multi", str(dst))
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("目标目录非空", H.out(res))
+
+    def test_init_allows_dir_containing_only_git(self):
+        # 先 git init 再实例化（EVOLUTION-PLAN.md:114 记录过的修复）
+        dst = self.tmp / "repo"
+        dst.mkdir()
+        H.git_repo(dst, bootstrap=False)
+        res = H.wsc("init", "multi", str(dst))
+        self.assertEqual(res.returncode, 0, H.out(res))
+        self.assertTrue((dst / ".agent").is_dir())
+
+    def test_init_installs_hook_into_existing_repo(self):
+        dst = self.tmp / "repo2"
+        dst.mkdir()
+        H.git_repo(dst, bootstrap=False)
+        H.wsc("init", "multi", str(dst))
+        self.assertTrue((H.hooks_dir(dst) / "pre-commit").exists(),
+                        "wsc init 应把 pre-commit 装进 git 认定的钩子目录")
+
+    def test_adapters_are_one_line_pointers(self):
+        dst = self.tmp / "adp"
+        dst.mkdir()
+        res = H.wsc("init", "solo", str(dst), "--adapter", "all")
+        self.assertEqual(res.returncode, 0, H.out(res))
+        for rel in ADAPTER_FILES:
+            p = dst / rel
+            self.assertTrue(p.exists(), rel)
+            self.assertTrue(p.read_text(encoding="utf-8").startswith(POINTER), rel)
+
+    def test_unknown_adapter_is_reported_not_fatal(self):
+        dst = self.tmp / "adp2"
+        dst.mkdir()
+        res = H.wsc("init", "solo", str(dst), "--adapter", "kimi")
+        self.assertEqual(res.returncode, 0, H.out(res))
+        self.assertIn("[跳过] 未知 adapter: kimi", H.out(res))
+
+    def test_existing_adapter_file_is_not_overwritten(self):
+        dst = self.tmp / "adp3"
+        dst.mkdir()
+        (dst / "CLAUDE.md").write_text("我自己的内容\n", encoding="utf-8")
+        H.wsc("init", "solo", str(dst), "--adapter", "claude")
+        self.assertEqual((dst / "CLAUDE.md").read_text(encoding="utf-8"), "我自己的内容\n")
+
+    def test_unknown_skeleton_lists_options(self):
+        res = H.wsc("init", "nope", str(self.tmp / "x"))
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("未找到骨架", H.out(res))
+
+
+class TestImproveAndDoctor(TempCase):
+    def test_improve_on_untouched_template(self):
+        proj = H.make_project(self.tmp)
+        res = H.wsc("improve", str(proj))
+        self.assertEqual(res.returncode, 0, H.out(res))
+        self.assertIn("无待处理改进", H.out(res))
+
+    def test_improve_missing_file(self):
+        res = H.wsc("improve", str(self.tmp))
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("未找到", H.out(res))
+
+    def test_doctor_reports_missing_without_failing(self):
+        res = H.wsc("doctor")
+        self.assertEqual(res.returncode, 0, H.out(res))
+        self.assertIn("依赖自检", H.out(res))
+        for label in ("git", "node", "backlog", "uv", "worktrunk"):
+            self.assertIn(label, H.out(res))
+
+
+if __name__ == "__main__":
+    unittest.main()
