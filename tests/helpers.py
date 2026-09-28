@@ -119,6 +119,12 @@ def install_hook(project):
     hd.mkdir(parents=True, exist_ok=True)
     target = hd / "pre-commit"
     shutil.copyfile(HOOK_SRC, target)
+    try:
+        target.chmod(0o755)
+    except OSError:
+        pass
+    # 必须和 wsc.install_pre_commit 做同样的事：unix 上不可执行的钩子会被 git 跳过，
+    # 少了这一步，测试测的就不是产品装出来的那个钩子（Windows 不看执行位，所以本机测不出来）。
     return target
 
 

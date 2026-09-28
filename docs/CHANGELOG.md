@@ -2,6 +2,8 @@
 
 > 格式：`- YYYY-MM-DD [晋升 I-xxx@来源项目] 摘要`；非晋升的本体演进用 `[演进]` 标签，缺陷修复用 `[缺陷修复]` 并附复现方式。只增不改。
 
+- 2026-09-28 [缺陷修复] **测试装钩子少了 chmod：本机测不出来，但测的就不是产品装出来的那个钩子**（复现方式是对照读码：`wsc.install_pre_commit` 复制钩子后 `target.chmod(0o755)`，而 `tests/helpers.py:install_hook` 只 `shutil.copyfile` 就走完——Windows 不看执行位，本机 244 条全绿也照不出这个差异；unix 上不可执行的 `pre-commit` 会被 git 跳过或报权限错，于是 `test_hook_e2e` / `test_check_diff` 里那些"提交必须被拦"的断言在 Linux runner 上测的是另一回事）。修法：测试侧与产品侧做同一件事（同样 copyfile + chmod 0o755 + 同样的 OSError 兜底），并把理由写在旁边。**如实说明这是按机制推出来的保真度修复，不是已证实的 CI 红因**——Linux 那一轴的 job 日志我读不到（未认证 API 被出口 IP 限流，本机无 WSL/docker/act），已排除的轴：py3.11 整跑绿、`core.autocrlf=true` 重新检出整跑绿、git 身份与默认分支与路径大小写静态排查无命中。剩下的定位要一次 `gh auth login`。
+
 - 2026-09-28 [演进] **面板的刷新从"每卡一次 git"改成"整库一次 + 按 HEAD 缓存"**（写第一版时留下的性能账，在补 `--watch` 的成本测试时才暴露）：原来每张卡各跑一次 `git log --name-only -- <边界>`、一次 `git worktree list`，20 张卡的看板每 5 秒就是 40 个 git 进程——"实时"两个字是拿 CPU 换的。现在一次 `git log` 取全部边界内的提交，按文件归属回每张卡（`_norm_prefix` 归一后做前缀匹配，这条改错一次就被测试抓住：卡片里的前缀带尾斜杠，不归一就永远匹配不上、提交数全成 0）；worktree 清单与提交结果按 HEAD 缓存，`rev-parse HEAD` 一变整体作废。实测 `.coh-p2/work/wt-a`：第一轮 3 次 git，第二轮 1 次（只剩 HEAD 探测），数据一字不差。
   新增 `tests/test_panel.py::RefreshCost` 两条：`test_second_build_only_probes_head`（第二轮必须比第一轮少干活，且缓存不能把数据也省掉）、`test_new_commit_invalidates_the_cache`（新提交后每张卡的提交数必须 +1——面板不许拿旧账当现状）。`board.py` 上限随之从 540 调到 580（ADR-10 附注的表同步），全套 244 条 OK。
 
