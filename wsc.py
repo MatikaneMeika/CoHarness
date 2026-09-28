@@ -5,7 +5,9 @@
     python wsc.py list                     # 列出可用骨架
     python wsc.py init <骨架名> <目标路径>   # 实例化骨架（占位符清单 + pre-commit 安装）
     python wsc.py sync [项目路径]           # 开工协议：pull + 看板摘要 + stale 报告
+    python wsc.py claim <项目> <卡号> <标识> # 原子认领一张 todo 卡（被抢自动还原）
     python wsc.py check [项目路径]          # 跑项目 scripts/check.py 全部检查
+    python wsc.py stats [项目路径]          # 本地统计：遵循率 / 返工信号 / stale 分布
     python wsc.py doctor                   # 依赖自检（node/backlog/uv/specify/worktrunk）
 
 骨架名支持全名/编号/前缀，如 solo / 03 / doc-production。
@@ -523,6 +525,105 @@ def cmd_improve(args):
     print("\n审核：对任意 harness 说「evolve <项目路径>」，标准见骨架库 docs/EVOLUTION-PROCESS.md")
 
 
+def _read_telemetry(project: Path):
+    f = project / ".agent" / "telemetry.jsonl"
+    if not f.exists():
+        return [], 0, f
+    entries, bad = [], 0
+    for line in f.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            e = json.loads(line)
+        except ValueError:
+            bad += 1
+            continue
+        if isinstance(e, dict):
+            entries.append(e)
+        else:
+            bad += 1
+    return entries, bad, f
+
+
+def _churn(project, days):
+    """git log 里近 N 天每个文件被几次提交、哪些作者触及：返工信号的原始计数。"""
+    r = _run(["git", "log", f"--since={days} days ago", "--name-only",
+              "--pretty=format:@@%h|%an"], project)
+    if r.returncode != 0:
+        return None
+    counts = {}
+    commit_id, author = "", ""
+    for line in (r.stdout or "").splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith("@@"):
+            _, _, rest = s.partition("|")
+            commit_id, author = s[2:].split("|", 1)[0], rest
+            continue
+        rec = counts.setdefault(s, {"ids": set(), "who": set()})
+        rec["ids"].add(commit_id)
+        rec["who"].add(author)
+    return counts
+
+
+def cmd_stats(args):
+    """三张报告：规则遵循率 / 返工信号 / stale 分布。数据源只有本地文件与 git log。"""
+    project = Path(args.project).resolve() if args.project else Path.cwd()
+    days = args.days
+    print(f"== stats {project}（近 {days} 天）==")
+
+    entries, bad, tfile = _read_telemetry(project)
+    print(f"\n[1] 规则遵循率（{tfile}，{len(entries)} 条执行记录"
+          + (f"，{bad} 行读不懂已跳过" if bad else "") + "）")
+    if not entries:
+        print("  还没有运行记录：check.py 每次执行会追加一行（--no-track 或 COHARNESS_NO_TRACK=1 可关）")
+    else:
+        by = {}
+        for e in entries:
+            by.setdefault(e.get("harness", "unknown"), []).append(e)
+        for who, rows in sorted(by.items()):
+            passed = sum(1 for e in rows if e.get("rc") == 0)
+            print(f"  {who}: {passed}/{len(rows)} 次全绿（{passed * 100 // len(rows)}%）")
+            per = {}
+            for e in rows:
+                for k, v in (e.get("checks") or {}).items():
+                    hit = per.setdefault(k, [0, 0])
+                    hit[1] += 1
+                    hit[0] += 1 if v else 0
+            detail = "  ".join(f"{k} {ok}/{tot}" for k, (ok, tot) in sorted(per.items()) if ok != tot)
+            if detail:
+                print(f"      失分项：{detail}")
+        cards_seen = sorted({e.get("card") for e in entries if e.get("card")})
+        print(f"  记录覆盖的卡片：{', '.join(cards_seen) if cards_seen else '（无 doing 卡记录）'}")
+
+    print(f"\n[2] 返工信号（git log 近 {days} 天，同一文件被 ≥3 次提交触及）")
+    churn = _churn(project, days)
+    if churn is None:
+        print("  git log 读不到（不是仓库？），跳过")
+    else:
+        hits = sorted(((f, v) for f, v in churn.items() if len(v["ids"]) >= 3),
+                      key=lambda kv: -len(kv[1]["ids"]))
+        if not hits:
+            print("  无：近期内没有反复改动的文件")
+        for f, v in hits[:10]:
+            cross = "（跨 harness，先看是不是边界没切清）" if len(v["who"]) > 1 else ""
+            print(f"  {f}：{len(v['ids'])} 次提交，作者 {', '.join(sorted(v['who']))}{cross}")
+        if len(hits) > 10:
+            print(f"  …另有 {len(hits) - 10} 个文件")
+
+    print("\n[3] stale 分布（check.py --stale 原样转述）")
+    if (project / "scripts" / "check.py").exists():
+        # --no-track：统计工具不该把自己读到的数据写胖（否则每次 stats 都 +1 条"执行记录"）
+        r = _run([sys.executable, "scripts/check.py", "--stale", "--no-track"], project, timeout=120)
+        print(_indent(r.stdout or "") or "  （无输出）")
+        if r.stderr:
+            print(_indent(r.stderr))
+    else:
+        print("  项目不带 scripts/check.py，无 stale 报告")
+
+
 def cmd_doctor(_args):
     tools = [
         ("git", "git", None),
@@ -725,16 +826,19 @@ def main():
     p_claim.add_argument("card", help="卡片 id，如 T-003")
     p_claim.add_argument("who", help="认领者标识（harness id，与卡 assignee/分支名一致）")
     p_claim.add_argument("--dry-run", action="store_true", help="只报告会不会成功，不写盘不提交")
+    p_stats = sub.add_parser("stats", help="本地运行统计：规则遵循率 / 返工信号 / stale 分布")
+    p_stats.add_argument("project", nargs="?", help="项目路径（默认当前目录）")
+    p_stats.add_argument("--days", type=int, default=7, help="返工信号回溯天数（默认 7）")
     sub.add_parser("doctor", help="依赖自检")
     args = ap.parse_args()
 
     if args.cmd is None:
         cmd_list(None)
-        print("\n用法: python wsc.py {list|init|sync|check|improve|claim|doctor} ...（-h 看详情）")
+        print("\n用法: python wsc.py {list|init|sync|check|improve|claim|stats|doctor} ...（-h 看详情）")
         return
     {"list": cmd_list, "init": cmd_init, "sync": cmd_sync,
      "check": cmd_check, "improve": cmd_improve, "claim": cmd_claim,
-     "doctor": cmd_doctor}[args.cmd](args)
+     "stats": cmd_stats, "doctor": cmd_doctor}[args.cmd](args)
 
 
 if __name__ == "__main__":

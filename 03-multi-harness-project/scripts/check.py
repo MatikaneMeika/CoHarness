@@ -14,9 +14,12 @@
 退出码：0 = 通过；1 = 存在违规（stale 提示不算违规，不拦截提交）。
 """
 import argparse
+import json
+import os
 import re
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -509,6 +512,36 @@ def check_stale(cards):
         print("[stale] 无僵死卡")
 
 
+def _harness_id():
+    """这次执行算在谁头上：环境变量优先，其次 git 身份，都没有就 unknown。"""
+    env = os.environ.get("COHARNESS_HARNESS", "").strip()
+    if env:
+        return env
+    ok, name = _git_out(["config", "user.name"])
+    return name.strip() if ok and name.strip() else "unknown"
+
+
+def record_run(checks, rc, my_card, started):
+    """把本次执行追加进项目内 .agent/telemetry.jsonl：本地、零上传、可关。
+
+    关掉用 `--no-track` 或环境变量 COHARNESS_NO_TRACK=1；删掉那个文件（它已在 .gitignore 里）
+    就回到零持久化痕迹。写失败只提示一行，不影响检查结论——执法不能因为记账而失效。
+    """
+    if os.environ.get("COHARNESS_NO_TRACK") or "--no-track" in sys.argv:
+        return
+    entry = {"ts": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+             "harness": _harness_id(),
+             "checks": checks, "rc": rc, "card": my_card,
+             "ms": int((time.monotonic() - started) * 1000)}
+    f = ROOT / ".agent" / "telemetry.jsonl"
+    try:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        with open(f, "a", encoding="utf-8", newline="\n") as fh:
+            fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except OSError as e:
+        print(f"[遥测] 写入 {f} 失败（不影响检查结论）: {e}", file=sys.stderr)
+
+
 def main():
     _utf8_streams()
     ap = argparse.ArgumentParser()
@@ -516,8 +549,11 @@ def main():
     ap.add_argument("--tasks", action="store_true")
     ap.add_argument("--diff", action="store_true")
     ap.add_argument("--stale", action="store_true")
+    ap.add_argument("--no-track", action="store_true",
+                    help="这次执行不写 .agent/telemetry.jsonl")
     args = ap.parse_args()
     run_all = not (args.names or args.tasks or args.diff or args.stale)
+    started = time.monotonic()
 
     tasks_dir, columns = load_config()
     cards, card_errors = load_cards(tasks_dir)
@@ -526,17 +562,25 @@ def main():
     except ValueError:
         tasks_rel = ""
 
+    ran = {}
     ok = True
     if run_all or args.names:
-        ok &= check_names()
+        ran["names"] = check_names()
+        ok &= ran["names"]
     if run_all or args.tasks:
-        ok &= check_tasks(cards, columns, card_errors)
+        ran["tasks"] = check_tasks(cards, columns, card_errors)
+        ok &= ran["tasks"]
     if run_all or args.diff:
-        ok &= check_diff(cards, tasks_rel)
+        ran["diff"] = check_diff(cards, tasks_rel)
+        ok &= ran["diff"]
     if run_all or args.stale:
         check_stale(cards)  # advisory
+        ran["stale"] = True
     if run_all:
         print("\n结论:", "全部通过 ✓" if ok else "存在违规 ✗（见上）")
+    my_card = next((c["meta"].get("id") for c in cards
+                    if c["status"] == "doing" and _harness_id() in c["assignees"]), None)
+    record_run(ran, 0 if ok else 1, my_card, started)
     sys.exit(0 if ok else 1)
 
 

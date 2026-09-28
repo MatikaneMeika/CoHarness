@@ -75,6 +75,8 @@
 
 `python scripts/check.py`（命名规范 / 卡格式与边界节 / 改动挂卡 / stale / assignee 冲突），已由 pre-commit 钩子强制（`scripts/hooks/pre-commit`，wsc init 自动安装）。**所有工具的提交都过这一个钩子。**
 
+`check.py` 每次执行会在项目内 `.agent/telemetry.jsonl` 追加一行本地运行记账（时间、harness 标识、跑了哪几项、通过与否、当时在做的卡）。它已在 `.gitignore` 里——不进版本库、不联网、不弄脏工作区，只给 `python <库>/wsc.py stats <项目>` 当数据源（遵循率 / 返工信号 / stale 分布）。不想留：`--no-track` 或环境变量 `COHARNESS_NO_TRACK=1`。
+
 ## 冲突裁决顺序
 
 ```

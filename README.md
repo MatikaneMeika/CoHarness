@@ -58,11 +58,12 @@ python wsc.py claim <项目> T-001 <标识>  # 原子认领：同步+校验+写�
 python wsc.py check <项目>     # 全量体检（命名、卡格式、改动挂卡、认领冲突、边界交集）
 python wsc.py improve <项目>   # 列出待审的骨架改进
 python wsc.py improve --cross  # 扫本机登记过的全部实例，按同类摩擦出机械计数（晋升门槛 ≥2 次的证据源）
+python wsc.py stats <项目>     # 本地运行统计：规则遵循率 / 返工信号 / stale 分布（数据只来自项目内文件与 git log）
 python wsc.py doctor           # 依赖自检
 python wsc.py list             # 骨架列表
 ```
 
-仓库自带 119 条自测，跑起来不需要装任何东西：
+仓库自带 138 条自测，跑起来不需要装任何东西：
 
 ```bash
 python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows × py3.11/3.13 上跑同样的命令
@@ -78,7 +79,7 @@ python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows × 
 
 ## 关于安全
 
-仓库里只有模板和两个纯标准库的 Python 脚本：没有网络请求，没有遥测，subprocess 参数全部是写死的字面量，文件操作不出项目目录。你实例化出来的项目归你自己的仓库，这边不收集任何东西。边界细节写在 [SECURITY.md](SECURITY.md)。
+仓库里只有模板和两个纯标准库的 Python 脚本：脚本自身不发任何网络请求（对外连接只走你自己配的 git 远端），subprocess 参数全部是字面量 argv。运行统计（`.agent/telemetry.jsonl`）与本机登记表（`~/.coharness/projects.json`）都只落本地文件、可关可删，位置能用 `COHARNESS_HOME` 挪走；你实例化出来的项目归你自己的仓库，这边不收集也不上传任何东西。边界细节写在 [SECURITY.md](SECURITY.md)。
 
 ## 文档与来源
 
