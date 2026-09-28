@@ -3,7 +3,6 @@
 只在骨架库自己的测试里用，不进任何骨架分发物（ADR-10：分发面保持纯标准库零依赖）。
 """
 import os
-import os
 import shutil
 import subprocess
 import sys
@@ -21,13 +20,18 @@ GIT_ID = ["-c", "user.name=coharness-test", "-c", "user.email=coharness-test@inv
           "-c", "commit.gpgsign=false", "-c", "core.autocrlf=false"]
 
 
-def run(argv, cwd=None):
-    # PYTHONIOENCODING 只统一子进程的 stdio 编码，不改 locale 的首选编码，
-    # 这样 wsc/check 内部 subprocess(text=True) 的解码问题仍能被测出（见 R3）
-    env = dict(os.environ, PYTHONIOENCODING="utf-8")
+def run(argv, cwd=None, native_env=False):
+    # PYTHONIOENCODING 只统一子进程 stdio 编码，不改 locale 首选编码，
+    # 这样 wsc 内部 subprocess(text=True) 的解码缺陷仍能被测出（见 test_console_encoding）
+    env = dict(os.environ) if native_env else dict(os.environ, PYTHONIOENCODING="utf-8")
     return subprocess.run([str(a) for a in argv], cwd=str(cwd) if cwd is not None else None,
                           capture_output=True, text=True, encoding="utf-8",
                           errors="replace", timeout=180, shell=False, env=env)
+
+
+def native_cli(*args, cwd=None):
+    """按本机真实控制台环境跑 wsc.py（不注入 PYTHONIOENCODING）。"""
+    return run([sys.executable, WSC, *args], cwd=cwd, native_env=True)
 
 
 def check(project, *args):

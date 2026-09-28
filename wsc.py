@@ -9,7 +9,8 @@
     python wsc.py doctor                   # 依赖自检（node/backlog/uv/specify/worktrunk）
 
 骨架名支持全名/编号/前缀，如 solo / 03 / doc-production。
-所有 subprocess 调用均为同一安全形状：argv 全字面量、shell=False、用户路径只作 cwd。
+所有 subprocess 调用均为同一安全形状：argv 全字面量、shell=False、用户路径只作 cwd、
+输出显式按 utf-8 解码（见 _run）。
 """
 import argparse
 import re
@@ -20,6 +21,24 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 PLACEHOLDER_RE = re.compile(r"\{\{([A-Z][A-Z0-9_]*)\}\}")
+
+
+def _utf8_streams():
+    """中文提示在 cp936/gbk 控制台下要先保证自己可读：stdout 与 stderr 一起管。"""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
+def _run(argv, cwd, timeout=60):
+    """统一的子进程调用形状：argv 全字面量、shell=False、输出显式按 utf-8 解码。
+
+    不写 encoding 时子进程输出按 locale 首选编码解码（简体中文 Windows 是 cp936），
+    被调脚本输出的 utf-8 中文会让读取线程直接抛 UnicodeDecodeError。
+    """
+    return subprocess.run([str(a) for a in argv], cwd=str(cwd), capture_output=True,
+                          text=True, encoding="utf-8", errors="replace",
+                          timeout=timeout, shell=False)
 
 NEXT_STEPS = {
     "03-multi-harness-project": [
@@ -204,8 +223,7 @@ def cmd_sync(args):
     print(f"== sync {project} ==")
 
     try:
-        r = subprocess.run(["git", "pull", "--ff-only"], cwd=str(project),
-                           capture_output=True, text=True, timeout=60, shell=False)
+        r = _run(["git", "pull", "--ff-only"], project)
         out = (r.stdout or r.stderr).strip() or "完成"
     except (OSError, subprocess.TimeoutExpired) as e:
         out = f"（执行失败: {e}）"
@@ -213,8 +231,7 @@ def cmd_sync(args):
 
     if shutil.which("backlog"):
         try:
-            r = subprocess.run(["backlog", "task", "list"], cwd=str(project),
-                               capture_output=True, text=True, timeout=60, shell=False)
+            r = _run(["backlog", "task", "list"], project)
             out = (r.stdout or r.stderr).strip()
         except (OSError, subprocess.TimeoutExpired) as e:
             out = f"（执行失败: {e}）"
@@ -228,8 +245,7 @@ def cmd_sync(args):
 
     if (project / "scripts" / "check.py").exists():
         try:
-            r = subprocess.run(["python", "scripts/check.py", "--stale"], cwd=str(project),
-                               capture_output=True, text=True, timeout=60, shell=False)
+            r = _run([sys.executable, "scripts/check.py", "--stale"], project)
             out = (r.stdout or r.stderr).strip()
         except (OSError, subprocess.TimeoutExpired) as e:
             out = f"（执行失败: {e}）"
@@ -265,8 +281,7 @@ def cmd_check(args):
     if not (project / "scripts" / "check.py").exists():
         sys.exit(f"未找到 {project / 'scripts' / 'check.py'}（该骨架不带执法脚本）")
     try:
-        r = subprocess.run(["python", "scripts/check.py"], cwd=str(project),
-                           capture_output=True, text=True, timeout=300, shell=False)
+        r = _run([sys.executable, "scripts/check.py"], project, timeout=300)
         sys.stdout.write(r.stdout or "")
         sys.stderr.write(r.stderr or "")
         sys.exit(r.returncode)
@@ -329,8 +344,7 @@ def cmd_doctor(_args):
 
 
 def main():
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    _utf8_streams()
     ap = argparse.ArgumentParser(description="CoHarness 工具链")
     sub = ap.add_subparsers(dest="cmd")
     sub.add_parser("list", help="列出可用骨架")

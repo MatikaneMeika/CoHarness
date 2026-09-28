@@ -43,6 +43,13 @@ def _read_text(p: Path):
         return None
 
 
+def _utf8_streams():
+    """中文提示在 cp936/gbk 控制台下要先保证自己可读：stdout 与 stderr 一起管。"""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def parse_frontmatter(path: Path):
     """解析 Backlog 卡的扁平 frontmatter：key: value / key: [] / key: 换行 - item。"""
     text = path.read_text(encoding="utf-8")
@@ -310,8 +317,7 @@ def check_stale(cards):
 
 
 def main():
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    _utf8_streams()
     ap = argparse.ArgumentParser()
     ap.add_argument("--names", action="store_true")
     ap.add_argument("--tasks", action="store_true")
