@@ -293,8 +293,15 @@ def cmd_sync(args):
     elif status in HOOK_NOTICES:
         print(f"[钩子] 未装（{HOOK_NOTICES[status]}）：check.py 不会被自动触发")
 
+    branch = _git_field(["git", "rev-parse", "--abbrev-ref", "HEAD"], project)
     try:
         r = _run(["git", "pull", "--ff-only"], project)
+        if r.returncode != 0 and branch[0] == "ok" and branch[1] != "HEAD":
+            # worktree 里的 harness 分支通常没有 upstream（git worktree add -b 就是这样），
+            # 裸 pull 会 rc=1；协议要求同步的是共享分支 main，显式指名再试一次
+            r2 = _run(["git", "pull", "--ff-only", "origin", "main"], project)
+            if r2.returncode == 0:
+                r = r2
         out = (r.stdout or r.stderr).strip() or "完成"
     except (OSError, subprocess.TimeoutExpired) as e:
         out = f"（执行失败: {e}）"

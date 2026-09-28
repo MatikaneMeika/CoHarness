@@ -6,6 +6,7 @@
 ## 开工协议（每次会话开始时，顺序固定）
 
 1. `git pull --ff-only`（在主工作树或自己的 worktree 内）——看板可能已被其他 harness 改动
+   - worktree 里的 harness 分支一般没有 upstream，裸 `git pull --ff-only` 会 rc=1：改用 `wsc sync <项目>`（它会自动回退到 `git pull --ff-only origin main`），或显式指名
 2. `backlog board`（或 `backlog task list`）读看板
 3. 选一张 status=todo 且 dependencies 已满足的卡
 4. 认领（见下节）

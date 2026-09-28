@@ -71,6 +71,29 @@ class HookInstall(unittest.TestCase):
         self.assertFalse((H.hooks_dir(outer) / "pre-commit").exists(),
                          "不许把项目钩子装进外层仓库")
 
+    def test_sync_pulls_main_in_worktree_without_upstream(self):
+        """真演练撞出来的：worktree 的 harness 分支没有 upstream，裸 pull 会 rc=1。"""
+        src = self.tmp / "up-src"
+        H.git_repo(src, bootstrap=False)
+        self.init(src)
+        H.git(src, "add", "-A")
+        H.git(src, "commit", "-q", "-m", "骨架入库")
+        remote = self.tmp / "up-origin.git"
+        H.git(self.tmp, "clone", "-q", "--bare", str(src), str(remote))
+        clone = self.tmp / "up-clone"
+        H.git(self.tmp, "clone", "-q", str(remote), str(clone))
+        wt = self.tmp / "up-wt"
+        H.git(clone, "worktree", "add", "-q", str(wt), "-b", "h-x")
+        # 从 clone 的 main 往远端推一格，worktree 的 h-x 分支就落后了（且没有 upstream）
+        (clone / "note.md").write_text("远端新提交\n", encoding="utf-8")
+        H.git(clone, "add", "note.md")
+        self.assertEqual(H.git(clone, "commit", "-q", "-m", "远端新提交").returncode, 0)
+        self.assertEqual(H.git(clone, "push", "-q", "origin", "main").returncode, 0)
+        res = H.wsc("sync", str(wt))
+        self.assertEqual(res.returncode, 0, H.out(res))
+        self.assertTrue((wt / "note.md").exists(),
+                        msg="sync 要把共享分支 main 的新提交带进无 upstream 的 worktree：" + H.out(res))
+
     def test_clone_then_sync_installs_the_hook(self):
         """钩子不入版本库：clone 出来的项目默认零执法，开工第一步要自愈补上。"""
         src = self.tmp / "src"
