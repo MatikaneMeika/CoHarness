@@ -2,6 +2,34 @@
 
 > 格式：`- YYYY-MM-DD [晋升 I-xxx@来源项目] 摘要`；非晋升的本体演进用 `[演进]` 标签，缺陷修复用 `[缺陷修复]` 并附复现方式。只增不改。
 
+- 2026-09-28 [演进] **适配语义桥、契约通知、社区文档三件**（计划书 W10 + W13 + W14）：
+  ① `--adapter` 不再给各家写"同一句中文指针塞进五种文件名"，改为**按各家原生语法生成**——
+  `.cursor/rules/coharness.mdc`（frontmatter `alwaysApply: true`）、`.windsurf/rules/coharness.md`
+  （`trigger: always_on`，Wave 8 之前的 `.windsurfrules` 降级为"旧格式，不再生成"）、
+  `CLAUDE.md`/`GEMINI.md` 用 `@AGENTS.md` 导入、`.github/copilot-instructions.md` 纯文本；
+  产物一律只含指针 + 工具元数据（ADR-5），新增 `wsc adapters`（列表）/ `--verify`（查有没有变成第二权威：
+  行数 >8、没指向 AGENTS.md、出现"必须/禁止"却无权威声明、`.mdc` 缺 frontmatter、旧单文件残留）/
+  `--install`（装机后又来一家工具时补指针，已存在不覆盖）。语法格式不靠记忆：来源记在
+  `tests/test_adapters.py` 的 `SOURCES`（Cursor 官方论坛 .mdc 深读、Windsurf Wave 8 规则目录说明等）；
+  `maintain.py` 的 **schema 升到 3**，v2→v3 步骤只替换真有过旧适配的项目，没要过指针的项目不凭空生成。
+  ② `wsc sync --dry-run`（W13）：不 pull、不装钩子、不 fetch（因此零网络），拿本地远端跟踪引用报告
+  即将进来的改动，对照 03 骨架新增的「接口契约」表（路径前缀 → 契约定义在哪 → 变更要通知谁）与在看板的卡
+  `allowed_paths`，打出 `[契约]` / `[边界]` 两类命中。**通知只落在自己的输出与交接说明里，不往别人的卡上写行**——
+  他人卡的唯一写者是他自己，自动改他人卡就是制造第二权威；这一条按计划书原文实现时被我否掉，改为只读报告 +
+  登记待议（计划书"在其它 doing 卡的交接说明生成变更提醒行"与本仓库所有权表直接冲突，按规则通道处理）。
+  ③ 社区面（W14）：`CONTRIBUTING.md`（三条通道的判定表、登记门槛、`evolve.py` 的四步门禁、代码约束、
+  PR 检查清单、明确"不接的东西"）、`docs/rfcs/`（README + `TEMPLATE.md` + **RFC-0001 认领原子化**：
+  四个备选方案含"什么都不做"与被牺牲项，采纳 D）、`.github/ISSUE_TEMPLATE/` 两个模板（Bug 要求写得出
+  红了的最小复现与对应测试名；改进提案要求先走项目登记表）、`.github/PULL_REQUEST_TEMPLATE.md`（三证 +
+  用户批准 + 口径同步清单）、`SECURITY.md` 披露节从一句扩成四条路径。
+  同步修正：`README.md` 里"会生成一行指针文件，内容就一句……"已被 ① 改真；`tests/test_wsc_current.py`
+  钉旧契约的用例 `test_adapters_are_one_line_pointers` 改为 `test_adapters_are_native_format_pointers`
+  （断言换成各家原生位置 + 指针仍薄 + 旧格式不再生成 + `adapters --verify` 必须过）。
+  证据：`tests/test_adapters.py` 11 条、`tests/test_contracts.py` 6 条、`tests/test_maintain.py` 加 2 条
+  （v2→v3 迁移与"不许凭空生成指针"）；全套 199 条 OK（skipped=4，expected failures=1）。
+  分层收口：`wsc.py` 本轮最后一次抬上限到 1250，**之后新命令一律进 `maintain.py`**（写在
+  `tests/test_distribution_surface.py` 的注释与 `CONTRIBUTING.md` 的代码约束里）
+
 - 2026-09-28 [演进] **装机指纹 + schema 迁移 + 只读体检**（计划书 W9 + W12），落在新文件 `maintain.py`（维护面）：`lock <项目>` 写 `.agent/skeleton.lock`（骨架名 / 骨架库 commit / schema / adapters 清单 / `check.py` 的 sha256）；`migrate <项目>` 默认 dry-run 且**一个字不写**，加 `--yes` 才落盘并**先自动建备份分支** `coh-backup-<时间戳>`（回滚 = `git reset --hard` 那条分支），非 git 仓库直接拒绝落盘；`schema` 打印版本与步骤表。v1→v2 的四步升级不是演示，是本轮真做过的改动：补 `.gitignore` 的 `telemetry.jsonl`、把文档里的 `<骨架库>`/`<CoHarness>` 代入本机绝对路径、认领条款改首选 `wsc claim`、缺「降级行为」节就从骨架本体搬。`audit <项目>` 全程只读，四类问题各有判决：钩子缺失 / 钩子被改（与骨架本体逐字节比哈希）、`check.py` 与指纹不符（漂移）、**main 合成态违规**——最后一条把 I-004 变成可查的：两条分支各自合法、merge 进 main 后成同人两张 doing 卡（merge 不跑 pre-commit），audit 当场判不合法并列出行；文档同时写明不覆盖的范围（harness 自身网络与 IDE 遥测、模型 API、`--no-verify` 的事后痕迹只在 reflog 里可人工核对，不自动定罪）。分层：这些不进 `wsc.py`（分发面单文件承诺），`maintain.py` 只 `import wsc` 复用调用形状；`test_distribution_surface.py` 的三面上限表随之立住（`wsc.py` 上限放宽到 1100 并写明理由：curl 单文件不许把命令散进多文件；`check.py` 仍最严 650）。证据：`tests/test_maintain.py` 12 条，其中 `test_audit_flags_an_illegal_merged_board` 用真实的双 worktree 分叉 + merge 复现 I-004，未用 `--no-verify`；全套 180 条 OK（skipped=4，expected failures=1）
 
 - 2026-09-28 [演进] **最小模式与依赖降级规格**（计划书 W4 + W11）：`wsc init <骨架> <路径> --minimal` 产出零外部依赖起步版——不复制 `backlog/`，任务清单换成项目根 `TODO.md`，并往 `AGENTS.md` 追加「最小模式」节**逐条写明关掉了什么**（卡片格式、改动挂卡、认领冲突、边界交集都以任务卡为前提）、**留住了什么**（命名规范、`.agent/improvements.md` 登记管线、钩子本身）；`check.py` 新增 `minimal_mode()`，无 `backlog/tasks` 且有 `TODO.md` 时把卡片层执法显式关闭并打印原因（不是静默跳过），`wsc sync` 改读 TODO.md 的 `- [ ]` 项。恢复路径是"放卡即生效"：往最小模式项目里补一张卡，改动挂卡当场重新拦（`check.py` 认文件不认工具）。同时把降级规格写成一处表一处文：`wsc.py` 里 `DEGRADE`（backlog / specify / worktrunk / node 的"丢了什么 / 降级行为 / 执法变化 / probe"）+ 四套骨架 `AGENTS.md` 各一节「降级行为」，新增 `wsc doctor --explain <项>` 与 `--simulate-missing=<项> <项目>`——后者不假装卸载，而是去项目里核对回落产物真在不在位（`[可用]` / `[不可用]` + 补救命令）。证据：`tests/test_minimal.py` 7 条（含"关掉的必须写明""没关的仍生效""补卡即恢复"）、`tests/test_degrade.py` 9 条（含表格与文档口径一致性：带 `scripts/check.py` 的骨架才允许提 TODO.md 回落，03 的降级节必须覆盖它声明过的四个依赖）

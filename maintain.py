@@ -25,7 +25,7 @@ import wsc  # noqa: E402  复用 ROOT / _run / 骨架发现，不在本文件里
 
 ROOT = wsc.ROOT
 _run = wsc._run
-SCHEMA = 2
+SCHEMA = 3
 LOCK_NAME = ".agent/skeleton.lock"
 TELEMETRY_IGNORE = ".agent/telemetry.jsonl"
 
@@ -171,9 +171,35 @@ def up_degrade_section(project: Path, apply_changes):
     return [f"待补：从 {skeleton.name} 搬「降级行为」节进 AGENTS.md"]
 
 
+def up_native_adapters(project: Path, apply_changes):
+    """v2→v3：旧单文件适配（.cursorrules / .windsurfrules）换成对应工具的原生目录格式。
+
+    只替换有旧文件的那几家：装机时选过 --adapter 子集的项目，不该被 migrate 塞进它没要的文件。
+    """
+    replacement = {".cursorrules": "cursor", ".windsurfrules": "windsurf"}
+    notes = []
+    for old, name in replacement.items():
+        f = project / old
+        if not f.exists():
+            continue
+        rel = wsc.ADAPTERS[name][0]
+        notes.append(f"{'已迁移' if apply_changes else '待迁移'} {old} → {rel}")
+        if apply_changes:
+            wsc.write_adapters(project, name)
+            f.unlink()
+    if notes:
+        return notes
+    have = [rel for _n, rel in wsc.adapter_targets("all") if (project / rel).exists()]
+    if have:
+        return [f"已到位：{len(have)} 个原生格式指针，无旧单文件残留"]
+    return ["跳过：项目里没有适配指针（装机时没要 --adapter，不该凭空生成）"]
+
+
 UPGRADES = {
     1: ("补 .gitignore 的本地记账项 + 代入骨架库绝对路径 + 认领首选 wsc claim + 补降级行为节",
         (up_ignore_telemetry, up_library_paths, up_claim_line, up_degrade_section)),
+    2: ("适配指针升级为各工具原生目录格式（.cursor/rules、.windsurf/rules），清掉旧单文件",
+        (up_native_adapters,)),
 }
 
 

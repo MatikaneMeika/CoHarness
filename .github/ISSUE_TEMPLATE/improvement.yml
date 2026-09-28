@@ -1,0 +1,65 @@
+name: 改进提案（规则缺口 / 能力缺口）
+description: 按现有规则执行会卡住，或缺某个 skill/MCP/依赖——先攒证据，不要求当场改执法
+labels: ["改进提案"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        规则通道的默认动作**不是改代码**：先在你实例化出来的项目里
+        `.agent/improvements.md` 登记一行，按门槛攒到第二个数据点，再走晋升审核
+        （`python evolve.py <项目> --out 记录.json` → `--apply-check` → `--verify-record`）。
+        这个 Issue 是用来讨论"该不该晋升"的，不是用来要求维护者立刻改执法。
+  - type: dropdown
+    id: kind
+    attributes:
+      label: 类别
+      options:
+        - 规则缺口或冲突
+        - 能力缺口（缺 skill / MCP / 依赖）
+        - 文档与实际不一致（这属于缺陷，请用 Bug 模板）
+    validations:
+      required: true
+  - type: textarea
+    id: scene
+    attributes:
+      label: 场景（哪个流程 / 哪个角色卡在哪一步）
+      placeholder: 03 骨架，多 harness 并行开工：B 不 pull 就认领同一张卡……
+    validations:
+      required: true
+  - type: textarea
+    id: gap
+    attributes:
+      label: 问题或缺口
+      description: 现状按规则执行会发生什么；为什么现有条款覆盖不了
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 提议改动
+      description: 想改哪个本体文件、改成什么；能力缺口请给候选名（没有候选写"待选型"）
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 证据与计数
+      description: |
+        发生了什么（命令输出 / 返工次数 / 测试编号）。
+        登记门槛要 ≥2 次同类摩擦：跨项目计数跑 `python wsc.py improve --cross`
+      placeholder: |
+        - 项目 A `.coh-pilot-03` I-002（tests/test_parallel_race.py::test_b）
+        - 项目 B 同样撞过一次：……
+    validations:
+      required: true
+  - type: checkboxes
+    id: gate
+    attributes:
+      label: 我确认
+      options:
+        - label: 不是纯口味偏好（口味请留在自己项目的 .agent/ 里）
+          required: true
+        - label: 已读过 docs/EVOLUTION-PROCESS.md 的五条审核标准
+          required: true
+        - label: 接受"驳回是一等公民"——拿不准的证据会被驳回，这不是敌意
+          required: true

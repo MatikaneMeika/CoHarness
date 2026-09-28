@@ -1,0 +1,53 @@
+name: 缺陷（承诺与实际不符）
+description: 代码或执法与 README / SECURITY / AGENTS.md 写下的承诺不一致，且能写成一条红了的最小复现
+labels: ["缺陷"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        缺陷通道当场修并附复现；**规则缺口**（按现有规则执行会卡住、但没有代码与承诺不符）
+        请走另一个模板，别在这里要求改执法。
+  - type: input
+    id: env
+    attributes:
+      label: 环境与版本
+      description: OS / Python / git；骨架库 commit（git -C CoHarness rev-parse --short HEAD）
+      placeholder: Windows 11 / Python 3.13 / git 2.47 / commit abc1234
+    validations:
+      required: true
+  - type: textarea
+    id: promise
+    attributes:
+      label: 被违背的承诺在哪
+      description: 文件 + 原句（README / SECURITY.md / AGENTS.md / CARD-CONVENTION.md）
+      placeholder: |
+        SECURITY.md 第 5 条："仅执行 scripts/check.py，五百行内纯标准库"
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤与输出
+      description: 命令 + 实际 rc + 关键输出；能贴 tests/ 形状的用例更好
+      value: |
+        ```bash
+        python wsc.py ...
+        # rc=1
+        ```
+    validations:
+      required: true
+  - type: textarea
+    id: test
+    attributes:
+      label: 能写成哪条测试
+      description: 文件名 + 用例名 + 断言什么。本仓库的验收方式就是"先能把它写成测试"
+      placeholder: tests/test_x.py::test_y —— 断言 rc=0 且输出含"……"
+    validations:
+      required: true
+  - type: textarea
+    id: selfcheck
+    attributes:
+      label: 自测结果
+      description: python -m unittest discover -s tests 的输出末尾几行
+    validations:
+      required: false

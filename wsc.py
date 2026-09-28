@@ -65,19 +65,124 @@ NEXT_STEPS = {
 }
 
 # 非 AGENTS.md 标准的工具适配指针：内容一律一行，指向 AGENTS.md（不构成第二权威）
+NATIVE = "各工具原生语法实测确认（2026-09）：见 tests/test_adapters.py 的 SOURCES 注释"
 ADAPTERS = {
-    "claude": ["CLAUDE.md"],
-    "gemini": ["GEMINI.md"],
-    "cursor": [".cursorrules"],
-    "copilot": [".github/copilot-instructions.md"],
-    "windsurf": [".windsurfrules"],
-    "zcode": [],   # 原生读 AGENTS.md，无需适配
-    "codex": [],   # 原生
-    "qoder": [],   # 原生读 AGENTS.md（可在项目 Rules 再加一行指向）
+    "claude": ("CLAUDE.md",
+               "CoHarness 适配指针。规则唯一权威是 AGENTS.md，本文件不复制第二份。\n\n"
+               "@AGENTS.md\n"),                      # Claude Code 的 @ 导入语法
+    "gemini": ("GEMINI.md",
+               "CoHarness 适配指针。规则唯一权威是 AGENTS.md，本文件不复制第二份。\n\n"
+               "@AGENTS.md\n"),                      # Gemini CLI 的上下文文件同样支持 @ 导入
+    "cursor": (".cursor/rules/coharness.mdc",
+               "---\ndescription: CoHarness 协作规则指针（规则本体在 AGENTS.md）\n"
+               "globs:\nalwaysApply: true\n---\n\n"
+               "本项目协作规则唯一权威是 `AGENTS.md` 与 `.agent/`；本文件只作指针，不复制规则正文。\n"),
+    "copilot": (".github/copilot-instructions.md",
+                "CoHarness 适配指针。项目协作规则唯一权威是仓库根的 `AGENTS.md` 与 `.agent/`；"
+                "本文件只作指针，不复制规则正文。\n"),
+    "windsurf": (".windsurf/rules/coharness.md",
+                 "---\ntrigger: always_on\n---\n\n"
+                 "CoHarness 适配指针：规则唯一权威是 `AGENTS.md` 与 `.agent/`，本文件不复制第二份。\n"),
+    "zcode": (None, None),      # 原生读 AGENTS.md
+    "codex": (None, None),      # 原生
+    "qoder": (None, None),      # 原生读 AGENTS.md
 }
-POINTER_TEXT = (
-    "读 AGENTS.md，以其为准。（CoHarness 适配指针；协作规则唯一权威是 AGENTS.md 与 .agent/）\n"
-)
+LEGACY_ADAPTERS = (".cursorrules", ".windsurfrules")   # Wave 8 前的单文件写法，仍被兼容但不是标准
+
+
+def adapter_targets(spec):
+    names = list(ADAPTERS) if spec.strip().lower() == "all" else \
+        [s.strip() for s in spec.split(",") if s.strip()]
+    out = []
+    for n in names:
+        rel = ADAPTERS.get(n, (None, None))[0]
+        if rel:
+            out.append((n, rel))
+    return out
+
+
+def write_adapters(dst: Path, spec: str):
+    """按各工具原生语法生成合法格式的指针文件。已存在的不覆盖。"""
+    unknown = [s.strip() for s in spec.split(",")
+               if s.strip() and s.strip().lower() not in ADAPTERS and s.strip().lower() != "all"]
+    for n in unknown:
+        print(f"  [跳过] 未知 adapter: {n}（可选: {', '.join(ADAPTERS)} 或 all）")
+    made = []
+    for name, rel in adapter_targets(spec):
+        p = dst / rel
+        if p.exists():
+            print(f"  [跳过] {rel} 已存在")
+            continue
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(ADAPTERS[name][1], encoding="utf-8", newline="\n")
+        made.append(rel)
+    return made
+
+
+def cmd_adapters(args):
+    """--install 往已有项目补指针（装机后又来了一家的场景）；--verify 检查它们还是薄指针。"""
+    if getattr(args, "install", None):
+        project = Path(args.project).resolve() if args.project else Path.cwd()
+        if not (project / "AGENTS.md").exists():
+            sys.exit(f"[adapters] {project} 里没有 AGENTS.md，指针没有可指向的权威")
+        made = write_adapters(project, args.install)
+        if made:
+            print(f"  已补适配指针: {', '.join(made)}")
+        else:
+            print("  没有新文件（要么已存在不覆盖，要么名字都不认识）")
+        return
+    if not args.verify:
+        print("支持的 adapter（生成用 `wsc init ... --adapter <名>`，逗号分隔或 all）:")
+        for name, (rel, _body) in ADAPTERS.items():
+            print(f"  {name:<9} {rel or '（原生读 AGENTS.md，无需适配文件）'}")
+        print(f"\n旧格式（不再生成）：{', '.join(LEGACY_ADAPTERS)}")
+        print("自检：python wsc.py adapters --verify <项目>")
+        return
+    project = Path(args.project).resolve() if args.project else Path.cwd()
+    if not (project / "AGENTS.md").exists():
+        sys.exit(f"[adapters] {project} 里没有 AGENTS.md——适配指针没有可指向的权威")
+    problems, checked = [], 0
+    print(f"== adapters --verify {project} ==")
+    for name, rel in adapter_targets("all"):
+        p = project / rel
+        if not p.exists():
+            print(f"  [未装] {name:<9} {rel}")
+            continue
+        checked += 1
+        text = p.read_text(encoding="utf-8")
+        lines = [l for l in text.splitlines() if l.strip()]
+        if "AGENTS.md" not in text:
+            problems.append(f"{rel}: 没指向 AGENTS.md，等于另立权威")
+        if len(lines) > 8:
+            problems.append(f"{rel}: 有 {len(lines)} 行正文，疑似复制了规则本体（指针应 ≤8 行）")
+        for marker in ("必须", "禁止", "不得"):
+            if marker in text and "不复制" not in text and "唯一权威" not in text:
+                problems.append(f"{rel}: 出现规则措辞 '{marker}' 却没有权威声明")
+                break
+        if rel.endswith(".mdc"):
+            if not text.startswith("---"):
+                problems.append(f"{rel}: Cursor .mdc 缺 frontmatter（alwaysApply 无处可写）")
+            elif "alwaysApply" not in text.split("---")[1]:
+                problems.append(f"{rel}: frontmatter 没有 alwaysApply")
+        if rel.endswith(".windsurf/rules/coharness.md") or ".windsurf/rules/" in rel:
+            if "trigger:" not in text:
+                problems.append(f"{rel}: Windsurf 规则缺 trigger 键，不会被激活")
+        print(f"  [已装] {name:<9} {rel}（{len(lines)} 行）")
+    for legacy in LEGACY_ADAPTERS:
+        if (project / legacy).exists():
+            print(f"  [旧格式] {legacy} 仍在——工具还兼容它，但标准位置已换成 "
+                  f"{ADAPTERS['cursor'][0]} / {ADAPTERS['windsurf'][0]}")
+            problems.append(f"{legacy}: 旧单文件规则还在，建议迁到 .cursor/rules / .windsurf/rules")
+    if not checked:
+        print("  没有任何适配指针（装机时加 --adapter claude,cursor,... 生成）")
+        return
+    if problems:
+        print(f"\n[违规] {len(problems)} 处：")
+        for pr in problems:
+            print(f"  - {pr}")
+        sys.exit(1)
+    print(f"\n结论：{checked} 个适配指针都只含指针与工具元数据 ✓")
+
 
 
 def discover_skeletons():
@@ -215,26 +320,6 @@ def install_pre_commit(dst: Path):
     return "installed", str(hooks)
 
 
-def write_adapters(dst: Path, spec: str):
-    """按 --adapter 生成一行式指针文件。已存在的不覆盖。"""
-    spec = spec.strip().lower()
-    names = list(ADAPTERS) if spec == "all" else [s.strip() for s in spec.split(",") if s.strip()]
-    made = []
-    for name in names:
-        if name not in ADAPTERS:
-            print(f"  [跳过] 未知 adapter: {name}（可选: {', '.join(ADAPTERS)} 或 all）")
-            continue
-        for rel in ADAPTERS[name]:
-            p = dst / rel
-            if p.exists():
-                print(f"  [跳过] {rel} 已存在")
-                continue
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(POINTER_TEXT, encoding="utf-8")
-            made.append(rel)
-    return made
-
-
 MINIMAL_TODO = """# TODO — 最小模式看板（没有 backlog 也能开工）
 
 一行一项：`- [ ]` 待办，`- [x]` 做完。想让 ID 稳定就在行首写 `T-001：`。
@@ -344,7 +429,7 @@ def cmd_init(args):
     if args.adapter:
         made = write_adapters(dst, args.adapter)
         if made:
-            print("  适配指针（均一行指向 AGENTS.md）:")
+            print("  适配指针（各工具原生格式，内容只有指针与工具元数据）:")
             for rel in made:
                 print(f"    + {rel}")
 
@@ -383,11 +468,113 @@ HOOK_NOTICES = {
 }
 
 
+def _contracts(project: Path):
+    """读 AGENTS.md 的「接口契约」表：[(路径前缀, 契约定义在哪, 变更要通知谁)]。"""
+    f = project / "AGENTS.md"
+    if not f.exists():
+        return []
+    text = f.read_text(encoding="utf-8")
+    if "## 接口契约" not in text:
+        return []
+    section = text.split("## 接口契约", 1)[1].split("\n## ", 1)[0]
+    rows = []
+    for line in section.splitlines():
+        s = line.strip()
+        if not (s.startswith("|") and s.endswith("|")):
+            continue
+        cells = [c.strip().strip("`") for c in s.strip("|").split("|")]
+        if len(cells) < 3 or cells[0] == "路径前缀" or set(cells[0]) <= set("-: "):
+            continue
+        rows.append(tuple(cells[:3]))
+    return rows
+
+
+def _doing_boundaries(project: Path):
+    """在看板上找在做的卡：返回 [(卡号, 持有者, [allowed 前缀])]。"""
+    d = project / "backlog" / "tasks"
+    out = []
+    if not d.is_dir():
+        return out
+    for p in sorted(d.glob("*.md")):
+        try:
+            text = p.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if not text.startswith("---"):
+            continue
+        status, who = _card_fields(text)
+        cid = (re.search(r"^id:\s*(\S+)", text, re.M) or [None, p.stem])[1]
+        if status not in ("doing", "review") or not who:
+            continue
+        allowed = []
+        body = text.split("## 边界", 1)
+        if len(body) > 1:
+            for line in body[1].split("allowed_paths:", 1)[-1].splitlines():
+                s = line.strip()
+                if s.startswith("forbidden_paths:") or (s.startswith("##") and len(s) > 2):
+                    break
+                if s.startswith("-"):
+                    allowed.append(s.lstrip("-").strip().strip("\"'").rstrip("/"))
+        out.append((cid, ", ".join(who), allowed))
+    return out
+
+
+def incoming_report(project: Path):
+    """`sync --dry-run` 的正文：只读现有的远端跟踪引用，不 fetch、不 pull、不写任何文件。"""
+    tip = _git_field(["git", "rev-parse", "--verify", "-q", "origin/main"], project)
+    if tip[0] != "ok":
+        print("[dry-run] 本地还没有 origin/main 的远端跟踪引用——先跑一次真 sync/fetch，"
+              "之后再开工就用 --dry-run 看代价")
+        return
+    behind = _git_field(["git", "rev-list", "--count", "HEAD..origin/main"], project)
+    log = _run(["git", "log", "--pretty=format:@@%h %s", "--name-only",
+                "HEAD..origin/main"], project)
+    commits, touched = [], {}
+    head = ""
+    for line in (log.stdout or "").splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith("@@"):
+            head = s[2:]
+            commits.append(head)
+        else:
+            touched.setdefault(s, []).append(head.split(" ", 1)[0])
+    print(f"[dry-run] 不 pull、不装钩子。origin/main 领先 {behind[1] if behind[0] == 'ok' else '?'} 个提交：")
+    for c in commits[:8]:
+        print(f"  {c}")
+    if len(commits) > 8:
+        print(f"  …另有 {len(commits) - 8} 个")
+    if not touched:
+        print("  （看不出文件级改动：可能是 merge 提交）")
+        return
+    contracts = _contracts(project)
+    board = _doing_boundaries(project)
+    print(f"  涉及 {len(touched)} 个文件。对照接口契约表与在看板的卡：")
+    hits = 0
+    for f, cs in sorted(touched.items()):
+        for prefix, where, whom in contracts:
+            if f == prefix or f.startswith(prefix.rstrip("*") + "/") or prefix in f:
+                print(f"    [契约] {f} → 定义在 {where}；变更要通知：{whom}（来自 {', '.join(cs)}）")
+                hits += 1
+                break
+        for cid, owner, allowed in board:
+            if any(f == a or f.startswith(a + "/") for a in allowed if a):
+                print(f"    [边界] {f} 落在 {cid}（{owner}）的 allowed_paths 里——"
+                      f"这次同步会带来冲突或返工，先看交接说明再 pull")
+                hits += 1
+    if not hits:
+        print("    没有触及契约表或在做卡边界内的文件（仍是只读报告，实际 pull 才算数）")
+
+
 def cmd_sync(args):
     project = Path(args.project).resolve() if args.project else Path.cwd()
     if not project.exists():
         sys.exit(f"项目路径不存在: {project}")
     print(f"== sync {project} ==")
+
+    if getattr(args, "dry_run", False):
+        return incoming_report(project)
 
     # 钩子不入版本库：clone 出来的项目默认没有执法，开工第一步顺手补装
     status, note = install_pre_commit(project)
@@ -954,6 +1141,8 @@ def main():
                         help="零外部依赖起步：不装 backlog/，任务清单用 TODO.md（卡片执法随之关闭）")
     p_sync = sub.add_parser("sync", help="开工协议：pull + 看板 + stale")
     p_sync.add_argument("project", nargs="?", help="项目路径（默认当前目录）")
+    p_sync.add_argument("--dry-run", action="store_true",
+                        help="不 pull、不写盘：报告即将进来的改动触及哪些契约与在做卡的边界")
     p_check = sub.add_parser("check", help="跑项目 check.py")
     p_check.add_argument("project", nargs="?", help="项目路径（默认当前目录）")
     p_imp = sub.add_parser("improve", help="列出项目待审改进条目")
@@ -968,6 +1157,11 @@ def main():
     p_stats = sub.add_parser("stats", help="本地运行统计：规则遵循率 / 返工信号 / stale 分布")
     p_stats.add_argument("project", nargs="?", help="项目路径（默认当前目录）")
     p_stats.add_argument("--days", type=int, default=7, help="返工信号回溯天数（默认 7）")
+    p_adp = sub.add_parser("adapters", help="列出/自检工具适配指针（只含指针，不含第二份规则）")
+    p_adp.add_argument("project", nargs="?", help="项目路径（--verify 时用）")
+    p_adp.add_argument("--verify", action="store_true", help="检查项目里的适配指针是否还是薄指针")
+    p_adp.add_argument("--install", metavar="名",
+                       help="往已有项目补生成指针（逗号分隔或 all），已存在的不覆盖")
     p_doc = sub.add_parser("doctor", help="依赖自检")
     p_doc.add_argument("project", nargs="?", help="演练降级路径时使用的项目路径")
     p_doc.add_argument("--explain", help="打印某个依赖缺失后的降级行为（逗号分隔），如 backlog,specify")
@@ -981,7 +1175,7 @@ def main():
         return
     {"list": cmd_list, "init": cmd_init, "sync": cmd_sync,
      "check": cmd_check, "improve": cmd_improve, "claim": cmd_claim,
-     "stats": cmd_stats, "doctor": cmd_doctor}[args.cmd](args)
+     "stats": cmd_stats, "adapters": cmd_adapters, "doctor": cmd_doctor}[args.cmd](args)
 
 
 if __name__ == "__main__":

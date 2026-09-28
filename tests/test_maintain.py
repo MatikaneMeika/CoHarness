@@ -45,6 +45,15 @@ class Maintain(unittest.TestCase):
             self.make_v1(proj)
         return proj
 
+    def proj_lock(self, proj):
+        return proj / ".agent" / "skeleton.lock"
+
+    def downgrade_schema(self, lock, to):
+        """把指纹里的 schema 调低，模拟"这个项目还停在老版本"。"""
+        text = lock.read_text(encoding="utf-8")
+        lock.write_text(text.replace('"schema": 3', f'"schema": {to}'),
+                        encoding="utf-8", newline="")
+
     def make_v1(self, proj):
         """把项目退回本轮改动之前的样子（v1），migrate 才有东西可做。"""
         agents = proj / "AGENTS.md"
@@ -68,13 +77,14 @@ class Maintain(unittest.TestCase):
         self.assertTrue(lock.is_file())
         text = lock.read_text(encoding="utf-8")
         self.assertIn("03-multi-harness-project", text)
-        self.assertIn('"schema": 2', text)
+        self.assertIn('"schema": 3', text)
         self.assertRegex(text, r'"check_sha256": "[0-9a-f]{12}"')
 
     def test_schema_lists_upgrade_steps(self):
         out = H.out(maintain("schema"))
-        self.assertIn("骨架 schema 版本：2", out)
+        self.assertIn("骨架 schema 版本：3", out)
         self.assertIn("v1 -> v2", out)
+        self.assertIn("v2 -> v3", out)
 
     def test_migrate_dry_run_writes_nothing(self):
         proj = self.fresh("03", downgrade=True)
@@ -102,7 +112,43 @@ class Maintain(unittest.TestCase):
         self.assertIn(".agent/telemetry.jsonl", (proj / ".gitignore").read_text(encoding="utf-8"))
         self.assertNotIn("<骨架库>", (proj / ".agent" / "workflows" /
                                     "parallel-protocol.md").read_text(encoding="utf-8"))
-        self.assertIn('"schema": 2', (proj / ".agent" / "skeleton.lock").read_text(encoding="utf-8"))
+        self.assertIn('"schema": 3', (proj / ".agent" / "skeleton.lock").read_text(encoding="utf-8"))
+
+    def fresh_with_legacy(self, name):
+        """带旧单文件适配的项目：旧文件必须进 bootstrap 提交，否则"改动未挂卡"当场拦下。"""
+        proj = H.make_project(self.tmp)
+        (proj / ".cursorrules").write_text("旧版 Cursor 单文件规则" + chr(10),
+                                           encoding="utf-8", newline="")
+        H.git_repo(proj)
+        H.git(proj, "config", "user.name", name)
+        H.git(proj, "config", "user.email", f"{name}@invalid")
+        H.git(proj, "config", "core.autocrlf", "false")
+        H.install_hook(proj)
+        return proj
+
+    def test_migrate_v2_to_v3_moves_legacy_adapters(self):
+        """v2→v3：旧单文件适配换成各家原生目录格式；没装过指针的项目不该被塞新文件。"""
+        proj = self.fresh_with_legacy("v23")
+        self.assertEqual(maintain("lock", str(proj)).returncode, 0)
+        lock = self.proj_lock(proj)
+        self.assertIn('"schema": 3', lock.read_text(encoding="utf-8"))
+        self.downgrade_schema(lock, 2)
+        dry = maintain("migrate", str(proj))
+        self.assertIn("待迁移 .cursorrules", H.out(dry))
+        self.assertTrue((proj / ".cursorrules").exists(), "dry-run 不该删旧文件")
+        yes = maintain("migrate", str(proj), "--yes")
+        self.assertEqual(yes.returncode, 0, msg=H.out(yes))
+        self.assertFalse((proj / ".cursorrules").exists())
+        self.assertTrue((proj / ".cursor" / "rules" / "coharness.mdc").exists())
+        self.assertIn('"schema": 3', lock.read_text(encoding="utf-8"))
+
+    def test_migrate_v2_to_v3_does_not_invent_adapters(self):
+        proj = self.fresh("03")
+        self.assertEqual(maintain("lock", str(proj)).returncode, 0)
+        self.downgrade_schema(self.proj_lock(proj), 2)
+        self.assertEqual(maintain("migrate", str(proj), "--yes").returncode, 0)
+        for rel in ("CLAUDE.md", ".cursor/rules/coharness.mdc", ".windsurf/rules/coharness.md"):
+            self.assertFalse((proj / rel).exists(), f"没要过适配指针的项目不该被生成 {rel}")
 
     def test_migrate_is_idempotent(self):
         proj = self.fresh("03", downgrade=True)

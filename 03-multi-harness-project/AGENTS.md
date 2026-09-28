@@ -35,6 +35,19 @@
 并行工作的前提是**路径不重叠**：两卡 `allowed_paths` 有交集时必须串行，或由 pm 先切分边界。
 本表与卡片 `allowed_paths` 都是授权来源且**以本表为准**：卡可以把本表里属于你的路径收窄，不能把标"只读"的路径扩成可写——要扩先改本表（走规则卡 + ADR）。
 
+## 接口契约（路径前缀 → 契约定义 → 变更要通知谁）
+
+所有权表管"谁能写"，这张表管"改了会波及谁"。`wsc sync --dry-run` 会拿它对照即将进来的改动，
+开工时就知道这次同步会不会动到你的接口。（通知落在自己的交接说明里；**不往别人的卡上写行**——
+他人卡的唯一写者是他自己，见所有权表。）
+
+| 路径前缀 | 契约/接口定义在哪 | 变更要通知 |
+|---|---|---|
+| `code/api/` | `docs/ARCHITECTURE.md` 的接口节 | 所有 doing 卡里含 `code/` 的 harness |
+| `code/shared/` | 模块自身 README | 在场全部 harness |
+| `docs/ARCHITECTURE.md`、`docs/DECISIONS.md` | 本身即契约 | integrator + 受影响组件 coder |
+| `backlog/config.yml` | 状态词表与列定义 | 在场全部 harness |
+
 ## 全局禁令（违反 = 直接返工；本节为 constitution 底稿来源，见 docs/CONSTITUTION-SOURCE.md）
 
 1. **交付文件名禁版本后缀**：`-v2` / `-final` / `-副本` / `-新` / `-修正版` 一律禁止，版本进 git + CHANGELOG

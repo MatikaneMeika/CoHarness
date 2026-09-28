@@ -32,4 +32,12 @@
 
 ## 披露
 
-发现安全问题请开 GitHub Issue 或邮件仓库所有者；不接受"另写一份规则文档"式的修复——安全约束一律进骨架文件本体。
+- **普通缺陷与规则缺口**：开 GitHub Issue（用 `.github/ISSUE_TEMPLATE/` 里的两种模板：Bug / 改进提案），
+  或按 `CONTRIBUTING.md` 直接在实例化项目里登记 `.agent/improvements.md` 后走晋升管线
+- **安全漏洞**：先发私信/邮件给仓库所有者（GitHub 档案页上的邮箱），说明可复现路径与影响面，
+  给对方 7 天窗口再公开——本仓库没有私有漏洞报告入口，隐私 Issue 是被接受的方式
+- **不接受的"修复"**：另写一份规则文档。安全与协作约束一律进骨架本体（`AGENTS.md`、
+  `scripts/check.py`、`ROUTER.md`、`wsc.py`/`maintain.py`），否则就会出现两套口径
+- **报告里请附**：操作系统与 Python 版本、`python -m unittest discover -s tests` 的结果、
+  以及能不能用 `tests/` 里的形状写出一条红了的最小复现——本仓库的验收方式就是"先能把它写成测试"
+

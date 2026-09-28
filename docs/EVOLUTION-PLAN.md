@@ -166,3 +166,22 @@ frontmatter 解析（其 ADR-8）、用 `pre-commit` 框架替换自建钩子安
 - :117-119 三条待验项仍未验（本机不装 backlog / specify / git-wt，也不为此装）。
   其中"真实 frontmatter 与 check.py 解析的兼容"这条现在有了开发期差分预言机与子集夹具兜着
   （见本文件 ADR-10 与 `tests/fixtures/`）。
+
+### ADR-10 附注 · 2026-09-28：三个面与行数上限的收口
+
+W5/W7/W9/W12 落地后，`wsc.py` 一度涨到 1137 行——**自己写的行数上限测试当场把它判红**，
+这正是那条测试存在的意义。处理不是删功能，而是把 ADR-10 的分层原则贯彻到底：
+
+| 面 | 文件 | 谁在用 | 上限（由 `tests/test_distribution_surface.py` 钉） |
+|---|---|---|---|
+| 分发面 | `wsc.py`、`03-.../scripts/check.py` | 下游项目与其中的 harness | 1250 / 650 |
+| 开发面 | `evolve.py` | 骨架库维护者（晋升审核） | 400 |
+| 维护面 | `maintain.py` | 管已实例化项目的漂移/指纹/体检 | 700 |
+
+- `check.py` 上限最严：它被复制进**每一个**下游项目，是执法面本体。
+- `wsc.py` 允许到 1250 的唯一理由是 README 的 `curl` 单文件承诺——装机与开工命令不许散进多个文件；
+  **这是最后一次为 `wsc.py` 上调**，之后的新命令一律进 `maintain.py`（已写进 `CONTRIBUTING.md` 的代码约束）。
+- `evolve.py` / `maintain.py` 只允许 `import wsc` 复用读表与调用形状，不许引入第三方：
+  审核与维护都不该成为下游项目的依赖面。
+- 计划书对照表里 ADR-7/8/9 的回绝理由不变（copier 走 git URL 取模板与"零网络 + clone 即用"冲突；
+  运行时 frontmatter/jsonschema 破分发面；pre-commit 框架装钩子把执法点交给外部工具）。

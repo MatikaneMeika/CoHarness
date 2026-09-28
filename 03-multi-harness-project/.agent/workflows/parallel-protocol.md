@@ -41,6 +41,7 @@
 ## pull 时机（写死，三处）
 
 - 开工时、认领前、push 前，各 pull 一次
+- 开工时想知道这次同步会碰到谁：`python {{COHARNESS_LIB}}/wsc.py sync <项目> --dry-run`——不 pull、不 fetch、不写盘，只按 `AGENTS.md` 的「接口契约」表与在看板的卡边界报告命中；**通知写在自己的交接说明里，不改他人的卡**
 - push 被拒（远端有新提交）= 有并行者动了 main，先 pull --rebase 再推
 
 ## 工作区隔离（铁律）

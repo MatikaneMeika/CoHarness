@@ -6,9 +6,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import helpers as H
 
-POINTER = "读 AGENTS.md，以其为准。"
-ADAPTER_FILES = ["CLAUDE.md", "GEMINI.md", ".cursorrules", ".github/copilot-instructions.md",
-                 ".windsurfrules"]
+# W10 之后：适配指针用各家原生语法，内容仍是"只有指针 + 工具元数据"。
+# 格式细节由 tests/test_adapters.py 钉；这里钉的是"init --adapter all 装出哪些位置、且都不是第二权威"。
+ADAPTER_FILES = ["CLAUDE.md", "GEMINI.md", ".cursor/rules/coharness.mdc",
+                 ".github/copilot-instructions.md", ".windsurf/rules/coharness.md"]
+LEGACY_ADAPTER_FILES = [".cursorrules", ".windsurfrules"]
 
 
 class TempCase(unittest.TestCase):
@@ -61,7 +63,8 @@ class TestInit(TempCase):
         self.assertTrue((H.hooks_dir(dst) / "pre-commit").exists(),
                         "wsc init 应把 pre-commit 装进 git 认定的钩子目录")
 
-    def test_adapters_are_one_line_pointers(self):
+    def test_adapters_are_native_format_pointers(self):
+        """init --adapter all 装出各家原生位置，且每个文件都只是指针。"""
         dst = self.tmp / "adp"
         dst.mkdir()
         res = H.wsc("init", "solo", str(dst), "--adapter", "all")
@@ -69,7 +72,14 @@ class TestInit(TempCase):
         for rel in ADAPTER_FILES:
             p = dst / rel
             self.assertTrue(p.exists(), rel)
-            self.assertTrue(p.read_text(encoding="utf-8").startswith(POINTER), rel)
+            text = p.read_text(encoding="utf-8")
+            self.assertIn("AGENTS.md", text, rel)
+            self.assertLessEqual(len([l for l in text.splitlines() if l.strip()]), 8,
+                                 f"{rel} 正文超过 8 行，不像指针")
+        for rel in LEGACY_ADAPTER_FILES:
+            self.assertFalse((dst / rel).exists(), f"旧单文件格式 {rel} 不该再生成")
+        verify = H.wsc("adapters", "--verify", str(dst))
+        self.assertEqual(verify.returncode, 0, H.out(verify))
 
     def test_unknown_adapter_is_reported_not_fatal(self):
         dst = self.tmp / "adp2"

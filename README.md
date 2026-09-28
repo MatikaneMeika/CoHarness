@@ -59,6 +59,7 @@ python wsc.py init <骨架> <目标路径>
 ```bash
 python wsc.py init <骨架> <目标路径> [--minimal]  # 装机；--minimal = 零外部依赖起步（清单走 TODO.md）
 python wsc.py sync <项目>      # 开工先跑：pull + 看板摘要 + stale 卡报告
+python wsc.py sync <项目> --dry-run  # 不 pull、不出网：报告即将进来的改动碰到哪些契约与在做卡的边界
 python wsc.py claim <项目> T-001 <标识>  # 原子认领：同步+校验+写卡+提交+推 main 绑成一步，被抢就还原
 python wsc.py check <项目>     # 全量体检（命名、卡格式、改动挂卡、认领冲突、边界交集）
 python wsc.py improve <项目>   # 列出待审的骨架改进
@@ -67,6 +68,9 @@ python wsc.py stats <项目>     # 本地运行统计：规则遵循率 / 返工
 python wsc.py doctor           # 依赖自检
 python wsc.py doctor --explain backlog,specify   # 这些依赖没装时降级成什么、执法怎么变
 python wsc.py doctor --simulate-missing backlog <项目>  # 核对回落产物真在不在位
+python wsc.py adapters                   # 列出各家工具的适配指针该写在哪
+python wsc.py adapters <项目> --verify    # 自检指针还是不是薄指针（有没有变成第二权威）
+python wsc.py adapters <项目> --install cursor  # 装机后又来一家工具时补指针
 python wsc.py list             # 骨架列表
 ```
 
@@ -79,7 +83,7 @@ python maintain.py audit   <项目>   # 只读体检：钩子在不在/被没被
 python evolve.py  <项目> --out 记录.json   # 晋升审核：机器取客观证据，人填有效性与必要性
 ```
 
-仓库自带 180 条自测，跑起来不需要装任何东西：
+仓库自带 199 条自测，跑起来不需要装任何东西：
 
 ```bash
 python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows × py3.11/3.13 上跑同样的命令
@@ -89,7 +93,7 @@ python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows × 
 
 ## 工具怎么接
 
-多数主流 harness 会自动读项目根的 AGENTS.md（ZCode、Codex、Qoder、opencode、Copilot CLI 这些都是）。只认自家文件的工具，init 时加 `--adapter claude,gemini,cursor,copilot,windsurf`（或 all），会生成一行指针文件，内容就一句"读 AGENTS.md，以其为准"。支持 skills 的工具可以选装 `skills/collab-zone/`（复制过去、改一行路径），不装也不影响使用。
+多数主流 harness 会自动读项目根的 AGENTS.md（ZCode、Codex、Qoder、opencode、Copilot CLI 这些都是）。只认自家文件的工具，init 时加 `--adapter claude,gemini,cursor,copilot,windsurf`（或 all）——生成的是各家**原生格式**（`.cursor/rules/coharness.mdc` 带 `alwaysApply`、`.windsurf/rules/coharness.md` 带 `trigger: always_on`、`CLAUDE.md`/`GEMINI.md` 用 `@AGENTS.md` 导入），内容只有指针与工具元数据，不复制第二份规则；`wsc adapters --verify` 当场查这一点。支持 skills 的工具可以选装 `skills/collab-zone/`（复制过去、改一行路径），不装也不影响使用。
 
 出现分歧时的裁决顺序：项目规则 > spec-kit 产物 > 任务卡 > 会话里的口头约定。
 
@@ -100,6 +104,8 @@ python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows × 
 ## 文档与来源
 
 - [ROUTER.md](ROUTER.md) —— 「开工：」的调度逻辑与角色匹配
+- [CONTRIBUTING.md](CONTRIBUTING.md) —— 三条通道（缺陷 / 规则 / 能力）、登记门槛、晋升门禁、PR 检查清单
+- [docs/rfcs/](docs/rfcs/README.md) —— 设计取舍的论证档案（RFC-0001 认领原子化已采纳）
 - [docs/EVOLUTION-PROCESS.md](docs/EVOLUTION-PROCESS.md) —— 改进管线；[docs/CHANGELOG.md](docs/CHANGELOG.md) —— 本体变更日志
 - [docs/EVOLUTION-PLAN.md](docs/EVOLUTION-PLAN.md) —— 为什么这么设计（从全自研到借力成熟组件的过程）
 - [SECURITY.md](SECURITY.md) —— 安全与数据安全边界
