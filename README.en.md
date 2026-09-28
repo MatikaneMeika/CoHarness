@@ -88,7 +88,7 @@ project: `maintain.py` (install fingerprint, schema migration, read-only audit) 
 
 ## Self-tests
 
-214 tests, no install required:
+216 tests, no install required:
 
 ```bash
 python -m unittest discover -s tests

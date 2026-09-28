@@ -6,6 +6,7 @@
 这些断言针对 SECURITY.md 与 README.md 里的说法——写了就要有红了会报警的测试兜着。
 """
 import ast
+import collections
 import re
 import sys
 import unittest
@@ -37,6 +38,21 @@ def imports_of(path):
         elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
             top.add(node.module)
     return top
+
+
+def discovered_module_names():
+    """与 `python -m unittest discover -s tests` 同一个发现入口，只数不跑。"""
+    suite = unittest.TestLoader().discover(str(H.REPO / "tests"),
+                                           top_level_dir=str(H.REPO / "tests"))
+
+    def walk(s):
+        for x in s:
+            if isinstance(x, unittest.TestSuite):
+                yield from walk(x)
+            else:
+                yield x
+
+    return [str(t.id()).split(".")[0] for t in walk(suite)]
 
 
 class DistributionSurface(unittest.TestCase):
@@ -92,6 +108,29 @@ class DistributionSurface(unittest.TestCase):
             text = (H.REPO / rel).read_text(encoding="utf-8")
             hits = re.findall(r"[（(][^）)]{0,12}\d{3,}\s*行[^）)]*[）)]", text)
             self.assertEqual(hits, [], f"{rel} 写死了行数 {hits}，改由行数上限测试钉住")
+
+    def test_docs_declare_the_real_self_test_count(self):
+        """写死条数比写死行数值得留（"零依赖 N 条"是对用户的承诺），但必须跟实跑对齐。
+
+        本轮实跑发现四处已经腐烂：`test_packaging.py 6 条`（真 7）、`test_protocol_smoke.py 8 条`
+        （真 9）、`test_evolve.py 12 条`（真 13）、发布草稿里的"199→206 条"（那是同一轮的两个
+        中间快照，不是 v1.0→v1.1 的对照）。手写记不住就交给机器记。
+        """
+        modules = discovered_module_names()
+        total = len(modules)
+        per_module = collections.Counter(modules)
+        docs = ("README.md", "README.en.md", "docs/ACCEPTANCE-v1.1.md", "CONTRIBUTING.md",
+                "docs/RELEASE-v1.1.0.md", "docs/DEMO-migrate.md")
+        for rel in docs:
+            text = (H.REPO / rel).read_text(encoding="utf-8")
+            for n in re.findall(r"(?<!\d)(\d{3})\s*(?:条|tests)", text):
+                self.assertEqual(int(n), total,
+                                 f"{rel} 写着 {n} 条自测，实际发现 {total} 条")
+            for mod, n in re.findall(r"test_([a-z_]+)\.py`?[^0-9\n]{0,4}(\d{1,3})\s*条", text):
+                name = f"test_{mod}"
+                self.assertIn(name, per_module, f"{rel} 引用了不存在的测试模块 {name}")
+                self.assertEqual(int(n), per_module[name],
+                                 f"{rel} 写着 {name} 有 {n} 条，实际 {per_module[name]} 条")
 
     def test_local_telemetry_is_documented_and_ignorable(self):
         sec = (H.REPO / "SECURITY.md").read_text(encoding="utf-8")

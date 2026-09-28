@@ -7,6 +7,7 @@
 """
 import ast
 import glob
+import re
 import subprocess
 import sys
 import tomllib
@@ -89,6 +90,23 @@ class Packaging(unittest.TestCase):
         listing = H.run([sys.executable, script, "list"])
         self.assertEqual(listing.returncode, 0, msg=H.out(listing))
         self.assertIn("可用骨架: 无", H.out(listing))
+
+    def test_documented_init_file_count_matches_reality(self):
+        """文档说"`wsc init 03` 复制 N 个文件"就真去复制一次数一遍：骨架加一个 .gitattributes，
+        这个数就会变，靠手写记不住（本轮 26→27 是实跑发现的）。"""
+        work = H.tmp_dir()
+        self.addCleanup(H.rmtree, work)
+        proj = work / "proj"
+        r = H.run([sys.executable, H.WSC, "init", "03", str(proj)],
+                  extra_env={"COHARNESS_HOME": str(work / "home")})
+        self.assertEqual(r.returncode, 0, msg=H.out(r))
+        n = sum(1 for p in proj.rglob("*") if p.is_file())
+        self.assertGreater(n, 0)
+        for rel in ("docs/ACCEPTANCE-v1.1.md", "docs/RELEASE-v1.1.0.md"):
+            text = (H.REPO / rel).read_text(encoding="utf-8")
+            for m in re.findall(r"(?<!\d)(\d{2,3})\s*(?:个)?文件", text):
+                self.assertEqual(int(m), n,
+                                 f"{rel} 写着复制 {m} 个文件，实跑复制 {n} 个")
 
     def test_version_and_license_are_real(self):
         self.assertRegex(PYPROJECT["project"]["version"], r"^\d+\.\d+\.\d+$")

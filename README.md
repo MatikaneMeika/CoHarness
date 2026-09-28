@@ -90,7 +90,7 @@ python maintain.py audit   <项目>   # 只读体检：钩子在否/被没被改
 python evolve.py  <项目> --out 记录.json   # 晋升审核：机器取客观证据，人填有效性与必要性
 ```
 
-仓库自带 214 条自测，跑起来不需要装任何东西：
+仓库自带 216 条自测，跑起来不需要装任何东西：
 
 ```bash
 python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows × py3.11/3.13 上跑同样的命令

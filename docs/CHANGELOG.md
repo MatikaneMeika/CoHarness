@@ -2,6 +2,8 @@
 
 > 格式：`- YYYY-MM-DD [晋升 I-xxx@来源项目] 摘要`；非晋升的本体演进用 `[演进]` 标签，缺陷修复用 `[缺陷修复]` 并附复现方式。只增不改。
 
+- 2026-09-28 [缺陷修复] **文档里写死的实测数字又烂了四处，这次交给机器去数**（复现：改动前跑 `python -m unittest discover -s tests -p test_distribution_surface.py -k docs_declare`，它判出全量 214≠216、`test_protocol_smoke.py` 8≠9、`test_packaging.py` 6≠7、`test_evolve.py` 12≠13）：上一轮刚把会腐烂的**行数**从文档清掉，这轮对照计划书自查发现**条数**是同一个病——加一条断言、加一个测试文件，五个文档里的手写数字就同时过期，最离谱的是发布草稿写"199→206 条零依赖自测"，那是**同一轮里的两个中间快照**，不是 v1.0→v1.1 的对照（v1.0 连一套可跑测试都没有，`tests/` 是本轮 `8f74102` 才建的）。条数和"骨架装出几个文件"是面向用户的承诺，值得写死，但写死就得有红了会报警的东西兜着：新增 `tests/test_distribution_surface.py::test_docs_declare_the_real_self_test_count`（用与 CLI 同一个 `discover` 入口数，全量条数和"`tests/test_x.py` N 条"两种写法一起对齐，并顺手断言文档引用的测试模块真存在）与 `tests/test_packaging.py::test_documented_init_file_count_matches_reality`（**真跑一次 `wsc init 03` 再数**：本轮给四套骨架补 `.gitattributes`，26 就变 27，这种数靠手写记不住）。五份文档共 11 处数字按实跑改真，全套自测 214→216 条。
+
 - 2026-09-28 [演进] **骨架自己声明 schema，migrate 补齐计划书点名的三项 v1 遗留**（W9 自查续）：
   四套骨架的项目卡新增 `| 骨架 schema | 3 |` 一行——计划书写的是"骨架文件头加 schema"，之前只把版本放在
   `maintain.py` 常量与锁文件里，等于**没装过指纹的老项目说不清自己是哪版**；现在 schema 有三个来源，
