@@ -156,13 +156,16 @@ def collect_projects(args):
 
 def commits_touching(project, prefixes, limit=3):
     """卡边界内的提交：返回 (总次数, 最近几条, 作者集合)。git 不可用时给 (0, [], set())。"""
-    paths = [_norm_prefix(p) for p in prefixes if _norm_prefix(p)]
+    paths = sorted({_norm_prefix(p) for p in prefixes if _norm_prefix(p)})
     if not paths:
         return 0, [], set()
+    key = tuple(paths)
+    if key in _CACHE["commits"]:
+        return _CACHE["commits"][key]
     ok, out = _git(project, ["log", "-n", "50", "--name-only", "--pretty=format:@@%h|%an|%ar",
                              "--", *paths])
     if not ok:
-        return 0, [], set()
+        return _cache_commit(key, (0, [], set()))
     commits, cur = [], None
     for line in out.splitlines():
         if line.startswith("@@"):
@@ -172,7 +175,7 @@ def commits_touching(project, prefixes, limit=3):
         elif line.strip() and cur is not None:
             cur.setdefault("files", set()).add(line.strip())
     authors = {c["author"] for c in commits}
-    return len(commits), commits[:limit], authors
+    return _cache_commit(key, (len(commits), commits[:limit], authors))
 
 
 def current_page_lines(snapshots, state, width, color):
@@ -209,6 +212,21 @@ def grouped_by_role(cards):
                 return (0, i, role)
         return (2 if role == UNKNOWN_ROLE else 1, 0, role)
     return sorted(groups.items(), key=lambda kv: rank(kv[0]))
+
+
+# --watch 每 5 秒重画一次；不缓存的话每张卡每轮都要起一个 git 进程，卡片一多就是白烧 CPU。
+# 键是 HEAD：提交一变（有人收工/合并了）缓存就整体作废，卡体内容本来每次都重读，不会读到旧的。
+_CACHE = {"head": None, "commits": {}, "worktrees": None}
+
+
+def _cache_commit(key, value):
+    _CACHE["commits"][key] = value
+    return value
+
+
+def head_sha(project):
+    ok, out = _git(project, ["rev-parse", "HEAD"])
+    return out.strip() if ok else ""
 
 
 def load_check(project):
@@ -301,7 +319,12 @@ def project_snapshot(project, deep=True):
                           "last": tel_entries[-1] if tel_entries else None,
                           "harnesses": sorted({str(e.get("harness", "?")) for e in tel_entries[-40:]})},
             "owners": facts["owners"], "heads": [], "diverged": 0}
-    now = time.time()
+    all_paths = sorted({p for c in cards_raw
+                        for p in (_norm_prefix(x) for x in c["allowed"]) if p})
+    if deep:
+        head = head_sha(project)
+        if _CACHE["head"] != head:
+            _CACHE.update(head=head, commits={}, worktrees=None)
     for c in cards_raw:
         try:
             body = c["path"].read_text(encoding="utf-8").split("---", 2)[-1]
@@ -311,12 +334,18 @@ def project_snapshot(project, deep=True):
         raw_role = role_of([_norm_prefix(p) for p in c["allowed"]], facts["owners"])
         role = UNKNOWN_ROLE if raw_role == UNKNOWN_ROLE else role_label(raw_role, facts["roles"])
         rel = str(c["path"].relative_to(project)).replace(os.sep, "/")
-        n_commits, recent, authors = (0, [], set())
-        copies = []
+        n_commits, recent, authors, copies = 0, [], set(), []
         if deep:
-            n_commits, recent, authors = commits_touching(project, c["allowed"])
-            if n_commits or total:
+            # 逐卡一次 git 太贵，改成整库一次：所有边界前缀合起来取提交，按文件归属回每张卡。
+            # worktree 清单本来就已缓存，逐卡只剩读几个文件。
+            n_commits, recent, authors = commits_touching(project, all_paths)
+            if total:
                 copies = worktree_copies(project, rel)
+            mine = {f for c2 in recent for f in c2.get("files", ())}
+            paths = [_norm_prefix(p) for p in c["allowed"] if _norm_prefix(p)]
+            touched = {f for f in mine if any(f == p or f.startswith(p + "/") for p in paths)}
+            n_commits = sum(1 for c2 in recent
+                            if {f for f in c2.get("files", ())} & touched)
         flags = []
         active = c["status"] in ("doing", "review")
         if active and total and done == 0 and n_commits:
@@ -507,24 +536,27 @@ def unfilled(value):
 
 def worktree_copies(project, rel_card):
     """同一张卡在各工作树的副本状态——I-007 点名的分叉症状在这里变成可见。"""
-    ok, out = _git(project, ["worktree", "list", "--porcelain"])
-    if not ok:
-        return []
+    trees = _CACHE["worktrees"]
+    if trees is None:
+        ok, out = _git(project, ["worktree", "list", "--porcelain"])
+        if not ok:
+            return []
+        trees = [Path(line.split(" ", 1)[1]) for line in out.splitlines()
+                 if line.startswith("worktree ")]
+        _CACHE["worktrees"] = trees
     rows = []
-    for line in out.splitlines():
-        if line.startswith("worktree "):
-            wt = Path(line.split(" ", 1)[1])
-            f = wt / rel_card
-            if not f.is_file():
-                continue
-            try:
-                text = f.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError):
-                continue
-            status, who = wsc._card_fields(text)
-            body = text.split("---", 2)[-1] if text.startswith("---") else text
-            done, total, _ = checklist(body)
-            rows.append({"path": str(wt), "status": status or "?",
-                         "assignee": ",".join(who) or "-", "done": done, "total": total})
+    for wt in trees:
+        f = wt / rel_card
+        if not f.is_file():
+            continue
+        try:
+            text = f.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        status, who = wsc._card_fields(text)
+        body = text.split("---", 2)[-1] if text.startswith("---") else text
+        done, total, _ = checklist(body)
+        rows.append({"path": str(wt), "status": status or "?",
+                     "assignee": ",".join(who) or "-", "done": done, "total": total})
     return rows
 

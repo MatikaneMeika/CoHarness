@@ -2,6 +2,9 @@
 
 > 格式：`- YYYY-MM-DD [晋升 I-xxx@来源项目] 摘要`；非晋升的本体演进用 `[演进]` 标签，缺陷修复用 `[缺陷修复]` 并附复现方式。只增不改。
 
+- 2026-09-28 [演进] **面板的刷新从"每卡一次 git"改成"整库一次 + 按 HEAD 缓存"**（写第一版时留下的性能账，在补 `--watch` 的成本测试时才暴露）：原来每张卡各跑一次 `git log --name-only -- <边界>`、一次 `git worktree list`，20 张卡的看板每 5 秒就是 40 个 git 进程——"实时"两个字是拿 CPU 换的。现在一次 `git log` 取全部边界内的提交，按文件归属回每张卡（`_norm_prefix` 归一后做前缀匹配，这条改错一次就被测试抓住：卡片里的前缀带尾斜杠，不归一就永远匹配不上、提交数全成 0）；worktree 清单与提交结果按 HEAD 缓存，`rev-parse HEAD` 一变整体作废。实测 `.coh-p2/work/wt-a`：第一轮 3 次 git，第二轮 1 次（只剩 HEAD 探测），数据一字不差。
+  新增 `tests/test_panel.py::RefreshCost` 两条：`test_second_build_only_probes_head`（第二轮必须比第一轮少干活，且缓存不能把数据也省掉）、`test_new_commit_invalidates_the_cache`（新提交后每张卡的提交数必须 +1——面板不许拿旧账当现状）。`board.py` 上限随之从 540 调到 580（ADR-10 附注的表同步），全套 244 条 OK。
+
 - 2026-09-28 [缺陷修复] **全屏面板在 Windows 上第一次读键就崩；测试全走 `--plain` 所以整轮没发现**（复现：`mintty -- python panel.py --project <项目>` 起窗后进程立刻退出，`tasklist` 里查不到 mintty；直接调 `panel.read_key(0.05)` 报 `AttributeError: module 'msvcrt' has no attribute 'flush'`）：`read_key` 里我照抄了 posix 侧的习惯写了一句 `msvcrt.flush()`，而 msvcrt 根本没有这个函数——`--plain` 那条路不进 `read_key`，25 条面板用例又都不碰它，于是这个 bug 只在真终端里出现。修法：去掉那句；顺手把两个平台的按键解码抽成纯函数 `decode_msvcrt` / `decode_posix`（表也提到模块级），这样读键的 IO 与判定分开，判定可测。补三类用例：`test_read_key_returns_tick_without_a_console`（没有控制台时超时返回 tick，不抛异常——这条就是本次的回归钉）、`test_msvcrt_key_decoding`、`test_posix_key_decoding`；再加 `InteractiveLoop` 两条，用假 stdin/stdout 与脚本化 read_key 把 `main()` 的整条循环跑完（渲染→读键→换页→重建→退出时找回光标），这样全屏模式在 CI 里也被覆盖，不再依赖有没有终端。
   真机也验了：修完后 mintty 里三页正常渲染（标题行、按角色分组的青色表头、进度条 `[######] 1/1`、红色 `!提交了没勾 !跨工作树分叉`、页脚按键提示），截图确认中文列对齐没有漂。全套 242 条 OK。
 

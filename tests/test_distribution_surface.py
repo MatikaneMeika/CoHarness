@@ -26,7 +26,7 @@ FIRST_PARTY = {"wsc", "maintain", "board"}         # 同目录自带模块（pan
 # 2026-09-28 定字：wsc.py 到 1250 为止，之后**新命令一律进 maintain.py**（决策记录见
 # docs/EVOLUTION-PLAN.md 的 ADR-10 附注）。这条上限是最后一次为 wsc.py 上调。
 LINE_BUDGET = {H.WSC: 1250, H.CHECK_SRC: 650, H.REPO / "evolve.py": 400,
-               H.REPO / "maintain.py": 700, H.REPO / "board.py": 540, H.REPO / "panel.py": 220}
+               H.REPO / "maintain.py": 700, H.REPO / "board.py": 580, H.REPO / "panel.py": 220}
 NETWORK_TOKENS = ("urllib.request", "http.client", "socket", "ftplib", "smtplib",
                   "poplib", "imaplib", "telnetlib", "requests", "urllib3", "httpx", "aiohttp")
 

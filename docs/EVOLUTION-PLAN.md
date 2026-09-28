@@ -177,10 +177,15 @@ W5/W7/W9/W12 落地后，`wsc.py` 一度涨到 1137 行——**自己写的行�
 | 分发面 | `wsc.py`、`03-.../scripts/check.py` | 下游项目与其中的 harness | 1250 / 650 |
 | 开发面 | `evolve.py` | 骨架库维护者（晋升审核） | 400 |
 | 维护面 | `maintain.py` | 管已实例化项目的漂移/指纹/体检 | 700 |
+| 展示面 | `board.py` + `panel.py` | 要看全局状态的人（只读，不进下游项目） | 580 / 220 |
 
 - `check.py` 上限最严：它被复制进**每一个**下游项目，是执法面本体。
 - `wsc.py` 允许到 1250 的唯一理由是 README 的 `curl` 单文件承诺——装机与开工命令不许散进多个文件；
-  **这是最后一次为 `wsc.py` 上调**，之后的新命令一律进 `maintain.py`（已写进 `CONTRIBUTING.md` 的代码约束）。
+  **这是最后一次为 `wsc.py` 上调**，之后的新命令**按面归位**：改已实例化项目的指纹/迁移/体检进
+  `maintain.py`，晋升审核进 `evolve.py`，只读呈现进展示面（`board.py` 装配与渲染 + `panel.py` 终端，
+  拆两个文件是为了让渲染能被 unittest 直接吃）。已写进 `CONTRIBUTING.md` 的代码约束同步改过。
+- 展示面破例带一次 `exec`（载入项目自己的 `scripts/check.py`，为的是卡片口径只有一套）：
+  范围由 `test_only_the_projects_own_check_py_may_be_executed` 钉死在一次 exec、一次 compile、一条路径。
 - `evolve.py` / `maintain.py` 只允许 `import wsc` 复用读表与调用形状，不许引入第三方：
   审核与维护都不该成为下游项目的依赖面。
 - 计划书对照表里 ADR-7/8/9 的回绝理由不变（copier 走 git URL 取模板与"零网络 + clone 即用"冲突；

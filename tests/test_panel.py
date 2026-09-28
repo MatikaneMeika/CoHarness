@@ -375,5 +375,50 @@ class InteractiveLoop(unittest.TestCase):
         self.assertNotIn("Traceback", out)
 
 
+class RefreshCost(unittest.TestCase):
+    """`--watch` 每 5 秒重画一次：不缓存的话每张卡每轮都要起一个 git 进程。"""
+
+    def setUp(self):
+        self.tmp = H.tmp_dir()
+        self.addCleanup(H.rmtree, self.tmp)
+        self.proj = self.tmp / "proj"
+        self.assertEqual(H.wsc("init", "03", str(self.proj)).returncode, 0)
+        git(self.proj, "init", "-q", "--initial-branch=main")
+        (self.proj / "docs").mkdir(exist_ok=True)
+        for cid in ("T-030", "T-031", "T-032"):
+            make_card(self.proj, cid, allowed=("  - docs/",), items=("- [ ] 一条",))
+        (self.proj / "docs" / "a.md").write_text("x\n", encoding="utf-8", newline="\n")
+        git(self.proj, "add", "-A")
+        self.assertEqual(git(self.proj, "commit", "-q", "-m", "基线").returncode, 0)
+        board._CACHE.update(head=None, commits={}, worktrees=None)
+        self.addCleanup(lambda: board._CACHE.update(head=None, commits={}, worktrees=None))
+        self.real_git = board._git
+        self.calls = []
+        board._git = lambda pr, av, timeout=15: (self.calls.append(av), self.real_git(pr, av, timeout))[1]
+        self.addCleanup(setattr, board, "_git", self.real_git)
+
+    def test_second_build_only_probes_head(self):
+        board.project_snapshot(self.proj)
+        first = len(self.calls)
+        self.calls.clear()
+        snap2 = board.project_snapshot(self.proj)
+        self.assertLessEqual(len(self.calls), 1,
+                             f"缓存没生效：第二轮还是打了 {len(self.calls)} 次 git")
+        self.assertEqual([c["commits"] for c in snap2["cards"]], [1, 1, 1],
+                         "缓存不能把数据也省掉")
+        self.assertGreaterEqual(first, 3, "第一轮本该真取提交与 worktree 清单，否则这条测试没意义")
+        self.assertLess(len(self.calls), first, "第二轮必须比第一轮少干活")
+
+    def test_new_commit_invalidates_the_cache(self):
+        board.project_snapshot(self.proj)
+        before = [c["commits"] for c in board.project_snapshot(self.proj)["cards"]]
+        (self.proj / "docs" / "b.md").write_text("y\n", encoding="utf-8", newline="\n")
+        git(self.proj, "add", "-A")
+        self.assertEqual(git(self.proj, "commit", "-q", "-m", "又一次提交").returncode, 0)
+        after = [c["commits"] for c in board.project_snapshot(self.proj)["cards"]]
+        self.assertEqual(after, [b + 1 for b in before],
+                         "HEAD 一变必须重取提交数——面板不许拿旧账当现状")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -9,7 +9,7 @@
 只需要 Python 3.11+（Windows/macOS/Linux 都行）与 git：
 
 ```bash
-python -m unittest discover -s tests    # 零依赖；当前 242 条
+python -m unittest discover -s tests    # 零依赖；当前 244 条
 ```
 
 想让差分测试也跑（拿 `python-frontmatter` 当预言机对照自写解析器）：
@@ -57,7 +57,7 @@ python evolve.py --verify-record 记录.json              # 主观两栏 + 四�
 
 - **分发面只用标准库、零网络**：`wsc.py` 与 `scripts/check.py` 会被复制进每个下游项目，
   `tests/test_distribution_surface.py` 用 AST 检查 import、网络符号、eval/exec 与行数上限
-- **新命令一律进 `maintain.py`**（维护面），不要再往 `wsc.py` 加——它的上限是最后一次上调后的 1250 行
+- **新命令按面归位**：改已实例化项目的指纹/迁移/体检进 `maintain.py`（维护面），晋升审核进 `evolve.py`（开发面），只读呈现进 `board.py`+`panel.py`（展示面，装配/渲染与终端分开才好测）；不要再往 `wsc.py` 加——它的上限是最后一次上调后的 1250 行
 - **卡片 frontmatter 只认声明子集**（`.agent/tasks/CARD-CONVENTION.md`）：子集外的写法必须**响亮失败**
   并带行号，不许静默忽略；要扩子集得先扩 `tests/test_card_subset.py` 与差分用例
 - **不许改 `docs/CHANGELOG.md` 的历史行**（只增不改）
