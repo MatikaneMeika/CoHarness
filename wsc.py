@@ -126,22 +126,66 @@ def collect_placeholders(dst: Path, copied):
     return found
 
 
+def _git_field(argv, cwd, timeout=30):
+    """跑一条只读 git 命令，返回 (状态, 首行输出)：ok / not-repo / no-git。"""
+    try:
+        r = _run(argv, cwd, timeout=timeout)
+    except OSError:
+        return "no-git", ""
+    lines = (r.stdout or "").strip().splitlines()
+    return ("ok", lines[0]) if r.returncode == 0 and lines else ("not-repo", "")
+
+
+def _hooks_target(project: Path):
+    """解析 pre-commit 该落在哪：普通仓库 / linked worktree（公共 .git）/ 非仓库 / 外层仓库。
+
+    只用只读命令，不代跑 `git init`——"init 只向目标目录写文件"是 SECURITY.md 的承诺。
+    """
+    st, top = _git_field(["git", "rev-parse", "--show-toplevel"], project)
+    if st == "no-git":
+        return None, "git-missing", ""
+    if st != "ok":
+        return None, "not-a-repo", ""
+    if Path(top).resolve() != project.resolve():
+        return None, "outer-repo", top          # 不许把项目钩子装进别人的仓库
+    st, hooks = _git_field(
+        ["git", "rev-parse", "--path-format=absolute", "--git-path", "hooks"], project)
+    if st != "ok":  # git < 2.43 不认 --path-format，退回 --git-dir 自己拼（含 commondir）
+        st, gd = _git_field(["git", "rev-parse", "--git-dir"], project)
+        if st != "ok":
+            return None, "not-a-repo", top
+        gd = Path(gd)
+        if not gd.is_absolute():
+            gd = project / gd
+        common = gd / "commondir"
+        if common.exists():
+            gd = (gd / common.read_text(encoding="utf-8").strip()).resolve()
+        hooks = str(gd / "hooks")
+    p = Path(hooks)
+    return (p if p.is_absolute() else project / p), "ok", top
+
+
 def install_pre_commit(dst: Path):
-    """目标已是 git 仓库且骨架带钩子时，装进 .git/hooks。"""
+    """把骨架钩子复制进 git 认定的 hooks 目录，返回 (状态, 说明)。
+
+    状态：installed / exists / not-a-repo / outer-repo / git-missing / no-hook-file。
+    """
     src = dst / "scripts" / "hooks" / "pre-commit"
-    git_dir = dst / ".git"
-    if not (src.exists() and git_dir.is_dir()):
-        return None
-    target = git_dir / "hooks" / "pre-commit"
+    if not src.exists():
+        return "no-hook-file", ""
+    hooks, status, note = _hooks_target(dst)
+    if status != "ok":
+        return status, note
+    target = hooks / "pre-commit"
     if target.exists():
-        return "exists"
+        return "exists", str(hooks)
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(src, target)
     try:
         target.chmod(0o755)
     except OSError:
         pass
-    return "installed"
+    return "installed", str(hooks)
 
 
 def write_adapters(dst: Path, spec: str):
@@ -188,11 +232,20 @@ def cmd_init(args):
     print(f"已实例化骨架 [{src.name}] -> {dst}")
     print(f"  复制 {len(copied)} 个文件" + (f"，跳过已存在 {len(skipped)} 个" if skipped else ""))
 
-    hook = install_pre_commit(dst)
-    if hook == "installed":
-        print("  pre-commit 钩子已安装（.git/hooks/pre-commit，check.py 执法）")
-    elif hook == "exists":
-        print("  .git/hooks/pre-commit 已存在，未覆盖")
+    status, note = install_pre_commit(dst)
+    if status == "installed":
+        print(f"  pre-commit 钩子已装进 {note}（所有 harness 的提交都过 check.py）")
+    elif status == "exists":
+        print(f"  {note}\\pre-commit 已存在，未覆盖")
+    elif status == "not-a-repo":
+        print("  [未装钩子] 目标目录还不是 git 仓库，check.py 不会被自动触发：")
+        print("            先 `git init` 再重跑 wsc init，或手动 "
+              "cp scripts/hooks/pre-commit .git/hooks/pre-commit")
+    elif status == "outer-repo":
+        print(f"  [未装钩子] 目标不是仓库根（外层仓库 {note}），钩子只装进项目自己的仓库：")
+        print("            把这个项目单独 git init，或手动 cp scripts/hooks/pre-commit .git/hooks/")
+    elif status == "git-missing":
+        print("  [未装钩子] 找不到 git 命令：装好 git 后重跑 wsc init")
 
     if args.adapter:
         made = write_adapters(dst, args.adapter)

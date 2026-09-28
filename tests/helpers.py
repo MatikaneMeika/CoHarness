@@ -23,23 +23,18 @@ GIT_ID = ["-c", "user.name=coharness-test", "-c", "user.email=coharness-test@inv
 
 def load_check_module():
     """把骨架里的 check.py 当模块载入，只用于解析器的单元测试（不跑它的 main）。"""
-    import importlib.util
-
     spec = importlib.util.spec_from_file_location("coh_check", CHECK_SRC)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
 
 
-def load_cards_fixture(name):
-    """取 tests/fixtures 下的夹具路径。"""
-    return REPO / "tests" / "fixtures" / name
-
-
-def run(argv, cwd=None, native_env=False):
+def run(argv, cwd=None, native_env=False, extra_env=None):
     # PYTHONIOENCODING 只统一子进程 stdio 编码，不改 locale 首选编码，
     # 这样 wsc 内部 subprocess(text=True) 的解码缺陷仍能被测出（见 test_console_encoding）
     env = dict(os.environ) if native_env else dict(os.environ, PYTHONIOENCODING="utf-8")
+    if extra_env:
+        env.update(extra_env)
     return subprocess.run([str(a) for a in argv], cwd=str(cwd) if cwd is not None else None,
                           capture_output=True, text=True, encoding="utf-8",
                           errors="replace", timeout=180, shell=False, env=env)
@@ -89,7 +84,8 @@ def make_project(parent, skeleton=None):
 
 
 def git_repo(dst, bootstrap=True):
-    """在 dst 建仓库；bootstrap=True 时把现有内容提交进 main（钩子未装，不会被拦）。"""
+    """在 dst 建仓库（目录不存在就建）；bootstrap=True 时把现有内容提交进 main。"""
+    Path(dst).mkdir(parents=True, exist_ok=True)
     git(dst, "init", "-q", "--initial-branch=main")
     if bootstrap:
         git(dst, "add", "-A")

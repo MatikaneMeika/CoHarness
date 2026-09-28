@@ -1,10 +1,25 @@
 #!/bin/sh
-# working_struct 执法钩子：所有 harness 的提交必经 check.py（命名/卡格式与认领/改动挂卡）。
-# 安装：wsc init 自动复制到 .git/hooks/pre-commit；手动：
+# CoHarness 执法钩子：所有 harness 的提交必经 check.py（命名 / 卡格式与认领 / 改动挂卡）。
+# 安装：wsc init 自动复制进 git 认定的 hooks 目录；手动装：
 #   cp scripts/hooks/pre-commit .git/hooks/pre-commit
-# stale 提示不在此列（advisory，不拦截提交），要看报告跑 python scripts/check.py --stale
+# stale 是 advisory，不在此拦：要看报告跑 scripts/check.py --stale
 
-python scripts/check.py --names --tasks --diff
+# 解释器以"真能跑"为准：Windows 上 python3 常常是商店占位符——command -v 找得到，一跑就废，
+# 所以每个候选都跑一次 -c 探。找不到就响亮失败，绝不静默放过提交。
+PY=""
+for c in "python" "python3" "py -3"; do
+  if command -v ${c%% *} >/dev/null 2>&1 && $c -c "import sys" >/dev/null 2>&1; then
+    PY="$c"
+    break
+  fi
+done
+if [ -z "$PY" ]; then
+  echo "pre-commit：找不到可用的 Python（试过 python / python3 / py -3），提交被拦。" >&2
+  echo "  装好 Python 再提交；自查命令：python scripts/check.py" >&2
+  exit 1
+fi
+
+$PY scripts/check.py --names --tasks --diff
 rc=$?
 if [ $rc -ne 0 ]; then
   echo "" >&2
