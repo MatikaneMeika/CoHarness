@@ -34,6 +34,8 @@ SKIP_DIRS = {
 BAD_NAME_RE = re.compile(
     r"(?i)[-_\s](v\d+|final|副本|copy|backup|bak|新版|最新版?|修正版?|最终版?)(\.[a-z0-9]+)?$"
 )
+# 自授权改动的固定路径（卡片文件按目录判定，见 is_self_authorized）
+SELF_AUTHORIZED = (".agent/improvements.md",)
 
 
 def _read_text(p: Path):
@@ -403,7 +405,18 @@ def path_covered(rel: str, prefixes):
     return False
 
 
-def check_diff(cards):
+def is_self_authorized(rel, tasks_rel):
+    """卡片本身与改进登记表不需要"挂卡"：改卡就是认领动作，登记是全局禁令第 7 条要求的动作。
+
+    并发演练实测：要求它们挂卡会让认领与登记无路可走（唯一的授权来源是常驻卡，
+    而持常驻卡再领实现卡会撞"一 harness 一张 doing 卡"，退回常驻卡又卡在 todo 上）。
+    这两类改动仍受 --tasks 的全局纪律约束：一卡一 assignee、一 harness 一张 doing、缺边界节即违规。
+    """
+    return rel in SELF_AUTHORIZED or (
+        tasks_rel and rel.startswith(tasks_rel + "/") and rel.endswith(".md"))
+
+
+def check_diff(cards, tasks_rel=""):
     changed = staged_files()
     if changed is None:
         print("[改动挂卡] 跳过（不是 git 仓库或 git 不可用）")
@@ -416,18 +429,25 @@ def check_diff(cards):
         return True
     ok = True
     for rel in changed:
+        if is_self_authorized(rel, tasks_rel):
+            continue
         covering = [c for c in cards if path_covered(rel, c["allowed"])]
         if not covering:
             ok = False
             print(f"[改动挂卡] 改动未挂任何任务卡: {rel}")
             continue
-        for c in covering:
-            if path_covered(rel, c["forbidden"]):
-                ok = False
-                print(f"[改动挂卡] {rel} 命中 {c['name']} 的 forbidden_paths")
-            if c["status"] in ("todo", ""):
-                ok = False
-                print(f"[改动挂卡] {rel} 挂在 {c['name']}，但该卡仍为 todo（应先认领取 doing）")
+        blocked = [c for c in covering if path_covered(rel, c["forbidden"])]
+        if blocked:
+            # 禁改优先：任何一张卡点名禁止，别的卡的 allowed_paths 不能把它绕开
+            ok = False
+            print(f"[改动挂卡] {rel} 命中 {blocked[0]['name']} 的 forbidden_paths")
+            continue
+        active = [c for c in covering if c["status"] in ("doing", "review")]
+        if not active:
+            ok = False
+            # 以前逢 todo 就报，会让重叠边界把已正确认领的一方一起诬告（并发演练 A3）
+            print(f"[改动挂卡] {rel} 只被未认领的卡覆盖（{covering[0]['name']} 仍为 todo，"
+                  f"应先认领取 doing）")
     if ok:
         print("[改动挂卡] 通过")
     return ok
@@ -477,6 +497,10 @@ def main():
 
     tasks_dir, columns = load_config()
     cards, card_errors = load_cards(tasks_dir)
+    try:
+        tasks_rel = tasks_dir.relative_to(ROOT).as_posix()
+    except ValueError:
+        tasks_rel = ""
 
     ok = True
     if run_all or args.names:
@@ -484,7 +508,7 @@ def main():
     if run_all or args.tasks:
         ok &= check_tasks(cards, columns, card_errors)
     if run_all or args.diff:
-        ok &= check_diff(cards)
+        ok &= check_diff(cards, tasks_rel)
     if run_all or args.stale:
         check_stale(cards)  # advisory
     if run_all:

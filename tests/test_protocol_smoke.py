@@ -1,11 +1,7 @@
 """协议冒烟：多 harness 并行的关键提交序列，按"正确行为"写断言。
 
 计划书 W2 的最小本地版（原生 git + 手写卡，不需要 backlog/specify/git-wt）。
-两类断言分开：
-- 硬断言：现在就该成立的（首次入库、两 harness 并行、一 harness 一卡的门禁、常驻规则卡绕行）
-- expectedFailure：规则缺口 I-001（看板状态流转与 improvements 登记没有授权通道）。
-  I-001 晋升、把放行写进 check.py 本体后，这两条会变成 unexpected success 报错 ——
-  那就是摘掉标记、改硬断言的信号。
+2026-09-28 之前的两条 expectedFailure（认领、登记不该再挂卡）在 I-001 晋升后已翻成硬断言。
 """
 import sys
 import unittest
@@ -66,49 +62,55 @@ class ProtocolSmoke(unittest.TestCase):
         self.assertNotEqual(res.returncode, 0, msg=H.out(res))
         self.assertIn("认领冲突", H.out(res))
 
-    def test_d_resident_card_workaround_is_executable(self):
-        """绕行要真能跑：认领常驻规则卡 → 登记 I-001 → 提交进 main → improve 读得到。"""
-        proj = self.fresh_project()
-        self.assertEqual(self.commit(proj, "骨架入库").returncode, 0)
-        board = proj / BOARD
-        board.write_text(board.read_text(encoding="utf-8").replace(
-            "status: todo\nassignee: []", "status: doing\nassignee: [qoder-0928a]"),
-            encoding="utf-8")
-        res = self.commit(proj, "认领常驻卡", [BOARD])
-        self.assertEqual(res.returncode, 0, msg=H.out(res))
-
-        ledger = proj / ".agent" / "improvements.md"
-        ledger.write_text(ledger.read_text(encoding="utf-8") + (
-            "| I-001 | 2026-09-28 | 规则 | 认领/状态流转/登记 | 三类合法提交无授权通道 | "
-            "卡与登记自授权，或常驻规则卡 | 冒烟步序复现，见 tests/test_protocol_smoke.py | 登记 |\n"),
-            encoding="utf-8")
-        res = self.commit(proj, "登记 I-001", [".agent/improvements.md"])
-        self.assertEqual(res.returncode, 0, msg=H.out(res))
-        listed = H.out(H.wsc("improve", str(proj)))
-        self.assertIn("I-001", listed)
-        self.assertIn("[登记]", listed)
-
-    @unittest.expectedFailure
-    def test_e_claim_commit_should_not_need_an_extra_card(self):
-        """缺口 I-001：改自己卡的 assignee/status 就是协议规定的认领动作，不该再被要求挂卡。"""
+    def test_d_claim_commit_needs_no_card(self):
+        """I-001 晋升产物：认领 = 改自己的卡 + commit + push main，一步过钩子。"""
         proj = self.fresh_project(extra_cards=(("T-021", {"status": "todo", "assignee": "[]"}),))
         self.assertEqual(self.commit(proj, "建卡入库").returncode, 0)
         target = proj / "backlog" / "tasks" / "T-021.md"
         target.write_text(target.read_text(encoding="utf-8").replace(
-            "status: todo\nassignee: []", "status: doing\nassignee: [zcode-0926a]"),
+            "status: todo", "status: doing").replace("assignee: []", "assignee: [zcode-0926a]"),
             encoding="utf-8")
-        self.assertEqual(self.commit(proj, "认领 T-021", ["backlog/tasks/T-021.md"]).returncode, 0)
+        res = self.commit(proj, "认领 T-021", ["backlog/tasks/T-021.md"])
+        self.assertEqual(res.returncode, 0, msg=H.out(res))
+        # 认领完就能在自己边界内交工
+        (proj / "docs" / "ARCHITECTURE.md").write_text("认领后交工\n", encoding="utf-8")
+        self.assertEqual(self.commit(proj, "交工", ["docs/ARCHITECTURE.md"]).returncode, 0)
 
-    @unittest.expectedFailure
-    def test_f_registration_commit_should_not_need_a_card(self):
-        """缺口 I-001：全局禁令第 7 条要求登记，执法却把登记拦住。"""
+    def test_e_registration_commit_needs_no_card(self):
+        """I-001 晋升产物：全局禁令第 7 条要求的登记，不该被执法拦住。"""
         proj = self.fresh_project()
         self.assertEqual(self.commit(proj, "骨架入库").returncode, 0)
         ledger = proj / ".agent" / "improvements.md"
         ledger.write_text(ledger.read_text(encoding="utf-8") + (
-            "| I-009 | 2026-09-28 | 规则 | 登记 | 登记被拦 | 自授权 | 冒烟复现 | 登记 |\n"),
-            encoding="utf-8")
-        self.assertEqual(self.commit(proj, "登记 I-009", [".agent/improvements.md"]).returncode, 0)
+            "| I-001 | 2026-09-28 | 规则 | 认领/状态流转/登记 | 三类合法提交无授权通道 | "
+            "卡与登记自授权 | 并发演练 D0：四条路全 rc=1 | 登记 |\n"), encoding="utf-8")
+        res = self.commit(proj, "登记 I-001", [".agent/improvements.md"])
+        self.assertEqual(res.returncode, 0, msg=H.out(res))
+        self.assertIn("I-001", H.out(H.wsc("improve", str(proj))))
+
+    def test_f_rule_files_are_still_not_self_authorized(self):
+        """自授权只覆盖卡片与登记表：规则文件仍不许随实现卡改。"""
+        proj = self.fresh_project(extra_cards=(("T-031", {"allowed": ["  - docs/"]}),))
+        self.assertEqual(self.commit(proj, "入库").returncode, 0)
+        (proj / ".agent" / "roles" / "reviewer.md").write_text("偷偷改规则\n", encoding="utf-8")
+        res = self.commit(proj, "改规则", [".agent/roles/reviewer.md"])
+        self.assertNotEqual(res.returncode, 0, msg=H.out(res))
+        self.assertIn("未挂任何任务卡", H.out(res))
+
+    def test_g_overlapping_todo_card_no_longer_frames_the_owner(self):
+        """A3 假阳性回归：同一文件被 doing 与 todo 两张卡覆盖时，已认领的一方不该被诬告。"""
+        proj = self.fresh_project(extra_cards=(
+            ("T-041", {"assignee": "[zcode-0926a]", "allowed": ["  - docs/"]}),
+            ("T-042", {"status": "todo", "assignee": "[]", "allowed": ["  - docs/"]}),
+        ))
+        self.assertEqual(self.commit(proj, "两张都指向 docs/ 的卡入库").returncode, 0)
+        (proj / "docs" / "ARCHITECTURE.md").write_text("T-041 的活\n", encoding="utf-8")
+        res = self.commit(proj, "已认领者交工", ["docs/ARCHITECTURE.md"])
+        self.assertEqual(res.returncode, 0, msg=H.out(res))
+
+    def test_h_no_resident_card_in_skeleton(self):
+        """死锁的根因是"唯一授权来源是一张必须长持的卡"，路修通后它不该再出现。"""
+        self.assertFalse((H.SKELETON / BOARD).exists())
 
 
 if __name__ == "__main__":

@@ -20,18 +20,17 @@
 3. **认领与状态流转的提交必须直接进共享分支 main**——跟功能分支走 = 别人看不见你认领了，先到先得即失效
 4. owner 冲突（两工具同时认领同一卡）：以 git 历史时间戳先者为准，后到者换卡
 
-## 看板改动与登记怎么提交（执法现状下的绕行，非设计意图）
+## 看板改动与登记怎么提交
 
-`backlog/` 与 `.agent/` 是每张卡 `forbidden_paths` 的默认值，而卡自身的改动、improvements 登记
-都需要"挂到某张卡的 allowed_paths 上"才放行 —— 于是**认领/状态流转/登记这三类提交先要认领常驻规则卡**
-`backlog/tasks/T-000-board.md`：
+卡片文件（`backlog/tasks/*.md`）与 `.agent/improvements.md` 是**自授权改动**：认领、状态流转、
+改进登记这三类提交不需要再被某张卡的 `allowed_paths` 覆盖，直接 commit + push main。
+它们仍受同一套全局纪律约束——一卡一 assignee、一 harness 一张 doing 卡、卡体缺"## 边界"节即违规。
 
-1. `backlog task edit T-000-board -a <你的标识> -s doing` + commit + push main（它的 allowed_paths 含 `backlog/` 与 `.agent/improvements.md`）
-2. 本轮只动看板与登记表；**持它期间不要再持实现卡**（"一 harness 一张 doing 卡"是硬门禁，两张会撞 `--tasks`）
-3. 提交时只 `git add` 看板/登记文件（`--diff` 判的是暂存集）
-4. 收工把 T-000-board 退回 todo 并进 main，让给下一轮需要动看板的人
+规则文件（`AGENTS.md`、`.agent/roles|workflows|tasks`）不在自授权之列：永远串行，只允许一张"规则卡"在跑。
 
-缺口已登记 I-001（状态：登记）。攒够第二次同类摩擦或经 evolve 审核后，把放行规则写进 check.py 本体，本卡随之删除。
+**为什么这样定**：2026-09-28 并发演练实测，要求这三类改动也挂卡会让认领彻底无路可走——
+唯一的授权来源是常驻规则卡，而持它再领实现卡会撞"一 harness 一张 doing 卡"，
+退回它又卡在"该卡仍为 todo"上，四条路全部 rc=1。缺口登记为 I-001，本条是它的晋升产物。
 
 ## pull 时机（写死，三处）
 
