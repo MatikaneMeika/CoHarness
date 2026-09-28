@@ -30,7 +30,7 @@
 ## 维护模式（匹配角色干活）
 
 1. 每次**先跑** `python <库>\wsc.py sync <路径>`（pull + 看板摘要 + stale 报告；01/04 无看板则跳过）
-2. 读项目 `AGENTS.md`，按其"工作方式"节定位 workflow；03 多 harness 另按 `.agent/workflows/parallel-protocol.md` 认领开工
+2. 读项目 `AGENTS.md`，按其"工作方式"节定位 workflow；03 多 harness 另按 `.agent/workflows/parallel-protocol.md` 认领开工——认领走 `python <库>\wsc.py claim <路径> <卡号> <标识>`（同步+校验+提交+推送绑成一步，被抢会自动还原并列出可认领的卡）
 3. **按任务性质套角色**（同一会话可身兼多角，但实现与审查必须分开两轮）：
 
    | 任务性质 | 角色（按所选骨架取用） |

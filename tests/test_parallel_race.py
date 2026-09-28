@@ -1,10 +1,12 @@
 """并发竞态探针：bare origin + clone + 两个 linked worktree，全程真钩子。
 
 钉住两类东西：
-- 硬断言：修好之后必须成立的（自授权认领跨 worktree 能走通、开工自愈装上钩子）
+- 硬断言：修好之后必须成立的（自授权认领跨 worktree 能走通、开工自愈装上钩子、
+  边界交集当场被拒、同一张卡两次认领恰好一个成功）
 - expectedFailure：还没解决的规则缺口。它们现在按"应有行为"断言会红，
   所以挂 expectedFailure；哪天变绿（unexpected success）就是该动手的信号。
-  缺口在试点项目 .agent/improvements.md 登记（I-002 认领原子性 / I-003 边界交集 / I-004 main 无复查）。
+  缺口在试点项目 .agent/improvements.md 登记（I-004 main 无复查；I-002 认领原子性已由
+  wsc claim 闭口，见 test_b）。
 """
 import shutil
 import sys
@@ -75,18 +77,23 @@ class RaceGround(unittest.TestCase):
         self.assertIn("assignee: [h-a]", self.main_card("T-001"))
         self.assertIn("assignee: [h-b]", self.main_card("T-002"))
 
-    @unittest.expectedFailure
     def test_b_double_claim_must_not_be_stolen_silently(self):
-        """I-002：B 不 pull 就认领同一张卡，rebase -X theirs 之后 A 的认领还在不在。"""
-        self.assertEqual(self.claim("wt-a", "T-001", "h-a").returncode, 0)
-        self.assertEqual(self.push("wt-a").returncode, 0)
-        b = self.claim("wt-b", "T-001", "h-b", pull=False)   # 跳过 pull，正是协议禁止的动作
-        self.assertEqual(b.returncode, 0, msg=H.out(b))      # 钩子看不见 A 的认领，判它合法
-        self.assertNotEqual(self.push("wt-b").returncode, 0)  # git 确实拒了
-        H.git(self.tmp / "wt-b", "pull", "-q", "--rebase", "-X", "theirs", "origin", "main")
-        self.assertEqual(self.push("wt-b").returncode, 0)
-        self.assertIn("assignee: [h-a]", self.main_card("T-001"),
-                      "期望：A 的先占不被静默覆盖（现实：被 -X theirs 吃掉且无人报警）")
+        """I-002 已闭口：认领走 wsc claim（同步+校验+提交+推送绑成一步），同一张卡第二方必败且干净。
+
+        原来这条挂 xfail，是因为协议里的小手工步（pull --rebase -X theirs）会静默吃掉先占者；
+        现在认领原子化到命令里，同步是命令内部的事，跳过同步就没机会写到 main。
+        """
+        self.assertEqual(H.wsc("claim", str(self.tmp / "wt-a"), "T-001", "h-a").returncode, 0)
+        self.assertIn("assignee: [h-a]", self.main_card("T-001"))
+        r = H.wsc("claim", str(self.tmp / "wt-b"), "T-001", "h-b")
+        self.assertNotEqual(r.returncode, 0, msg="第二方认领同一张卡必须失败")
+        self.assertIn("已被 h-a 认领", H.out(r))
+        self.assertIn("assignee: [h-a]", self.main_card("T-001"), "先占者不能被静默覆盖")
+        self.assertNotIn("h-b", H.git(self.tmp / "wt-b", "status", "--porcelain").stdout,
+                         "落败方不能留半截改动")
+        # 落败方仍然可以领走另一张不相干的卡：拒绝不是把看板锁死
+        self.assertEqual(H.wsc("claim", str(self.tmp / "wt-b"), "T-002", "h-b").returncode, 0)
+        self.assertIn("assignee: [h-b]", self.main_card("T-002"))
 
     def test_c_overlapping_boundaries_are_blocked_at_claim(self):
         """I-003 已晋升：两张 allowed_paths 交集的卡同时在做，执法当场拒绝（原来只靠 git 撞车）。"""

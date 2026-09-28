@@ -16,10 +16,15 @@
 
 ## 认领（先到先得）
 
-1. 认领动作 = `backlog task edit T-xxx -a <harness标识> -s doing` + **commit + push 到 main**
-2. harness 标识 = 工具名 + 会话尾缀，如 `zcode-0926a`；一卡只允许一个 assignee
-3. **认领与状态流转的提交必须直接进共享分支 main**——跟功能分支走 = 别人看不见你认领了，先到先得即失效
-4. owner 冲突（两工具同时认领同一卡）：以 git 历史时间戳先者为准，后到者换卡
+1. **首选一条命令**：`python <CoHarness>/wsc.py claim <项目> T-xxx <harness标识>`
+   —— 它把"fetch + 变基 + 读卡校验 + 写卡 + 过项目 check.py + commit + push main"绑成一步，
+   任何一步不成都还原，不会留下半截认领；被抢则退出并列出此刻可认领的卡
+2. 手工路径（用 backlog CLI 或不带 wsc 时）：`backlog task edit T-xxx -a <harness标识> -s doing`
+   + **commit + push 到 main**；先 pull 再改，改完立刻推
+3. harness 标识 = 工具名 + 会话尾缀，如 `zcode-0926a`；一卡只允许一个 assignee
+4. **认领与状态流转的提交必须直接进共享分支 main**——跟功能分支走 = 别人看不见你认领了，先到先得即失效
+5. owner 冲突（两工具同时认领同一卡）：以 git 先推入 main 者为准，后到者换卡；
+   手工路径靠 pull 时机兜，`wsc claim` 靠推送被拒后重新同步再判一次
 
 ## 看板改动与登记怎么提交
 

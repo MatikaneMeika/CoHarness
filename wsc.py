@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -438,6 +439,158 @@ def cmd_doctor(_args):
         print("\n全部就绪。")
 
 
+def _find_card(project: Path, card_id: str):
+    """按 frontmatter 的 id 找卡文件（兼容手工 T-001.md 与 backlog 的 t-1 - 标题.md）。"""
+    d = project / "backlog" / "tasks"
+    if not d.is_dir():
+        return None
+    for p in sorted(d.glob("*.md")):
+        try:
+            text = p.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if re.search(rf"^id:\s*{re.escape(card_id)}\s*$", text, re.M) and text.startswith("---"):
+            return p
+    return None
+
+
+def _card_fields(text: str):
+    get = lambda k: (re.search(rf"^{k}:\s*(.*)$", text, re.M) or [None, ""])[1].strip()
+    assignee = get("assignee")
+    who = [w for w in re.split(r"[,\s]+", assignee.strip("[]\"'")) if w]
+    return get("status").strip("\"'").lower(), who
+
+
+def _claimable(project: Path, limit=6):
+    d = project / "backlog" / "tasks"
+    out = []
+    if d.is_dir():
+        for p in sorted(d.glob("*.md")):
+            try:
+                text = p.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            if not text.startswith("---"):
+                continue
+            status, who = _card_fields(text)
+            cid = re.search(r"^id:\s*(\S+)", text, re.M)
+            if status == "todo" and not who and cid:
+                out.append(cid.group(1))
+    return out
+
+
+def _set_card_field(text, key, value):
+    """改写卡片 frontmatter 的一个标量键；键不存在就按声明子集追加。"""
+    line = f"{key}: {value}"
+    if re.search(rf"^{key}:", text, re.M):
+        return re.sub(rf"^{key}:.*$", line, text, count=1, flags=re.M)
+    if text.startswith("---\n"):
+        head, sep, rest = text.partition("\n---")
+        return f"{head}\n{line}\n---{rest}"
+    return line + "\n" + text
+
+
+def _stage_claim(project, card_id, who, now):
+    """把认领写进卡并交给项目自己的 check.py 判：返回 (卡片相对路径, None) 或 (None, 失败原因)。
+
+    判定不另写一套——一 harness 一张 doing 卡、边界交集不得并行都在 check.py 里，
+    这里只负责"被拒就把卡还原成读到的原文"。
+    """
+    path = _find_card(project, card_id)
+    if path is None:
+        return None, f"卡 {card_id} 不在看板上"
+    text = path.read_text(encoding="utf-8")
+    status, owners = _card_fields(text)
+    if owners and owners != [who]:
+        return None, f"已被 {', '.join(owners)} 认领（状态 {status or '空'}）"
+    if status not in ("todo", ""):
+        return None, f"状态是 {status}，只有 todo 可领"
+    rel = path.relative_to(project).as_posix()
+    new = _set_card_field(text, "status", "doing")
+    new = _set_card_field(new, "assignee", f"[{who}]")
+    new = _set_card_field(new, "updated_date", now)
+    path.write_text(new, encoding="utf-8", newline="\n")
+    verdict = _run([sys.executable, "scripts/check.py", "--tasks"], project, timeout=120)
+    if verdict.returncode != 0:
+        path.write_text(text, encoding="utf-8", newline="\n")
+        detail = ((verdict.stdout or "") + (verdict.stderr or "")).strip()
+        return None, f"认领被执法拒回（已还原 {rel}）：\n{detail}"
+    return rel, None
+
+
+def cmd_claim(args):
+    """原子认领：先同步，再校验，写卡过钩子，推 main；被抢就放弃并回到远端状态。
+
+    冲突判定不另写一套：写卡后交给项目自己的 check.py --tasks（一 harness 一张 doing 卡、
+    边界交集不得并行都在那里）。认领被拒时 reset --hard origin/main 是安全的，
+    因为开头已经确认过工作区干净。
+    """
+    project = Path(args.project).resolve()
+    if not (project / "scripts" / "check.py").exists():
+        sys.exit(f"未找到 {project / 'scripts' / 'check.py'}（该骨架不带执法脚本，无需认领）")
+    path = _find_card(project, args.card)
+    if path is None:
+        sys.exit(f"[claim] 找不到卡 {args.card}（在 {project / 'backlog' / 'tasks'} 里按 id 查）")
+
+    if args.dry_run:
+        status, who = _card_fields(path.read_text(encoding="utf-8"))
+        print(f"[claim --dry-run] {args.card}: status={status or '空'} assignee={who or '（无）'}")
+        print(f"  将改为 status: doing / assignee: [{args.who}]，过 check.py 后 commit 并 push origin HEAD:main")
+        free = _claimable(project)
+        print(f"  此刻可认领：{', '.join(free) if free else '（无）'}")
+        return
+
+    dirty = _run(["git", "status", "--porcelain"], project)
+    if (dirty.stdout or "").strip():
+        sys.exit("[claim] 工作区有未提交改动：先提交或撤销再认领，"
+                 "免得把别人的改动卷进这次提交")
+
+    has_remote = "origin" in (_run(["git", "remote"], project).stdout or "")
+    if has_remote:
+        r = _run(["git", "fetch", "-q", "origin"], project)
+        if r.returncode != 0:
+            sys.exit(f"[claim] fetch 失败：{(r.stderr or r.stdout).strip()}")
+        rebase = _run(["git", "rebase", "-q", "origin/main"], project)
+        if rebase.returncode != 0:
+            _run(["git", "rebase", "--abort"], project)
+            sys.exit("[claim] 与 origin/main 变基冲突，已中止变基不做半截认领："
+                     f"\n{(rebase.stdout or '') + (rebase.stderr or '')}")
+
+    # 校验与写卡都在同步之后：同步前读到的快照可能已被别人改走，
+    # 拿旧快照改写就是静默覆盖别人的认领（演练抓到的 A1 形态）。
+    now = f"{datetime.now():%Y-%m-%d %H:%M}"
+    out = ""
+    for attempt in range(1, 4):
+        # 每一轮都从当前树重新写卡：上一轮推送失败后已经回滚到远端状态，
+        # 这一轮的 _stage_claim 顺带负责"抢输了"的判定。
+        rel, why = _stage_claim(project, args.card, args.who, now)
+        if rel is None:
+            free = ", ".join(_claimable(project)) or "（无，等看板更新）"
+            if attempt == 1:
+                sys.exit(f"[claim] {args.card} {why}。此刻可认领：{free}")
+            sys.exit(f"[claim] 抢输了：{args.card} {why}，已回到远端状态。"
+                     f"此刻可认领：{free}\n{out}")
+        if _run(["git", "add", rel], project).returncode != 0:
+            sys.exit("[claim] git add 失败")
+        commit = _run(["git", "commit", "-q", "-m", f"claim {args.card} -> {args.who}"], project)
+        out += (commit.stdout or "") + (commit.stderr or "")
+        if commit.returncode != 0:
+            # 开头确认过工作区干净，此刻盘上只有这张卡的改动，硬回退不会伤到别人
+            _run(["git", "reset", "-q", "--hard", "HEAD"], project)
+            sys.exit(f"[claim] 提交被钩子拦下（已还原）：\n{out}")
+        if not has_remote:
+            print(f"[claim] 已本地认领 {args.card} → {args.who}（无 origin 远端，跳过 push：{rel}）")
+            return
+        push = _run(["git", "push", "-q", "origin", "HEAD:main"], project)
+        if push.returncode == 0:
+            print(f"[claim] {args.card} → {args.who}（第 {attempt} 次尝试，已进 main）")
+            return
+        out += (push.stdout or "") + (push.stderr or "")
+        _run(["git", "fetch", "-q", "origin"], project)
+        _run(["git", "reset", "-q", "--hard", "origin/main"], project)
+    sys.exit(f"[claim] 三次推送都被拒，已回到远端状态：\n{out}")
+
+
 def main():
     _utf8_streams()
     ap = argparse.ArgumentParser(description="CoHarness 工具链")
@@ -453,15 +606,21 @@ def main():
     p_check.add_argument("project", nargs="?", help="项目路径（默认当前目录）")
     p_imp = sub.add_parser("improve", help="列出项目待审改进条目")
     p_imp.add_argument("project", nargs="?", help="项目路径（默认当前目录）")
+    p_claim = sub.add_parser("claim", help="原子认领一张 todo 卡（写卡+过钩子+推 main）")
+    p_claim.add_argument("project", help="项目路径")
+    p_claim.add_argument("card", help="卡片 id，如 T-003")
+    p_claim.add_argument("who", help="认领者标识（harness id，与卡 assignee/分支名一致）")
+    p_claim.add_argument("--dry-run", action="store_true", help="只报告会不会成功，不写盘不提交")
     sub.add_parser("doctor", help="依赖自检")
     args = ap.parse_args()
 
     if args.cmd is None:
         cmd_list(None)
-        print("\n用法: python wsc.py {list|init|sync|check|improve|doctor} ...（-h 看详情）")
+        print("\n用法: python wsc.py {list|init|sync|check|improve|claim|doctor} ...（-h 看详情）")
         return
     {"list": cmd_list, "init": cmd_init, "sync": cmd_sync,
-     "check": cmd_check, "improve": cmd_improve, "doctor": cmd_doctor}[args.cmd](args)
+     "check": cmd_check, "improve": cmd_improve, "claim": cmd_claim,
+     "doctor": cmd_doctor}[args.cmd](args)
 
 
 if __name__ == "__main__":

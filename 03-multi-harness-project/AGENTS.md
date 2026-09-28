@@ -55,7 +55,7 @@
 - 看板与卡片：`backlog board` / `backlog task list` / `backlog task view T-xxx`
 - 建卡 / 改卡：`backlog task create` / `backlog task edit`（卡片格式约定见 `.agent/tasks/CARD-CONVENTION.md`）
 - 状态四列：`todo → doing → review → done`（写在 `backlog/config.yml` 的 `statuses`；真工具默认是 `To Do / In Progress / Done`，装机时按 wsc init 的提示改成这四列）
-- 认领 = `-a <harness标识> -s doing` 且**提交直接进 main**；一卡一 assignee；卡片与 `.agent/improvements.md` 属自授权改动（不再要求挂卡），细则见 parallel-protocol
+- 认领 = `python <CoHarness>/wsc.py claim <项目> T-xxx <harness标识>`（同步+校验+提交+推送绑成一步，被抢就还原并列出可认领的卡）；手工路径为 `backlog task edit -a <标识> -s doing` 且**提交直接进 main**；一卡一 assignee；卡片与 `.agent/improvements.md` 属自授权改动（不再要求挂卡），细则见 parallel-protocol
 
 ## 角色一览
 
