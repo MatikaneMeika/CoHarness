@@ -17,7 +17,8 @@
 8. **`evolve.py` 在开发面，不在分发面**：它是骨架库维护者的晋升审核工具（读项目登记表、跨本机实例数同类摩擦、在**临时副本**里试装补丁跑自测），因此不随 `wsc init` 进任何下游项目，`curl` 单文件模式也带不动它。它同样只用标准库、不出网；对下游项目只读，唯一的写是你指定的 `--out` 记录文件；`--apply-check` 只在系统临时目录里动，本体一个字不改，临时目录跑完即删
 9. **`maintain.py` 在维护面**：管已实例化项目的装机指纹与升级。写盘只有两处——`.agent/skeleton.lock`（`lock` 子命令）和 `migrate --yes` 显式升级；`migrate` 默认 dry-run 且落盘前自动建备份分支，`audit` 全程只读。它不联网、只用标准库
 10. **最小模式（`init --minimal`）关掉了什么**：卡片层执法（改动挂卡、认领冲突、边界交集）依赖任务卡，没卡时 `check.py` 显式打印"最小模式关闭"并放行，命名规范与登记管线照常执法。关掉与留下的都在项目 `AGENTS.md` 的「最小模式」节里写着；补一张卡进 `backlog/tasks/` 即恢复执法——执法读文件，不读工具
-11. **审计者视角**：想知道这些承诺是不是真的，跑 `python -m unittest discover -s tests`——`tests/test_distribution_surface.py` 会用 AST 检查三个脚本的 import 全在标准库或同目录模块、无网络符号、无 eval/exec、行数在上限内，并检查文档里没留下已经腐烂的手写数字
+11. **审计者视角**：想知道这些承诺是不是真的，跑 `python -m unittest discover -s tests`——`tests/test_distribution_surface.py` 会用 AST 检查四个门面的 import 全在标准库或同目录模块、无网络符号、行数在上限内，并检查文档里没留下已经腐烂的手写数字
+12. **展示面（`board.py` + `panel.py`）只读，且是全链唯一的动态执行点**：面板不写文件、不认领、不改卡、不出网，跑完项目的工作区与 `git status` 一模一样（`tests/test_panel.py::test_panel_writes_nothing_into_the_project` 钉住，且断言不留 `__pycache__`）。它读卡片时**复用项目自己的** `scripts/check.py`——理由是"卡片格式与边界只准有一套口径"，而那份文件本来就每次提交都被 pre-commit 执行。技术上用 `exec(compile(...))` 而非 `importlib`，因为后者会在别人的项目目录里留下 `__pycache__`。这个口子被 `test_only_the_projects_own_check_py_may_be_executed` 钉死在最小范围：整个 `board.py` 只允许一次 `exec` 与一次 `compile`，且被执行的路径必须是 `<项目>/scripts/check.py`；除此之外四个门面仍一律禁 `eval`/`exec`
 
 ## 供应链建议
 

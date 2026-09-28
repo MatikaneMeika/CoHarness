@@ -17,15 +17,16 @@ import helpers as H
 SHIPPED = (H.WSC, H.CHECK_SRC)                  # 分发面：随骨架进每个下游项目，可 curl 单文件
 DEV = (H.REPO / "evolve.py",)                    # 开发面：审骨架本体
 MAINT = (H.REPO / "maintain.py",)                # 维护面：管已实例化项目的指纹/迁移/体检
-ALL = SHIPPED + DEV + MAINT
-FIRST_PARTY = {"wsc", "maintain"}                 # 同目录自带模块（evolve 读指纹会 import maintain）
+VIEW = (H.REPO / "board.py", H.REPO / "panel.py")  # 展示面：只读看板（装配/渲染与终端分开）
+ALL = SHIPPED + DEV + MAINT + VIEW
+FIRST_PARTY = {"wsc", "maintain", "board"}         # 同目录自带模块（panel 复用 board，evolve 读指纹 import maintain）
 # 行数上限：只防"无人再读得动"，不防正常生长；超了先删冗余或按面分层拆出去，别抬数字。
 # wsc.py 比 check.py 宽是因为 README 承诺"curl 一个文件就能装机"，下游命令不许散到多文件；
 # check.py 才是复制进每个项目的那一份，最严。新增能力一律进 maintain.py / evolve.py。
 # 2026-09-28 定字：wsc.py 到 1250 为止，之后**新命令一律进 maintain.py**（决策记录见
 # docs/EVOLUTION-PLAN.md 的 ADR-10 附注）。这条上限是最后一次为 wsc.py 上调。
 LINE_BUDGET = {H.WSC: 1250, H.CHECK_SRC: 650, H.REPO / "evolve.py": 400,
-               H.REPO / "maintain.py": 700}
+               H.REPO / "maintain.py": 700, H.REPO / "board.py": 540, H.REPO / "panel.py": 220}
 NETWORK_TOKENS = ("urllib.request", "http.client", "socket", "ftplib", "smtplib",
                   "poplib", "imaplib", "telnetlib", "requests", "urllib3", "httpx", "aiohttp")
 
@@ -62,8 +63,8 @@ class DistributionSurface(unittest.TestCase):
                              if m.split(".")[0] not in sys.stdlib_module_names)
             self.assertEqual(non_std, [], f"分发面 {p.name} 引了非标准库依赖: {non_std}")
 
-    def test_dev_and_maint_faces_may_only_add_first_party_module(self):
-        for p in DEV + MAINT:
+    def test_dev_maint_and_view_faces_may_only_add_first_party_modules(self):
+        for p in DEV + MAINT + VIEW:
             extra = sorted(m for m in imports_of(p)
                            if m.split(".")[0] not in sys.stdlib_module_names and m not in FIRST_PARTY)
             self.assertEqual(extra, [], f"{p.name} 引了第三方依赖: {extra}")
@@ -82,9 +83,31 @@ class DistributionSurface(unittest.TestCase):
             calls = [n.func.id for n in ast.walk(tree)
                      if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)]
             self.assertNotIn("eval", calls, f"{p.name} 用了 eval")
-            if p != H.CHECK_SRC:
-                # check.py 本体没有 exec；把它当模块载入只发生在测试侧（helpers.load_check_module）
+            if p != H.CHECK_SRC and p != H.REPO / "board.py":
+                # board.py 的执行点是唯一放行的，见 test_only_the_projects_own_check_py_may_be_executed
+                pass
+            if p != H.CHECK_SRC and p != H.REPO / "board.py":
                 self.assertNotIn("exec", calls, f"{p.name} 用了 exec")
+
+    def test_only_the_projects_own_check_py_may_be_executed(self):
+        """整个工具链唯一的动态执行点：展示面载入**项目自己的** scripts/check.py。
+
+        放行理由：pre-commit 每次提交都在执行这份文件，面板只是把它读卡片的那部分
+        在同一进程里再读一遍——为的是"卡片格式与边界只有一套口径"。用 exec 而不是
+        importlib 是因为后者会在别人的项目里留下 __pycache__（破"只读"承诺）。
+        这条测试把口子钉死在一处：多一个 exec、或执行的路径不再是 scripts/check.py，就红。
+        """
+        src = (H.REPO / "board.py").read_text(encoding="utf-8")
+        tree = ast.parse(src)
+        calls = [n.func.id for n in ast.walk(tree)
+                 if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)]
+        self.assertEqual(calls.count("exec"), 1, "exec 只允许出现在 load_check 一处")
+        self.assertEqual(calls.count("compile"), 1)
+        fn = next(n for n in tree.body
+                  if isinstance(n, ast.FunctionDef) and n.name == "load_check")
+        seg = ast.get_source_segment(src, fn) or ""
+        self.assertIn('Path(project) / "scripts" / "check.py"', seg,
+                      "被执行的必须是项目自己的执法脚本，不是任意路径")
 
     def test_scripts_stay_readable_within_budget(self):
         for p in ALL:
@@ -98,6 +121,8 @@ class DistributionSurface(unittest.TestCase):
         src = H.WSC.read_text(encoding="utf-8")
         self.assertNotIn("cmd_evolve", src)
         self.assertNotIn('"evolve"', src)
+        self.assertNotIn("import board", src, "看板是第四面，不接进分发面的单文件")
+        self.assertNotIn("panel", src, "同上")
         self.assertIn("evolve.py", (H.REPO / "docs" / "EVOLUTION-PROCESS.md")
                       .read_text(encoding="utf-8"),
                       "管线文档要写清审核命令是 evolve.py，别让人去喊 wsc evolve")

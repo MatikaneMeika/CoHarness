@@ -45,6 +45,7 @@
    | 学习（02 持续型）：出题 / 讲解 / 错题 | quizmaster、tutor、error-auditor |
 
 4. 干活全程遵守项目 AGENTS.md 的全局禁令与角色约束；收工按 parallel-protocol 汇报（03）或项目 workflow 的收尾节（其余骨架）
+5. 想知道全局状态（谁在做哪张卡、做到哪一步、哪里不一致）→ `python <库>\panel.py --plain [--project 路径]`：只读看板，按角色分组并把“提交了没勾 / 勾了没提交 / 跨工作树分叉”标出来，不写任何文件
 
 ## 自我迭代
 

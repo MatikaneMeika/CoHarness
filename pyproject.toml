@@ -1,7 +1,8 @@
 # CoHarness — 骨架库与工具链
 #
 # 打包原则（ADR-10：依赖面按分发面分层）：
-#   * 运行期零第三方依赖——wsc.py / maintain.py / evolve.py / scripts/check.py 全用标准库；
+#   * 运行期零第三方依赖——四个门面（wsc.py / maintain.py / evolve.py / board.py+panel.py）与 scripts/check.py
+#   全用标准库；
 #     python-frontmatter 只作为**开发期差分预言机**放在 dev extra，绝不进运行时路径。
 #   * 单文件模式必须继续可用：`curl -O .../wsc.py` 后 `python wsc.py init ...` 照旧工作，
 #     所以这里只是把整库装成包给想要 `wsc` 命令的人，不改动源码结构。
@@ -35,6 +36,7 @@ Security = "https://github.com/MatikaneMeika/CoHarness/blob/main/SECURITY.md"
 wsc = "coharness.wsc:main"
 coharness-maintain = "coharness.maintain:main"
 coharness-evolve = "coharness.evolve:main"
+coharness-panel = "coharness.panel:main"
 
 # 开发期工具（差分预言机）。没装它们，`python -m unittest discover -s tests` 照样全绿，
 # 只是那 4 条对照用例自动 skip。

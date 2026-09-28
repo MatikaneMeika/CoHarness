@@ -1,0 +1,299 @@
+"""展示面测试：board.py 的装配/渲染与 panel.py 的导航。
+
+三条不容妥协的口径，逐条钉住：
+1. **只读**——面板跑完不许留下任何文件改动或 __pycache__（写路径只有 wsc claim）；
+2. **不写第二套解析器**——卡片必须经项目自己的 scripts/check.py 读，缺函数就降级不崩；
+3. **报警要有凭据**——"提交了没勾""跨工作树分叉"这些旗子必须由真 git 状态触发，
+   不能是渲染层的装饰。角色一律从 AGENTS.md 所有权表推，推不到就明说推不到。
+"""
+import shutil
+import subprocess
+import sys
+import unittest
+from pathlib import Path
+
+import helpers as H
+
+sys.path.insert(0, str(H.REPO))
+import board                                               # noqa: E402
+import panel as panel_mod                                  # noqa: E402
+
+CARD = """---
+id: {cid}
+title: {title}
+status: {status}
+assignee: {assignee}
+labels: []
+created_date: 2026-09-20
+updated_date: {updated}
+---
+
+## 需求
+{title}
+
+## 技术口径
+（architect 填）
+
+## 边界
+allowed_paths:
+{allowed}
+forbidden_paths:
+  - AGENTS.md
+  - .agent/
+
+## 验收清单
+{items}
+
+## 交接说明
+（收工时填，≤5 行）
+"""
+
+
+def git(proj, *args):
+    return H.run(["git", *H.GIT_ID[:4], *args], cwd=proj)
+
+
+def make_card(proj, cid, *, status="doing", assignee="[wt-a]", allowed=("  - docs/",),
+              items=("- [ ] 第一条", "- [ ] 第二条"), updated="2026-09-28 09:00",
+              title=None):
+    d = Path(proj) / "backlog" / "tasks"
+    d.mkdir(parents=True, exist_ok=True)
+    p = d / f"{cid}.md"
+    p.write_text(CARD.format(cid=cid, title=title or f"卡 {cid}", status=status,
+                             assignee=assignee, allowed="\n".join(allowed),
+                             items="\n".join(items), updated=updated),
+                 encoding="utf-8", newline="\n")
+    return p
+
+
+class BoardData(unittest.TestCase):
+    def setUp(self):
+        self.tmp = H.tmp_dir()
+        self.addCleanup(H.rmtree, self.tmp)
+        self.proj = self.tmp / "proj"
+        r = H.wsc("init", "03", str(self.proj))
+        self.assertEqual(r.returncode, 0, msg=H.out(r))
+        git(self.proj, "init", "-q", "--initial-branch=main")
+
+    def test_reads_columns_and_ticks_through_the_projects_own_parser(self):
+        make_card(self.proj, "T-010", items=("- [x] 做完的一条", "- [ ] 没做的一条"))
+        snap = board.project_snapshot(self.proj, deep=False)
+        self.assertEqual(snap["columns"], ["todo", "doing", "review", "done"])
+        card = snap["cards"][0]
+        self.assertEqual((card["done"], card["total"]), (1, 2))
+        self.assertEqual(card["status"], "doing")
+        self.assertEqual(card["assignees"], ["wt-a"])
+        self.assertEqual(snap["card_errors"], [])
+
+    def test_role_comes_from_ownership_table_or_says_unknown(self):
+        make_card(self.proj, "T-011", allowed=("  - docs/ARCHITECTURE.md",))
+        make_card(self.proj, "T-012", allowed=("  - notes/xyz/",))
+        snap = board.project_snapshot(self.proj, deep=False)
+        by = {c["id"]: c for c in snap["cards"]}
+        self.assertEqual(by["T-011"]["role"], "architect")
+        self.assertEqual(by["T-012"]["role"], board.UNKNOWN_ROLE)
+
+    def test_template_placeholder_row_still_matches(self):
+        """骨架所有权表里写的是 code/<组件>/，实例化后不会真替换那一行，
+        所以带通配的条目要能匹配到 code/ 下的路径——否则面板对任何 coder 卡都推不出角色。"""
+        make_card(self.proj, "T-013", allowed=("  - code/frontend/",))
+        snap = board.project_snapshot(self.proj, deep=False)
+        self.assertIn("coder", snap["cards"][0]["role"])
+
+    def test_flag_submit_without_tick(self):
+        make_card(self.proj, "T-014", items=("- [ ] 一条",))
+        (self.proj / "docs").mkdir(exist_ok=True)
+        (self.proj / "docs" / "X.md").write_text("改动\n", encoding="utf-8", newline="\n")
+        git(self.proj, "add", "-A")
+        self.assertEqual(git(self.proj, "commit", "-q", "-m", "改 docs").returncode, 0)
+        snap = board.project_snapshot(self.proj)
+        card = next(c for c in snap["cards"] if c["id"] == "T-014")
+        self.assertGreaterEqual(card["commits"], 1)
+        self.assertIn("提交了没勾", card["flags"])
+
+    def test_flag_done_with_unticked_checklist(self):
+        make_card(self.proj, "T-015", status="done", items=("- [x] 一条", "- [ ] 另一条"))
+        snap = board.project_snapshot(self.proj, deep=False)
+        self.assertIn("done 但清单未满", snap["cards"][0]["flags"])
+
+    def test_flag_cross_worktree_divergence(self):
+        """I-007 点名的形状：同一张卡在不同工作树里状态/勾选不一样，面板必须报分叉。"""
+        make_card(self.proj, "T-016", items=("- [ ] 一条",))
+        git(self.proj, "add", "-A")
+        self.assertEqual(git(self.proj, "commit", "-q", "-m", "播卡").returncode, 0)
+        wt = self.tmp / "wt"
+        self.assertEqual(git(self.proj, "worktree", "add", "-q", "-b", "wt",
+                             str(wt)).returncode, 0)
+        p = wt / "backlog" / "tasks" / "T-016.md"
+        p.write_text(p.read_text(encoding="utf-8").replace("- [ ] 一条", "- [x] 一条")
+                     .replace("status: doing", "status: review"), encoding="utf-8", newline="\n")
+        snap = board.project_snapshot(self.proj)
+        card = snap["cards"][0]
+        self.assertIn("跨工作树分叉", card["flags"])
+        self.assertEqual(len(card["copies"]), 2)
+
+    def test_old_check_py_without_minimal_mode_still_reads(self):
+        """没跑 maintain migrate 的老实例：check.py 里可能没有后来加的 minimal_mode，
+        面板要降级继续读，而不是当场炸（这正是 audit 报"漂移"之外的另一面）。"""
+        f = self.proj / "scripts" / "check.py"
+        text = f.read_text(encoding="utf-8")
+        cut = text[text.index("def minimal_mode("):]
+        cut = cut[:cut.index("\ndef ")]
+        self.assertIn("minimal_mode", cut)
+        self.assertNotIn("def load_cards", cut)
+        f.write_text(text.replace(cut, ""), encoding="utf-8", newline="\n")
+        make_card(self.proj, "T-017", items=("- [x] 一条",))
+        snap = board.project_snapshot(self.proj, deep=False)
+        self.assertEqual(snap["cards"][0]["done"], 1)
+        self.assertFalse(snap["minimal"], "有 backlog/tasks 就不是最小模式")
+
+    def test_too_old_check_py_says_what_to_run(self):
+        """连 load_cards 都没有的老执法脚本：要给出可执行补救命令，不许抛 AttributeError。"""
+        (self.proj / "scripts" / "check.py").write_text(
+            "import pathlib\nROOT = pathlib.Path('.')\n", encoding="utf-8", newline="\n")
+        with self.assertRaises(SystemExit) as ctx:
+            board.project_snapshot(self.proj, deep=False)
+        self.assertIn("maintain.py migrate", str(ctx.exception))
+
+    def test_missing_check_py_fails_loudly_with_a_fix_command(self):
+        bare = self.tmp / "bare"
+        bare.mkdir()
+        with self.assertRaises(SystemExit) as ctx:
+            board.project_snapshot(bare)
+        msg = str(ctx.exception)
+        self.assertIn("scripts/check.py", msg)
+        self.assertIn("init", msg)
+
+    def test_panel_writes_nothing_into_the_project(self):
+        make_card(self.proj, "T-018")
+        git(self.proj, "add", "-A")
+        self.assertEqual(git(self.proj, "commit", "-q", "-m", "基线").returncode, 0)
+        before = H.run(["git", "status", "--porcelain"], cwd=self.proj).stdout.strip()
+        board.project_snapshot(self.proj)
+        board.render_projects([{"name": "x", "skeleton": "y", "doing": 0, "todo": 0,
+                                "flags": 0, "errors": 0}], 0, 60, color=True)
+        self.assertEqual(H.run(["git", "status", "--porcelain"], cwd=self.proj).stdout.strip(),
+                         before, "面板是只读面，跑完工作区必须一模一样")
+        junk = [p for p in self.proj.rglob("__pycache__")]
+        self.assertEqual(junk, [], "载入项目 check.py 不许留下 __pycache__")
+
+
+class BoardView(unittest.TestCase):
+    def setUp(self):
+        self.snap = {"path": Path("P"), "name": "示例项目", "label": "示例项目",
+                     "goal": "把事做成", "run": "", "schema": "3",
+                     "columns": ["todo", "doing", "review", "done"], "minimal": False,
+                     "card_errors": [], "owners": [], "heads": [], "diverged": 0,
+                     "cards": [{"id": "T-001", "title": "甲", "status": "doing",
+                                "assignees": ["codex-a"], "role": "coder", "allowed": ["docs/"],
+                                "rel": "backlog/tasks/T-001.md", "done": 1, "total": 2,
+                                "items": [(True, "一"), (False, "二")], "commits": 3,
+                                "recent": [{"sha": "abc1234", "author": "codex-a",
+                                            "ago": "2 hours ago"}],
+                                "authors": ["codex-a"], "copies": [], "flags": ["提交了没勾"],
+                                "updated": "2026-09-28 09:00", "stale": False}],
+                     "telemetry": {"runs": 0, "bad": 0, "file": Path("t"), "last": None,
+                                   "harnesses": []}}
+
+    def test_plain_render_emits_no_escape_sequences(self):
+        lines, order = board.render_tasks(self.snap, 0, 78, color=False)
+        text = "\n".join(lines)
+        self.assertNotIn("\033", text)
+        self.assertEqual(order, [0])
+        self.assertIn("T-001", text)
+        self.assertIn("!提交了没勾", text)
+
+    def test_core_roles_sort_above_workers_and_unknown_last(self):
+        cards = [{"role": "coder", "id": "1"}, {"role": board.UNKNOWN_ROLE, "id": "2"},
+                 {"role": "integrator", "id": "3"}, {"role": "architect", "id": "4"}]
+        order = [role for role, _ in board.grouped_by_role(cards)]
+        self.assertEqual(order[:2], ["integrator", "architect"])
+        self.assertEqual(order[-1], board.UNKNOWN_ROLE)
+
+    def test_card_page_prints_the_command_rather_than_running_it(self):
+        text = "\n".join(board.render_card(self.snap, self.snap["cards"][0], 78, color=False))
+        self.assertIn("wsc.py claim", text)
+        self.assertIn("wsc.py check", text)
+        self.assertIn("maintain.py audit", text)
+        self.assertIn("验收清单", text)
+        self.assertIn("1/2", text)
+
+    def test_chinese_columns_align_by_display_width(self):
+        self.assertEqual(board.dw("骨架"), 4)
+        self.assertLessEqual(board.dw(board.clip("骨架骨架骨架", 6)), 6)
+        self.assertEqual(board.dw(board.pad(board.clip("骨架骨架骨架", 6), 6)), 6)
+        self.assertEqual(board.dw(board.pad("骨架", 10)), 10)
+        self.assertEqual(board.dw(board.rpad("在做", 6)), 6)
+
+
+class Navigate(unittest.TestCase):
+    def base(self):
+        return {"page": "projects", "sel": 0, "cursor": 0, "card": None, "quit": False}
+
+    def test_cursor_clamps_at_both_ends(self):
+        s = board.navigate(self.base(), "up", 3)
+        self.assertEqual(s["cursor"], 0)
+        for _ in range(9):
+            s = board.navigate(s, "down", 3)
+        self.assertEqual(s["cursor"], 2)
+
+    def test_enter_and_back_move_one_level_at_a_time(self):
+        s = board.navigate(self.base(), "enter", 2)
+        self.assertEqual(s["page"], "tasks")
+        s = board.navigate(s, "enter", 2)
+        self.assertEqual(s["page"], "card")
+        s = board.navigate(s, "back", 1)
+        self.assertEqual(s["page"], "tasks")
+        s = board.navigate(s, "back", 2)
+        self.assertEqual(s["page"], "projects")
+        self.assertIsNone(s["card"])
+
+    def test_q_quits_and_projects_cannot_back_out(self):
+        self.assertTrue(board.navigate(self.base(), "q", 1)["quit"])
+        self.assertEqual(board.navigate(self.base(), "back", 1)["page"], "projects")
+
+
+class EndToEnd(unittest.TestCase):
+    def test_plain_mode_lists_registered_projects_and_opens_one(self):
+        tmp = H.tmp_dir()
+        self.addCleanup(H.rmtree, tmp)
+        home = tmp / "home"
+        a, b = tmp / "alpha", tmp / "beta"
+        for proj in (a, b):
+            r = H.wsc("init", "03", str(proj), extra_env={"COHARNESS_HOME": str(home)})
+            self.assertEqual(r.returncode, 0, msg=H.out(r))
+        r = H.run([sys.executable, str(H.REPO / "panel.py"), "--plain"],
+                  extra_env={"COHARNESS_HOME": str(home)})
+        self.assertEqual(r.returncode, 0, msg=H.out(r))
+        out = H.out(r)
+        self.assertIn("本机项目（2）", out)
+        self.assertIn("03-multi-harness-project", out)
+
+        make_card(a, "T-002", status="todo", assignee="[]", items=("- [ ] 一条",))
+        r2 = H.run([sys.executable, str(H.REPO / "panel.py"), "--plain",
+                    "--project", str(a)], extra_env={"COHARNESS_HOME": str(home)})
+        self.assertEqual(r2.returncode, 0, msg=H.out(r2))
+        self.assertIn("任务看板", H.out(r2))
+        self.assertIn("T-002", H.out(r2))
+        # 只读承诺在子进程这条路上同样成立：项目里不许多出文件
+        self.assertEqual(list(a.rglob("__pycache__")), [])
+
+    def test_minimal_instance_is_labeled_not_broken(self):
+        tmp = H.tmp_dir()
+        self.addCleanup(H.rmtree, tmp)
+        proj = tmp / "m"
+        r = H.wsc("init", "03", str(proj), "--minimal")
+        self.assertEqual(r.returncode, 0, msg=H.out(r))
+        out = H.out(H.run([sys.executable, str(H.REPO / "panel.py"), "--plain",
+                          "--project", str(proj)]))
+        self.assertIn("最小模式", out)
+
+    def test_console_script_entry_exists(self):
+        import tomllib
+        data = tomllib.loads((H.REPO / "pyproject.toml").read_text(encoding="utf-8"))
+        self.assertEqual(data["project"]["scripts"]["coharness-panel"], "coharness.panel:main")
+        self.assertTrue(hasattr(panel_mod, "main"))
+
+
+if __name__ == "__main__":
+    unittest.main()

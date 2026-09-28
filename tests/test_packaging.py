@@ -39,12 +39,12 @@ class Packaging(unittest.TestCase):
         self.assertIn("dev", PYPROJECT["project"].get("optional-dependencies", {}),
                       "预言机要作为 dev extra 存在，而不是消失")
 
-    def test_console_scripts_cover_the_three_faces(self):
+    def test_console_scripts_cover_the_four_faces(self):
         scripts = PYPROJECT["project"]["scripts"]
         self.assertEqual(scripts["wsc"], "coharness.wsc:main")
-        for name in ("coharness-maintain", "coharness-evolve"):
+        for name in ("coharness-maintain", "coharness-evolve", "coharness-panel"):
             self.assertIn(name, scripts)
-        for mod in ("wsc", "maintain", "evolve"):
+        for mod in ("wsc", "maintain", "evolve", "panel"):
             tree = ast.parse((H.REPO / f"{mod}.py").read_text(encoding="utf-8"))
             names = {n.name for n in tree.body if isinstance(n, ast.FunctionDef)}
             self.assertIn("main", names, f"{mod}.py 没有可作为入口的 main()")

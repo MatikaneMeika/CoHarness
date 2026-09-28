@@ -88,7 +88,12 @@ project: `maintain.py` (install fingerprint, schema migration, read-only audit) 
 
 ## Self-tests
 
-216 tests, no install required:
+A read-only board is the fourth entry point: `python panel.py --plain` lists projects on this
+machine, then task lists grouped by role and per-card detail. Progress comes from the
+card's own `- [ ]` acceptance checklist, cross-checked against git and local run records;
+mismatches are flagged (`committed but unticked`, `diverged across worktrees`).
+
+237 tests, no install required:
 
 ```bash
 python -m unittest discover -s tests
