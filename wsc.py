@@ -42,8 +42,12 @@ def _run(argv, cwd, timeout=60):
 
 NEXT_STEPS = {
     "03-multi-harness-project": [
-        "npm i -g backlog.md && backlog init --task-prefix T",
-        "  然后把 backlog/ 或 backlog.config.yml 里看板列改为: todo, doing, review, done",
+        "npm i -g backlog.md && backlog init --task-prefix T --agent-instructions none",
+        "  注意：--agent-instructions 会往 AGENTS.md 里注入 24 行它自己的说明（实测 1.53.0），"
+        "协作规则唯一权威是 AGENTS.md，所以这里要写 none",
+        "  然后把 backlog/config.yml 里的 statuses 与 default_status 改成: todo, doing, review, done",
+        "  （真工具默认是 To Do / In Progress / Done，不改的话 `-s doing` 会被它拒绝；"
+        "`backlog config set statuses` 也拒绝直改，只能编辑文件）",
         "uv tool install specify-cli，再对每个在场工具各跑一次:",
         "  specify init --integration zcode   # codex / qodercli / generic（Antigravity）同理",
         "winget install max-sixty.worktrunk   # Windows 下命令为 git-wt",

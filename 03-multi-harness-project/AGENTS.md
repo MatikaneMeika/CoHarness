@@ -53,7 +53,7 @@
 
 - 看板与卡片：`backlog board` / `backlog task list` / `backlog task view T-xxx`
 - 建卡 / 改卡：`backlog task create` / `backlog task edit`（卡片格式约定见 `.agent/tasks/CARD-CONVENTION.md`）
-- 状态四列：`todo → doing → review → done`（`backlog.config.yml` 配置）
+- 状态四列：`todo → doing → review → done`（写在 `backlog/config.yml` 的 `statuses`；真工具默认是 `To Do / In Progress / Done`，装机时按 wsc init 的提示改成这四列）
 - 认领 = `-a <harness标识> -s doing` 且**提交直接进 main**；一卡一 assignee；卡片与 `.agent/improvements.md` 属自授权改动（不再要求挂卡），细则见 parallel-protocol
 
 ## 角色一览

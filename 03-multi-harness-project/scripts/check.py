@@ -210,7 +210,7 @@ def _yaml_list_under(text: str, key: str):
             inline = m.group(1).strip()
             if inline.startswith("[") and inline.endswith("]"):
                 inner = inline[1:-1].strip()
-                return [x.strip() for x in inner.split(",") if x.strip()]
+                return [x.strip().strip("\"'") for x in inner.split(",") if x.strip()]
             in_block = True
             continue
         if in_block:
@@ -233,7 +233,8 @@ def load_config():
     for cand in (ROOT / dirname / "config.yml", ROOT / f"{Path(dirname).name}.config.yml"):
         t = _read_text(cand)
         if t:
-            cols = _yaml_list_under(t, "columns")
+            # 真 Backlog.md 1.53.0 用的键是 statuses；columns 是早期猜测的键名，留着兼容
+            cols = _yaml_list_under(t, "statuses") or _yaml_list_under(t, "columns")
             if cols:
                 columns = [c.strip().lower() for c in cols]
             break

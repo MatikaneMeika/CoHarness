@@ -85,7 +85,7 @@ python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows × 
 - [docs/EVOLUTION-PLAN.md](docs/EVOLUTION-PLAN.md) —— 为什么这么设计（从全自研到借力成熟组件的过程）
 - [SECURITY.md](SECURITY.md) —— 安全与数据安全边界
 
-任务卡用 [Backlog.md](https://github.com/MrLesk/backlog.md)，规格拆解用 [GitHub Spec Kit](https://github.com/github/spec-kit)，工作树用 [Worktrunk](https://github.com/max-sixty/worktrunk)（Windows 下命令叫 git-wt），版本按 2026-09-26 核实。Vibe Kanban 试了解过，已宣布 sunset 且看板数据存在应用目录里不进仓库，放弃。
+任务卡用 [Backlog.md](https://github.com/MrLesk/backlog.md)，规格拆解用 [GitHub Spec Kit](https://github.com/github/spec-kit)，工作树用 [Worktrunk](https://github.com/max-sixty/worktrunk)（Windows 下命令叫 git-wt），版本按 2026-09-26 核实。Backlog.md 1.53.0 在 2026-09-28 真装真跑过：默认看板列是 `To Do / In Progress / Done`，要用本骨架的四列得改 `backlog/config.yml` 的 `statuses`（`backlog config set` 拒绝直改）；它按 `t-<编号> - <标题>.md` 认卡，手工建的 `T-001.md` 工具不列；`backlog init --agent-instructions` 会往 AGENTS.md 注入它自己的说明，本骨架要求写 `none`。Vibe Kanban 试了解过，已宣布 sunset 且看板数据存在应用目录里不进仓库，放弃。
 
 ## License
 

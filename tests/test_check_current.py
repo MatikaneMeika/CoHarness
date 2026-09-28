@@ -105,8 +105,43 @@ class TestCardFormat(TempProjectCase):
         H.write_card(self.proj, "T-014", updated=datetime.now().strftime("%Y-%m-%d %H:%M"))
         self.assertCheck(["--stale"], 0, "[stale] 无僵死卡")
 
+    def test_real_backlog_card_parses(self):
+        """真 Backlog.md 1.53.0 写出的 frontmatter 必须落在我们的子集内（2026-09-28 实测原文）。"""
+        d = self.proj / "backlog" / "tasks"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "t-1 - 探针卡.md").write_text(
+            "---\n"
+            "id: T-1\n"
+            "title: 探针卡：真工具写出的卡长什么样\n"
+            "status: doing\n"
+            "assignee:\n  - '@harness-probe'\n"
+            "created_date: '2026-09-28 04:00'\n"
+            "labels: []\n"
+            "dependencies: []\n"
+            "ordinal: 1000\n"
+            "---\n\n"
+            "## 边界\nallowed_paths:\n  - docs/\nforbidden_paths:\n  - AGENTS.md\n\n"
+            "## Acceptance Criteria\n<!-- AC:BEGIN -->\n- [ ] #1 check.py 全绿\n<!-- AC:END -->\n",
+            encoding="utf-8")
+        self.assertCheck(["--tasks"], 0, "[任务卡] 通过（1 张）")
+
     def test_missing_tasks_dir_is_not_a_failure(self):
+        import shutil
+        shutil.rmtree(self.proj / "backlog" / "tasks")
         self.assertCheck(["--tasks"], 0, "[任务卡] 无任务卡")
+
+    def test_columns_come_from_real_backlog_config_key(self):
+        # Backlog.md 1.53.0 用的键是 statuses；没配才回落默认四列
+        (self.proj / "backlog" / "config.yml").write_text(
+            'project_name: "p"\ndefault_status: "To Do"\n'
+            'statuses: ["To Do", "In Progress", "Done"]\n', encoding="utf-8")
+        H.write_card(self.proj, "T-050", status="In Progress", assignee="[zcode-0926a]",
+                     allowed=["  - docs/"])
+        self.assertCheck(["--tasks"], 0, "[任务卡] 通过（1 张）")
+
+    def test_default_columns_reject_english_status(self):
+        H.write_card(self.proj, "T-051", status="In Progress", allowed=["  - docs/"])
+        self.assertCheck(["--tasks"], 1, "status 非法: 'in progress'")
 
     def test_non_card_files_in_tasks_dir_ignored(self):
         d = self.proj / "backlog" / "tasks"
