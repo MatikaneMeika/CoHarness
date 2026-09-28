@@ -8,7 +8,7 @@
 | 项 | 状态 | 证据 |
 |---|---|---|
 | 包定义 `pyproject.toml` | 已就绪 | `tests/test_packaging.py`（7 条：运行期零依赖、三个入口脚本、wheel 清单覆盖骨架、不夹带开发面文件、指纹可移植、README 双语互链真存在、`init` 复制文件数与文档一致） |
-| 本地安装可用 | 已实测两种 | ① `uv build --wheel` + 干净 venv 里 `pip install --no-build-isolation ./`；② `uv tool install --from <wheel> coharness` 的隔离工具环境（pipx 等价，工具目录指 D 盘）。两条都验到 `wsc list` 列出四套骨架、`wsc init 03 <空目录>` 复制出 27 个文件、`wsc check` 全绿 |
+| 本地安装可用 | 已实测两种 | ① `uv build --wheel` + 干净 venv 里 `pip install --no-build-isolation ./`；② `uv tool install --from <wheel> coharness` 的隔离工具环境（pipx 等价，工具目录指 D 盘）。两条都验到 `wsc list` 列出四套骨架、`wsc init 03 <空目录>` 复制出 27 个文件、`wsc check` 全绿；wheel 含四个门面的模块与入口，装出来的 `coharness-panel` 在仓库外目录跑通（rc=0） |
 | 单文件模式的真实边界 | 已改真 | `README.md` / `README.en.md` / `SECURITY.md` 不再承诺"curl 一个 wsc.py 就能装骨架"；`wsc.py init` 在无骨架目录时给出可执行的两条替代路径（`tests/test_packaging.py::test_single_file_mode_says_what_it_cannot_do`） |
 | 双语 README | 已就绪 | `README.md` ↔ `README.en.md` 互链 |
 | 贡献与审核门禁 | 已就绪 | `CONTRIBUTING.md`、`docs/EVOLUTION-PROCESS.md`、`docs/rfcs/`、`.github/ISSUE_TEMPLATE/*`、`.github/PULL_REQUEST_TEMPLATE.md` |
