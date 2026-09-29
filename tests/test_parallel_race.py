@@ -5,8 +5,9 @@
   边界交集当场被拒、同一张卡两次认领恰好一个成功）
 - expectedFailure：还没解决的规则缺口。它们现在按"应有行为"断言会红，
   所以挂 expectedFailure；哪天变绿（unexpected success）就是该动手的信号。
-  缺口在试点项目 .agent/improvements.md 登记（I-004 main 无复查；I-002 认领原子性已由
-  wsc claim 闭口，见 test_b）。
+  缺口在试点项目 .agent/improvements.md 登记（I-002 认领原子性已由
+  wsc claim 闭口，见 test_b；I-004 main 无复查已于 2026-09-29 由 pre-push 推送门闭口，
+  见 test_d 转正）。
 """
 import shutil
 import sys
@@ -109,20 +110,29 @@ class RaceGround(unittest.TestCase):
         self.assertNotEqual(second.returncode, 0, msg=H.out(second))
         self.assertIn("边界交集不得并行", H.out(second))
 
-    @unittest.expectedFailure
     def test_d_main_must_never_hold_an_illegal_board(self):
-        """I-004：每个提交当时都合法，凑起来 main 上是非法态；rebase/merge 不跑钩子，无人复查。"""
+        """I-004 已闭口（2026-09-29）：每个提交当时都合法（各自基上 pre-commit 全绿），
+        但 merge 不跑 pre-commit——两个合法提交合出来的非法看板，由 pre-push 钩子在
+        推送前拦下，进不了共享 main。原来挂 expectedFailure 钉的是"无人复查"。
+        """
         self.assertEqual(self.claim("wt-a", "T-001", "same-owner").returncode, 0)
         self.assertEqual(self.push("wt-a").returncode, 0)
-        self.assertEqual(self.claim("wt-b", "T-002", "same-owner").returncode, 0)
-        self.assertEqual(self.push("wt-b").returncode, 0)
-        merged = self.tmp / "merged"
-        merged.mkdir()
-        self.assertEqual(H.git(self.tmp, "clone", "-q", str(self.origin), str(merged)).returncode, 0)
-        H.wsc("sync", str(merged))          # 补钩子顺带把 scripts/ 之外的东西不动
-        r = H.check(merged, "--tasks")
-        self.assertEqual(r.returncode, 0, msg="期望：合并后的 main 合法（现实：同一人两张 doing 卡，"
-                                              "只有下一次不相关的提交才会撞上钩子）")
+        # wt-b 不 pull：在旧基上认领 T-002，此刻它自己的看板是合法的（T-001 还是 todo）
+        self.assertEqual(self.claim("wt-b", "T-002", "same-owner", pull=False).returncode, 0)
+        # merge 把 origin/main（含 T-001 doing）合进来：merge 提交不跑 pre-commit，
+        # "same-owner 两张 doing"的非法态就此在本地凑成
+        w = self.tmp / "wt-b"
+        H.git(w, "fetch", "-q", "origin")
+        self.assertEqual(H.git(w, "merge", "-q", "--no-edit", "origin/main").returncode, 0)
+        r = H.check(w, "--tasks")
+        self.assertNotEqual(r.returncode, 0, msg="合并凑出来的非法看板必须被 check 识破")
+        self.assertIn("认领冲突", H.out(r))
+        # 推送门：pre-push 钩子（wsc sync 补装）在 push 前跑 --tasks，非法态推不进 main
+        self.assertTrue((H.hooks_dir(self.proj) / "pre-push").exists(),
+                        "wsc sync 补装应包含 pre-push 推送门")
+        pushed = self.push("wt-b")
+        self.assertNotEqual(pushed.returncode, 0, msg="非法看板必须在推送前被拦下")
+        self.assertIn("pre-push", H.out(pushed))
 
 
 if __name__ == "__main__":

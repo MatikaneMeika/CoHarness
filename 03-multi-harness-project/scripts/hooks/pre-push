@@ -1,0 +1,29 @@
+#!/bin/sh
+# CoHarness 推送门（I-004）：merge/rebase 不跑 pre-commit，两个各自合法的提交
+# 合并出来的非法看板（同人两张 doing、边界交集）只有 push 前还有一次拦的机会。
+# 判的是整个看板（--tasks）：推送进 main 之前，main 将变成的样子必须合法。
+# stale 是 advisory，不在此拦：要看报告跑 scripts/check.py --stale
+
+# 解释器以"真能跑"为准：Windows 上 python3 常常是商店占位符——command -v 找得到，一跑就废，
+# 所以每个候选都跑一次 -c 探。找不到就响亮失败，绝不静默放过推送。
+PY=""
+for c in "python" "python3" "py -3"; do
+  if command -v ${c%% *} >/dev/null 2>&1 && $c -c "import sys" >/dev/null 2>&1; then
+    PY="$c"
+    break
+  fi
+done
+if [ -z "$PY" ]; then
+  echo "pre-push：找不到可用的 Python（试过 python / python3 / py -3），推送被拦。" >&2
+  echo "  装好 Python 再推；自查命令：python scripts/check.py --tasks" >&2
+  exit 1
+fi
+
+$PY scripts/check.py --tasks
+rc=$?
+if [ $rc -ne 0 ]; then
+  echo "" >&2
+  echo "pre-push：看板存在非法态（合并/变基凑出来的也算），推送被拦（I-004）。" >&2
+  echo "  修卡、改派或按所有权表调整后再推；自查命令：python scripts/check.py --tasks" >&2
+  exit $rc
+fi

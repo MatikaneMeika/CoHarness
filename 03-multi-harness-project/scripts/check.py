@@ -407,16 +407,30 @@ def _git_out(args):
 
 
 def staged_files():
-    """本次提交将纳入的改动（含删除；重命名取新路径）。
+    """本次提交将纳入的改动，返回 (新路径列表, 全路径列表)。
 
     判据必须是暂存集而不是工作区：`git status` 会把没 add 的文件、以及被折叠成
     目录的未跟踪项都算进来，全新实例化的项目连第一个提交都拦掉。
+    挂卡判"新路径"（重命名按新路径归属）；所有权核对拿"全路径"——重命名的旧路径
+    也盯，改个名逃不出所有权表。
     """
     ok, out = _git_out(["-c", "core.quotepath=false", "diff", "--cached",
-                        "--name-only", "--no-ext-diff"])
+                        "--name-status", "--no-ext-diff", "-M"])
     if not ok:
         return None
-    return [ln.strip().replace("\\", "/") for ln in out.splitlines() if ln.strip()]
+    fresh, every = [], []
+    for ln in out.splitlines():
+        parts = ln.split("\t")
+        if len(parts) < 2 or not parts[1].strip():
+            continue
+        if parts[0].startswith("R") and len(parts) >= 3:
+            fresh.append(parts[2].replace("\\", "/"))
+            every += [parts[1].replace("\\", "/"), parts[2].replace("\\", "/")]
+        else:
+            p = parts[1].replace("\\", "/")
+            fresh.append(p)
+            every.append(p)
+    return fresh, every
 
 
 def has_commits():
@@ -456,6 +470,60 @@ def minimal_mode():
     return not (ROOT / "backlog" / "tasks").is_dir() and (ROOT / "TODO.md").exists()
 
 
+def ownership_rows():
+    """AGENTS.md 单写者所有权表里**能机械核对**的行：(路径前缀, 角色) + 判不了的行数。
+
+    裁决句说"以表为准、扩权先改表"，但表里写者是角色、卡上 assignee 是 harness 标识
+    （"同一会话可身兼多角"），机械桥梁只有卡上的 `role:` 标签。所以只判"具体路径 +
+    写者恰是角色一览里一个角色"的行；模板行与散文行判不了，报数留给审核人——宁少判，不诬判。
+    """
+    text = _read_text(ROOT / "AGENTS.md")
+    if text is None:
+        return [], 0
+    roles, cands, section = set(), [], ""
+    for ln in text.splitlines():
+        s = ln.strip()
+        if s.startswith("## "):
+            section = s[3:].strip()
+        elif s.startswith("|") and (section == "角色一览"
+                                    or section.startswith("单写者所有权表")):
+            cells = [c.strip().strip("`") for c in s.strip("|").split("|")]
+            if not cells or not cells[0] or set(cells[0]) == {"-"}:
+                continue
+            if section == "角色一览" and cells[0] != "角色" and "<" not in cells[0]:
+                roles.add(cells[0])
+            elif section.startswith("单写者所有权表") and len(cells) >= 2 and cells[0] != "路径":
+                cands.append(cells)
+    rows, opaque = [], 0
+    for cells in cands:
+        named = [t for t in re.findall(r"[A-Za-z][\w-]*", cells[1]) if t in roles]
+        if "<" in cells[0] or re.search(r"[^\w./-]", cells[0]) or len(named) != 1:
+            opaque += 1
+        else:
+            rows.append((norm_prefix(cells[0]), named[0]))
+    return rows, opaque
+
+
+def _owning_row(rel, rows):
+    """rel 命中的最长所有权前缀行；不在任何管辖路径下就 None。"""
+    best = None
+    for path, role in rows:
+        if (rel == path or rel.startswith(path + "/")) and (best is None or len(path) > len(best[0])):
+            best = (path, role)
+    return best
+
+
+def _role_declared(rel, rows, cards):
+    """该路径被表的"可判"行管辖时，覆盖它的在做卡必须带 role: 标签（身兼多角由卡声明）。"""
+    row = _owning_row(rel, rows)
+    if not row:
+        return True
+    act = [c for c in cards if c["status"] in ("doing", "review")
+           and path_covered(rel, c["allowed"])]
+    return any(f"role:{row[1]}" in str(x) for c in act
+               for x in (c["meta"].get("labels") or []))
+
+
 def check_diff(cards, tasks_rel=""):
     changed = staged_files()
     if changed is None:
@@ -467,32 +535,48 @@ def check_diff(cards, tasks_rel=""):
     if not has_commits():
         print("[改动挂卡] 首次入库（仓库还没有提交）：不执法；此后每次提交都必须在卡内")
         return True
-    if not changed:
+    fresh, every = changed
+    if not fresh:
         print("[改动挂卡] 通过（暂存区没有改动）")
         return True
-    ok = True
-    for rel in changed:
+    rows, opaque = ownership_rows()
+    ok, governed = True, 0
+    for rel in every:
         if is_self_authorized(rel, tasks_rel):
             continue
-        covering = [c for c in cards if path_covered(rel, c["allowed"])]
-        if not covering:
+        if rel in fresh:
+            covering = [c for c in cards if path_covered(rel, c["allowed"])]
+            if not covering:
+                ok = False
+                print(f"[改动挂卡] 改动未挂任何任务卡: {rel}")
+                continue
+            blocked = [c for c in covering if path_covered(rel, c["forbidden"])]
+            if blocked:
+                # 禁改优先：任何一张卡点名禁止，别的卡的 allowed_paths 不能把它绕开
+                ok = False
+                print(f"[改动挂卡] {rel} 命中 {blocked[0]['name']} 的 forbidden_paths")
+                continue
+            active = [c for c in covering if c["status"] in ("doing", "review")]
+            if not active:
+                ok = False
+                # 以前逢 todo 就报，会让重叠边界把已正确认领的一方一起诬告（并发演练 A3）
+                print(f"[改动挂卡] {rel} 只被未认领的卡覆盖（{covering[0]['name']} 仍为 todo，"
+                      f"应先认领取 doing）")
+                continue
+            governed += 1 if _owning_row(rel, rows) else 0
+        elif not _role_declared(rel, rows, cards):
             ok = False
-            print(f"[改动挂卡] 改动未挂任何任务卡: {rel}")
+            print(f"[所有权] 扩权: {rel}（重命名旧路径）按所有权表只归 "
+                  f"{_owning_row(rel, rows)[1]} 写——以表为准，扩权先改表")
             continue
-        blocked = [c for c in covering if path_covered(rel, c["forbidden"])]
-        if blocked:
-            # 禁改优先：任何一张卡点名禁止，别的卡的 allowed_paths 不能把它绕开
+        if rel in fresh and not _role_declared(rel, rows, cards):
             ok = False
-            print(f"[改动挂卡] {rel} 命中 {blocked[0]['name']} 的 forbidden_paths")
-            continue
-        active = [c for c in covering if c["status"] in ("doing", "review")]
-        if not active:
-            ok = False
-            # 以前逢 todo 就报，会让重叠边界把已正确认领的一方一起诬告（并发演练 A3）
-            print(f"[改动挂卡] {rel} 只被未认领的卡覆盖（{covering[0]['name']} 仍为 todo，"
-                  f"应先认领取 doing）")
+            print(f"[所有权] 扩权: {rel} 按所有权表只归 {_owning_row(rel, rows)[1]} 写"
+                  f"（在做的卡没有对应 role: 标签）——以表为准，扩权先改表")
     if ok:
         print("[改动挂卡] 通过")
+    print(f"[所有权] 核对 {governed} 个路径 × {len(rows)} 行可判；"
+          f"{opaque} 行是模板/散文写者，留给审核人")
     return ok
 
 

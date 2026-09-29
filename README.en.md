@@ -93,7 +93,7 @@ machine, then task lists grouped by role and per-card detail. Progress comes fro
 card's own `- [ ]` acceptance checklist, cross-checked against git and local run records;
 mismatches are flagged (`committed but unticked`, `diverged across worktrees`).
 
-250 tests, no install required:
+254 tests, no install required:
 
 ```bash
 python -m unittest discover -s tests

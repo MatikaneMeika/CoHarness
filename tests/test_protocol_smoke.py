@@ -44,7 +44,8 @@ class ProtocolSmoke(unittest.TestCase):
 
     def test_b_two_harnesses_parallel_on_disjoint_paths(self):
         proj = self.fresh_project(extra_cards=(
-            ("T-001", {"assignee": "[zcode-0926a]", "allowed": ["  - docs/"]}),
+            ("T-001", {"assignee": "[zcode-0926a]", "allowed": ["  - docs/"],
+                       "labels": ["role:architect"]}),
             ("T-002", {"assignee": "[codex-0926b]", "allowed": ["  - scripts/"]}),
         ))
         self.assertEqual(self.commit(proj, "入库含两张并行卡").returncode, 0)
@@ -64,7 +65,8 @@ class ProtocolSmoke(unittest.TestCase):
 
     def test_d_claim_commit_needs_no_card(self):
         """I-001 晋升产物：认领 = 改自己的卡 + commit + push main，一步过钩子。"""
-        proj = self.fresh_project(extra_cards=(("T-021", {"status": "todo", "assignee": "[]"}),))
+        proj = self.fresh_project(extra_cards=(
+            ("T-021", {"status": "todo", "assignee": "[]", "labels": ["role:architect"]}),))
         self.assertEqual(self.commit(proj, "建卡入库").returncode, 0)
         target = proj / "backlog" / "tasks" / "T-021.md"
         target.write_text(target.read_text(encoding="utf-8").replace(
@@ -100,7 +102,8 @@ class ProtocolSmoke(unittest.TestCase):
     def test_g_overlapping_todo_card_no_longer_frames_the_owner(self):
         """A3 假阳性回归：同一文件被 doing 与 todo 两张卡覆盖时，已认领的一方不该被诬告。"""
         proj = self.fresh_project(extra_cards=(
-            ("T-041", {"assignee": "[zcode-0926a]", "allowed": ["  - docs/"]}),
+            ("T-041", {"assignee": "[zcode-0926a]", "allowed": ["  - docs/"],
+                       "labels": ["role:architect"]}),
             ("T-042", {"status": "todo", "assignee": "[]", "allowed": ["  - docs/"]}),
         ))
         self.assertEqual(self.commit(proj, "两张都指向 docs/ 的卡入库").returncode, 0)
@@ -109,21 +112,22 @@ class ProtocolSmoke(unittest.TestCase):
         self.assertEqual(res.returncode, 0, msg=H.out(res))
 
     def test_i_ownership_precedence_is_one_voice_in_both_docs(self):
-        """I-005：所有权表 > 卡片边界这条裁决顺序，两份文件都得说，且不许假装已经执法。
+        """I-005：所有权表 > 卡片边界这条裁决顺序，两份文件都得说，且执法面真的在读表。
 
         演练里真 harness 读到自己项目内的"冲突裁决顺序"却照卡片扩权改了 architect 独占的
-        docs/ARCHITECTURE.md——只有一处写了优先级等于没写。
+        docs/ARCHITECTURE.md——只有一处写了优先级等于没写。2026-09-29 起机械核对落地：
+        check.py 在提交时拦"可判行"的扩权，两份文档同步写明执法边界（模板/散文行仍归审核人）。
         """
         agents = (H.SKELETON / "AGENTS.md").read_text(encoding="utf-8")
         self.assertIn("以本表为准", agents, "所有权表的裁决句不见了")
+        self.assertIn("机械核对", agents, "AGENTS.md 没说清所有权执法的边界")
         conv = (H.SKELETON / ".agent" / "tasks" / "CARD-CONVENTION.md").read_text(encoding="utf-8")
         self.assertIn("以 `AGENTS.md` 的单写者所有权表为准", conv,
                       "卡片约定里没同步这条优先级，两处会各说一套")
-        # 钉住"仍未执法"这个事实：check.py 里没有读所有权表的代码。
-        # 哪天加了拦截，就得同时把两份文档里"仍是纪律层约束"的说法改真。
+        self.assertIn("role:", conv, "卡片约定没写 role: 标签这个机械桥梁")
         check_src = (H.SKELETON / "scripts" / "check.py").read_text(encoding="utf-8")
-        self.assertNotIn('"AGENTS.md"', check_src,
-                         "check.py 已经在读所有权表了，文档别说它还不管")
+        self.assertIn('"AGENTS.md"', check_src, "check.py 应该读所有权表做机械核对")
+        self.assertIn("单写者所有权表", check_src, "执法面认不得表名，判不了行")
 
     def test_h_no_resident_card_in_skeleton(self):
         """死锁的根因是"唯一授权来源是一张必须长持的卡"，路修通后它不该再出现。"""

@@ -316,18 +316,18 @@ def _hooks_target(project: Path):
     return (p if p.is_absolute() else project / p), "ok", top
 
 
-def install_pre_commit(dst: Path):
-    """把骨架钩子复制进 git 认定的 hooks 目录，返回 (状态, 说明)。
+def install_hook(dst: Path, name: str):
+    """把骨架钩子（pre-commit / pre-push）复制进 git 认定的 hooks 目录，返回 (状态, 说明)。
 
     状态：installed / exists / not-a-repo / outer-repo / git-missing / no-hook-file。
     """
-    src = dst / "scripts" / "hooks" / "pre-commit"
+    src = dst / "scripts" / "hooks" / name
     if not src.exists():
         return "no-hook-file", ""
     hooks, status, note = _hooks_target(dst)
     if status != "ok":
         return status, note
-    target = hooks / "pre-commit"
+    target = hooks / name
     if target.exists():
         return "exists", str(hooks)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -337,6 +337,10 @@ def install_pre_commit(dst: Path):
     except OSError:
         pass
     return "installed", str(hooks)
+
+
+def install_pre_commit(dst: Path):
+    return install_hook(dst, "pre-commit")
 
 
 MINIMAL_TODO = """# TODO — 最小模式看板（没有 backlog 也能开工）
@@ -448,6 +452,12 @@ def cmd_init(args):
         print("            把这个项目单独 git init，或手动 cp scripts/hooks/pre-commit .git/hooks/")
     elif status == "git-missing":
         print("  [未装钩子] 找不到 git 命令：装好 git 后重跑 wsc init")
+
+    pstatus, pnote = install_hook(dst, "pre-push")
+    if pstatus == "installed":
+        print(f"  pre-push 钩子已装进 {pnote}（merge 不跑 pre-commit，推送前再查一次看板——I-004）")
+    elif pstatus == "exists":
+        print(f"  {pnote}\\pre-push 已存在，未覆盖")
 
     if args.adapter:
         made = write_adapters(dst, args.adapter)
@@ -605,6 +615,9 @@ def cmd_sync(args):
         print(f"[钩子] 本次开工补装进 {note}")
     elif status in HOOK_NOTICES:
         print(f"[钩子] 未装（{HOOK_NOTICES[status]}）：check.py 不会被自动触发")
+    pstatus, pnote = install_hook(project, "pre-push")
+    if pstatus == "installed":
+        print(f"[钩子] pre-push 本次开工补装进 {pnote}（merge 不跑 pre-commit，推送前再查一次看板）")
 
     branch = _git_field(["git", "rev-parse", "--abbrev-ref", "HEAD"], project)
     try:

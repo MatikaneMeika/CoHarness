@@ -125,3 +125,88 @@ jobs:
           # 这里让项目自己的 check.py 也认这份装机。
           python "$GITHUB_WORKSPACE/wsc.py" check . > "$work/check.log" 2>&1
           tail -3 "$work/check.log"
+
+  # I-004 的端到端证明（2026-09-29）：merge/rebase 不跑 pre-commit，两个各自合法的提交
+  # 合出来的非法看板，由 pre-push 钩子在推送前拦下。干净 runner 上真造一遍这个形态：
+  # 同一 harness 在两个基上各领一张卡 → merge 凑出"两张 doing"→ 推送必须被拦。
+  push-gate:
+    name: 推送门（I-004）端到端
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: 装机 → 两基合法认领 → merge 凑非法 → 推送必须被拦
+        shell: bash
+        run: |
+          # runner 没有全局 git 身份，自己给一个（第一轮 CI 全红的真因，别蹭环境）
+          git config --global user.email ci@example.com
+          git config --global user.name ci
+          work=$(mktemp -d)
+          set -e
+          git init -q --bare -b main "$work/origin.git"
+          proj="$work/proj"
+          mkdir "$proj" && cd "$proj"
+          git init -q -b main .
+          python "$GITHUB_WORKSPACE/wsc.py" init 03 . > /dev/null   # 仓库在场：双钩子直接装上
+          python - <<'PY'
+          from pathlib import Path
+          t = Path("backlog/tasks"); t.mkdir(parents=True, exist_ok=True)
+          card = """---
+          id: {cid}
+          title: 卡 {cid}
+          status: todo
+          assignee: []
+          labels: []
+          created_date: 2026-09-29
+          updated_date: 2026-09-29 09:00
+          ---
+
+          ## 需求
+          {cid}
+
+          ## 边界
+          allowed_paths:
+            - {allowed}
+          forbidden_paths:
+            - AGENTS.md
+
+          ## 验收清单
+          - [ ] check.py 全绿
+
+          ## 交接说明
+          （收工时填）
+          """
+          for cid, allowed in (("T-001", "docs/"), ("T-002", "code/")):
+              (t / f"{cid}.md").write_text(card.format(cid=cid, allowed=allowed), encoding="utf-8")
+          PY
+          git add -A
+          git commit -q -m "首次开工"          # 首次入库不执法
+          git remote add origin "$work/origin.git"
+          git push -q origin main
+          # main 上：T-001 → doing same-owner（此刻看板合法，pre-commit 放行）
+          sed -i 's/^status: todo/status: doing/; s/^assignee: \[\]/assignee: [same-owner]/' backlog/tasks/T-001.md
+          git add backlog/tasks/T-001.md && git commit -q -m "领 T-001"
+          git push -q origin main
+          # wt-b 停在旧基（T-001 还是 todo）：T-002 → doing same-owner，提交合法
+          git worktree add -q "$work/wt-b" -b wt-b HEAD~1
+          cd "$work/wt-b"
+          sed -i 's/^status: todo/status: doing/; s/^assignee: \[\]/assignee: [same-owner]/' backlog/tasks/T-002.md
+          git add backlog/tasks/T-002.md && git commit -q -m "领 T-002"
+          # merge 把两张 doing 合到一起：merge 不跑 pre-commit，非法态在本地凑成
+          git fetch -q origin
+          git merge -q --no-edit origin/main
+          # 推送必须被 pre-push 拦下——非法看板进不了 main（stdout+stderr 全捕获：
+          # check.py 的冲突报告走 stdout，只捕 stderr 会漏掉拦截原因）
+          if git push origin HEAD:main > "$work/push.log" 2>&1; then
+            echo "::error::非法看板竟被推上 main——I-004 推送门失效"
+            tail -20 "$work/push.log" | sed 's/^/::error::/' || true
+            exit 1
+          fi
+          grep -q "认领冲突" "$work/push.log" || {
+            echo "::error::拦截原因不是看板非法，检查 pre-push 钩子"
+            cat "$work/push.log"
+            exit 1
+          }
+          echo "I-004 端到端 ✓：合并凑出的非法看板在推送前被拦下"

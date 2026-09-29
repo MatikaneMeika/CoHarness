@@ -64,6 +64,7 @@ coharness = [
     "0*/.agent/*.md",
     "0*/.agent/*/*.md",
     "0*/scripts/hooks/pre-commit",
+    "0*/scripts/hooks/pre-push",
     "ROUTER.md",
     "SECURITY.md",
     "CONTRIBUTING.md",

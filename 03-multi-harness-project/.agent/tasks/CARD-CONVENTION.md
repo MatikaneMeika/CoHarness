@@ -11,7 +11,14 @@
 | `status` | 看板列 | 四列 `todo / doing / review / done`（backlog.config.yml 配置） |
 | `assignee` | 认领者 | **唯一** harness 标识（如 `zcode-0926a`），一卡一人 |
 | `dependencies` | 前置卡 | 无依赖的卡才可并行 |
-| `labels` / `priority` / `created_date` / `updated_date` | Backlog 维护 | 02 骨架用 labels 承载 requirement_refs；03 不用 labels 管理引用 |
+| `labels` / `priority` / `created_date` / `updated_date` | Backlog 维护 | 02 骨架用 labels 承载 requirement_refs；03 用 labels 承载 `role:<角色>` 声明（所有权表执法要用，见下） |
+
+## 边界与所有权表的关系（I-005，2026-09-29 起有机械核对）
+
+卡片边界节以 `AGENTS.md` 的单写者所有权表为准：表里"具体路径 + 具体角色"的行所管辖的文件，
+只有当覆盖它的在做卡带着 `role:<角色>` 标签（如 `role:architect`——"同一会话可身兼多角"，
+角色由卡声明）时才可写，`check.py` 在提交时核对并拦下扩权；表的模板行与散文写者行判不了，
+仍归审核人判。要改"谁拥有什么"，先改所有权表，不是绕开它。
 
 ## 支持的写法子集（check.py 只认这些，超出去就报错给行号，绝不静默按空值处理）
 

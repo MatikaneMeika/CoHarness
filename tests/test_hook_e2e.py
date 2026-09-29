@@ -29,7 +29,7 @@ class HookCase(unittest.TestCase):
         return H.git(proj, "commit", "-q", "-m", msg)
 
     def test_legal_change_passes(self):
-        proj = self.build()
+        proj = self.build(cards=(("T-001", {"labels": ["role:architect"]}),))
         f = proj / "docs" / "ARCHITECTURE.md"
         f.write_text(f.read_text(encoding="utf-8") + "\n补充一段。\n", encoding="utf-8")
         self.assertEqual(H.git(proj, "add", "docs/ARCHITECTURE.md").returncode, 0)

@@ -164,7 +164,7 @@ id: {cid}
 title: {title}
 status: {status}
 assignee: {assignee}
-labels: []
+labels: {labels}
 created_date: 2026-09-20
 updated_date: {updated}
 ---
@@ -193,10 +193,11 @@ DEFAULT_FORBIDDEN = ["  - AGENTS.md", "  - .agent/"]
 
 
 def card_text(cid, *, status="doing", assignee="[zcode-0926a]", allowed=None,
-              forbidden=None, updated="2026-09-28 09:00", title=None):
+              forbidden=None, updated="2026-09-28 09:00", title=None, labels=None):
     return CARD_TMPL.format(
         cid=cid, title=title or f"卡 {cid}", status=status,
         assignee=assignee if isinstance(assignee, str) else str(list(assignee)),
+        labels="[]" if labels is None else "[" + ", ".join(labels) + "]",
         allowed="\n".join(allowed if allowed is not None else DEFAULT_ALLOWED),
         forbidden="\n".join(forbidden if forbidden is not None else DEFAULT_FORBIDDEN),
         updated=updated,

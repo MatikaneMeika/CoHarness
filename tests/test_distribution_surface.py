@@ -26,7 +26,9 @@ FIRST_PARTY = {"wsc", "maintain", "board"}         # 同目录自带模块（pan
 # check.py 才是复制进每个项目的那一份，最严。新增能力一律进 maintain.py / evolve.py。
 # 2026-09-28 定字：wsc.py 到 1250 为止，之后**新命令一律进 maintain.py**（决策记录见
 # docs/EVOLUTION-PLAN.md 的 ADR-10 附注）。这条上限是最后一次为 wsc.py 上调。
-LINE_BUDGET = {H.WSC: 1250, H.CHECK_SRC: 650, H.REPO / "evolve.py": 400,
+# 2026-09-29 check.py 650→700：I-005 的所有权执法必须长在执法面本体（check.py 随骨架
+# 分发是单文件契约，拆不出去；维持它的教学性注释优先于压缩）。这是为 check.py 的第一次上调。
+LINE_BUDGET = {H.WSC: 1250, H.CHECK_SRC: 700, H.REPO / "evolve.py": 400,
                H.REPO / "maintain.py": 700, H.REPO / "board.py": 580, H.REPO / "panel.py": 220}
 NETWORK_TOKENS = ("urllib.request", "http.client", "socket", "ftplib", "smtplib",
                   "poplib", "imaplib", "telnetlib", "requests", "urllib3", "httpx", "aiohttp")
