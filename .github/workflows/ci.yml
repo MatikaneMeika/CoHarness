@@ -28,18 +28,23 @@ jobs:
         run: git --version
       - name: unittest（不安装任何依赖）
         # 失败时把红掉的测试名写成 annotation：job 日志要登录才能看，annotation 公开页面就能读。
-        # 注意 GitHub 给 shell: bash 默认加 set -e -o pipefail：grep 没匹配到就返回 1，
-        # 会把整步中止掉——本仓库曾因此让五条全绿的腿判红。每条管道都要 || true。
+        # 两个坑都踩过，都写在这：① GitHub 给 shell: bash 默认加 set -e -o pipefail，grep 没匹配到
+        # 就返回1并中止整步，所以每条管道都要 || true；② 成功时也不许发 ::error::——那会把一条
+        # 本来全绿的腿直接染红（实测：五条腿 rc=0、245 条 OK，仍全部判 failed）。
         shell: bash
         run: |
           log=$(mktemp)
           python -m unittest discover -s tests -v > "$log" 2>&1
           rc=$?
-          fails=$(grep -cE '^(FAIL|ERROR): ' "$log" || true)
-          ran=$(grep -E '^Ran |^OK|^FAILED' "$log" | tail -2 | tr '\n' ' ' || true)
-          echo "::error::rc=$rc 匹配到 $fails 条  总结行: $ran"
-          grep -E '^(FAIL|ERROR): ' "$log" | head -20 | sed 's/^/::error::/' || true
-          tail -6 "$log" | sed 's/^/::error::tail: /' || true
+          if [ $rc -ne 0 ]; then
+            fails=$(grep -cE '^(FAIL|ERROR): ' "$log" || true)
+            ran=$(grep -E '^Ran |^OK|^FAILED' "$log" | tail -2 | tr '\n' ' ' || true)
+            echo "::error::rc=$rc 匹配到 $fails 条  总结行: $ran"
+            grep -E '^(FAIL|ERROR): ' "$log" | head -20 | sed 's/^/::error::/' || true
+            tail -6 "$log" | sed 's/^/::error::tail: /' || true
+          else
+            echo "自测全绿：$(grep -E '^Ran ' "$log" | tail -1)"
+          fi
           exit $rc
 
   oracle:
@@ -58,9 +63,13 @@ jobs:
           log=$(mktemp)
           .venv/bin/python -m unittest discover -s tests -v > "$log" 2>&1
           rc=$?
-          fails=$(grep -cE '^(FAIL|ERROR): ' "$log" || true)
-          ran=$(grep -E '^Ran |^OK|^FAILED' "$log" | tail -2 | tr '\n' ' ' || true)
-          echo "::error::rc=$rc 匹配到 $fails 条  总结行: $ran"
-          grep -E '^(FAIL|ERROR): ' "$log" | head -20 | sed 's/^/::error::/' || true
-          tail -6 "$log" | sed 's/^/::error::tail: /' || true
+          if [ $rc -ne 0 ]; then
+            fails=$(grep -cE '^(FAIL|ERROR): ' "$log" || true)
+            ran=$(grep -E '^Ran |^OK|^FAILED' "$log" | tail -2 | tr '\n' ' ' || true)
+            echo "::error::rc=$rc 匹配到 $fails 条  总结行: $ran"
+            grep -E '^(FAIL|ERROR): ' "$log" | head -20 | sed 's/^/::error::/' || true
+            tail -6 "$log" | sed 's/^/::error::tail: /' || true
+          else
+            echo "自测全绿（预言机在场）：$(grep -E '^Ran ' "$log" | tail -1)"
+          fi
           exit $rc
