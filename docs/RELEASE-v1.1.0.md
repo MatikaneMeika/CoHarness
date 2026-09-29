@@ -99,6 +99,7 @@ uv publish
 
 `star 1→50`、第一个外部 PR、ADR-3 的"≥50 装机指纹"。前置件（`CONTRIBUTING.md`、Issue/PR 模板、
 RFC 档案、SECURITY 披露路径）都已就位，但这一格的数字不是任何一次执行能造出来的。
+**2026-09-29 起整格暂缓**：用户裁定当前单用户、暂不运营社区，目标数字不撤，重启条件=对外发布后出现真实协作者。
 
 **pipx 那条已经不用你跑**：本机没有 pipx，但我用 `uv tool install --from dist/coharness-1.1.0-py3-none-any.whl coharness`
 做了等价验证（隔离环境 + 全局命令 + D 盘工具目录），装出来的 `wsc list`/`init`/`check` 全部正常。

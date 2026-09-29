@@ -4,3 +4,8 @@ build/
 dist/
 *.egg-info/
 .venv*/
+
+# 本机工具与草稿区（骨架不使用 workspace/ 这个目录名）
+.mimosa/
+.zcode/
+workspace/

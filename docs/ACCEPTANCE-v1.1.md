@@ -14,7 +14,7 @@
 | 6 | P2 | 并发 claim：一方失败且干净回滚 | 双写可能 | 一方失败且干净回滚 | **已成立（两层证据）** | 本地：`tests/test_claim.py::test_two_processes_claiming_the_same_card_exactly_one_wins`（真双进程）+ `test_parallel_race::test_b`（worktree 拓扑，xfail 已摘）。外部：`.coh-p4` 两个 `qodercli` 真会话抢同一张卡，a 进 main、b 被拒且未提交未推送（`docs/CHANGELOG.md` 演练取证行、`docs/rfcs/RFC-0001-认领原子化.md`） |
 | 7 | P2 | migrate 公开演示项目 1 个 | 无 | 公开演示项目 1 个 | **已成立（脚本 + 实跑记录）** | `docs/demo/migrate_demo.py`（clone 后可直接跑，零网络）+ `docs/DEMO-migrate.md` 的实跑输出；v1→v2→v3 每一步都对应本轮真实改动，含 dry-run 不写盘、备份分支、幂等、拒绝无仓库落盘（`tests/test_maintain.py` 20 条） |
 | 8 | P3 | adapters verify：五工具 lint 全过 | 一行字 | 五工具 lint 全过 | **已成立** | `tests/test_adapters.py` 11 条：五家原生位置与语法（`.cursor/rules/*.mdc` 的 `alwaysApply`、`.windsurf/rules/*.md` 的 `trigger: always_on`、`CLAUDE.md`/`GEMINI.md` 的 `@AGENTS.md`、Copilot 纯文本）+ `adapters --verify` 对干净装机 rc=0、对"复制规则正文/缺 frontmatter/旧单文件残留"各判红；语法来源写在 `SOURCES` 里 |
-| 9 | P3 | 社区：≥50 star、≥1 外部 PR | 1 star | ≥50 star、≥1 外部 PR | **未成立（需要发布与时间）** | 前置件已就绪：`CONTRIBUTING.md`、Issue/PR 模板、RFC 档案、SECURITY 披露路径。本机登记表当前只有 1 条实例指纹（`.coh-p4/proj`），ADR-3 的"≥50 指纹"重启条件离成立还很远——这一格我不粉饰 |
+| 9 | P3 | 社区：≥50 star、≥1 外部 PR | 1 star | ≥50 star、≥1 外部 PR | **暂缓（2026-09-29 起：当前单用户，目标数字不撤）** | 前置件已就绪：`CONTRIBUTING.md`、Issue/PR 模板、RFC 档案、SECURITY 披露路径。本机登记表当前只有 1 条实例指纹（`.coh-p4/proj`），ADR-3 的"≥50 指纹"重启条件离成立还很远——用户裁定暂缓：这个工具目前只有本机在用，重启条件=对外发布后出现真实协作者 |
 
 ## 顺手改掉的两处"承诺与实际不符"（本轮主题的直接产出）
 
@@ -45,6 +45,5 @@
 - `I-004` 合并后 main 无自动复查：`maintain.py audit` 给了可查面，`evolve.py --apply-check` 覆盖晋升时机；
   **常态提交路径仍靠 integrator 自觉**，服务端钩子或 CI 门禁待议
 - `I-005` 所有权表与卡片边界两源：已加裁决句（以表为准、扩权先改表），但**没有执法**，`test_d` 之外仍无人拦
-- 契约变更的自动通知：本轮只做只读报告（`sync --dry-run`）。计划书原文要"往他人卡的交接说明写提醒行"，
-  这与"他人卡唯一写者是他自己"直接冲突 → 按规则通道登记待议，没有顺手改执法
-- pipx 真实安装成功率、Actions **长绿**（首跑已成立，见 #1）、社区指标：发布后的数据，见 `docs/RELEASE-v1.1.0.md` 第三节
+- ~~契约变更的自动通知~~ **已注销（2026-09-29）**：只读报告（`sync --dry-run`）保留；计划书原文要"往他人卡的交接说明写提醒行"，这与"他人卡唯一写者是他自己"直接冲突，否决维持；且当前单用户、无对端可通知——重启条件：本机出现第二个真实协作者
+- pipx 真实安装成功率、Actions **长绿**（首跑已成立，见 #1）：发布后的数据，见 `docs/RELEASE-v1.1.0.md` 第三节；社区指标（指标 9）2026-09-29 起暂缓（单用户），重启条件=对外发布后出现真实协作者
