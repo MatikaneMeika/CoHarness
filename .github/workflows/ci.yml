@@ -79,3 +79,49 @@ jobs:
             echo "自测全绿（预言机在场）：$(grep -E '^Ran ' "$log" | tail -1 || true)"
           fi
           exit $rc
+
+  # 计划书 #3 的口径是"clone → 首次开工 ≤ 5 分钟（CI 计时）"。本地单次实测 2.6 秒，
+  # 但那是开发机：有全局 git 身份、盘也不同，数字不进断言。这条 job 在干净 runner 上
+  # 跑同一条序列，超 300 秒判红，实测值发 notice（公开页无需登录就能读）。
+  first-run:
+    name: 开工计时 ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: 装机 → 首次 commit → 开工协议，全程计时
+        shell: bash
+        run: |
+          # runner 没有全局 git 身份，这里必须自己给一个——那是 CI 第一轮全红的真因，别再蹭环境。
+          git config --global user.email ci@example.com
+          git config --global user.name ci
+          # 不用 $RUNNER_TEMP 拼路径：windows 上它是反斜杠的 8.3 短名，在 Git bash 里会咬人（踩过）。
+          work=$(mktemp -d)
+          proj="$work/proj"
+          set -e
+          t0=$(date +%s%3N)
+          python wsc.py init 03 "$proj" > "$work/init.log" 2>&1
+          cd "$proj"
+          git init -q -b main .
+          git add -A
+          git commit -q -m "首次开工"
+          python "$GITHUB_WORKSPACE/wsc.py" sync . > "$work/sync.log" 2>&1
+          t1=$(date +%s%3N)
+          ms=$((t1 - t0))
+          echo "::notice::开工计时 ${ms} ms（装机 + 首次提交 + sync，干净 runner、零 pip 依赖）"
+          if [ $ms -gt 300000 ]; then
+            echo "::error::开工计时 ${ms} ms 超过 5 分钟上限"
+            tail -20 "$work/init.log" | sed 's/^/::error::init: /' || true
+            tail -20 "$work/sync.log" | sed 's/^/::error::sync: /' || true
+            exit 1
+          fi
+          # 计时之外再确认装出来的东西自洽：钩子已在"首次提交"那步真跑过并放行，
+          # 这里让项目自己的 check.py 也认这份装机。
+          python "$GITHUB_WORKSPACE/wsc.py" check . > "$work/check.log" 2>&1
+          tail -3 "$work/check.log"
