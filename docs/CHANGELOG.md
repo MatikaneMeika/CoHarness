@@ -2,6 +2,9 @@
 
 > 格式：`- YYYY-MM-DD [晋升 I-xxx@来源项目] 摘要`；非晋升的本体演进用 `[演进]` 标签，缺陷修复用 `[缺陷修复]` 并附复现方式。只增不改。
 
+- 2026-09-29 [缺陷修复] **同一条 CHANGELOG 里藏了一个响铃符（0x07），人眼看不出来**：用 shell heredoc 生成 Python 源码来写文档时，字符串里的 `D:\\a\\_temp` 被 bash 先折成 `D:\a\_temp`，Python 再把 `\a` 解释成 BEL 控制字符写进文件——显示出来仍是正常文字，字节里已经是 0x07。这是本会话第三次踩"往 shell 里塞带反斜杠的 Python 源码"这一类坑（前两次是 `\n` 折叠把源码当场改坏），区别是前两次立刻报错，这次只有字节知道。已就地修回那一行（同一批次刚写进去的，不是历史条目），并改用 Edit 工具而不是 heredoc 来写这类文本。
+  补一条机器钉子：`tests/test_distribution_surface.py::test_no_control_characters_in_tracked_text`——`git ls-files` 里所有 `.md`/`.py`/`.yml`/`.json`/`pre-commit` 不许出现 C0 控制字符（`\t` `\n` `\r` 除外）与 DEL，命中就报文件名与码位。这类"只有机器能发现"的缺陷不该指望人眼。验证：全套 245 条 OK（skipped=4，expected failures=1，434.1 秒），文档条数 244→245 同步。
+
 - 2026-09-29 [缺陷修复] **上一条自己把 windows 两条腿改坏了：`"$RUNNER_TEMP/ci-test.log"` 在 Git bash 里重定向直接失败**（复现：`RUNNER_TEMP='D:\a\_temp'` 后执行 `echo x > "$RUNNER_TEMP/ci-test.log"` → `No such file or directory`，rc=1；GitHub 给 Windows runner 的 `RUNNER_TEMP` 是反斜杠路径，bash 里反斜杠是转义符，于是整个路径变成一个不存在的相对名字）。后果是那条步骤连测试都没跑就 exit 1，annotation 里自然一条测试名都没有——跑完看时长也能反推出来：windows 两条腿几秒就完，9 分钟全是 ubuntu 在跑门禁。改法：`log=$(mktemp)`，Linux 与 Git bash 都可用，也仍然不落进工作树。验证：本地把 `mktemp` + `grep -E '^(FAIL|ERROR): '` + `sed 's/^/::error::/'` 整条管道跑通，输出 `::error::FAIL: test_x (t.A.test_x)`；PyYAML 解析 `ci.yml` 通过。
   这条也是给上一条记账的补账：上一条写「放 RUNNER_TEMP 而不是工作树，免得给只读断言添变量」——动机对、实现错，而且错在只在一台机器上想过没在另一种 shell 上试过。教训是**改 CI 的 shell 片段必须同时在两种 shell 下验**，本地能验的那半（bash 语义）我这次才补上。
 
