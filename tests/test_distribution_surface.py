@@ -155,6 +155,30 @@ class DistributionSurface(unittest.TestCase):
                 bad.append((rel, hits))
         self.assertEqual(bad, [], f"这些文件里藏了控制字符：{bad}")
 
+    def test_markdown_table_rows_are_not_split(self):
+        """表格一行必须一行写完：Edit 工具往一行单元格里插了换行，渲染时那一行直接散架，
+        而读源码的人（包括我）看不出问题——本轮真实踩到过一次。只由机器发现。"""
+        out = subprocess.run(["git", "-c", "core.quotepath=false", "ls-files", "-z", "*.md"],
+                             cwd=str(H.REPO), capture_output=True).stdout.decode("utf-8")
+        bad = []
+        for rel in [p for p in out.split("\0") if p]:
+            f = H.REPO / rel
+            if not f.is_file():
+                continue
+            in_row = False
+            for n, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+                s = line.strip()
+                if s.startswith("|"):
+                    in_row = True
+                    if not s.endswith("|"):
+                        bad.append(f"{rel}:{n} 行首是 | 行尾不是（这行被换行拆断了）")
+                elif in_row and s.endswith("|") and not s.startswith("|"):
+                    bad.append(f"{rel}:{n} 上一行是表格行，这行不以 | 开头却以 | 结尾（续行）")
+                    in_row = False
+                else:
+                    in_row = False
+        self.assertEqual(bad, [], "Markdown 表格行被拆成多行：\n" + "\n".join(bad))
+
     def test_docs_declare_the_real_self_test_count(self):
         """写死条数比写死行数值得留（"零依赖 N 条"是对用户的承诺），但必须跟实跑对齐。
 

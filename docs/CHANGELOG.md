@@ -2,6 +2,8 @@
 
 > 格式：`- YYYY-MM-DD [晋升 I-xxx@来源项目] 摘要`；非晋升的本体演进用 `[演进]` 标签，缺陷修复用 `[缺陷修复]` 并附复现方式。只增不改。
 
+- 2026-09-29 [缺陷修复] **Edit 工具把 Markdown 表格的一行拆成了三行，读源码看不出来，渲染直接散架**：改 `docs/ACCEPTANCE-v1.1.md` 表格里那格"CI 计时"时，我在单元格里写了换行——行首仍是 `|`，但行尾没有闭合的 `|`，续行又不以 `|` 开头。通读文本时它是"顺的"，只有渲染或机器才发现。复现方式已固化成钉子：`tests/test_distribution_surface.py::test_markdown_table_rows_are_not_split` 扫 `git ls-files *.md`，报两类信号（表格行未闭合、表格行后续行以 `|` 结尾）；红绿对照真做过——把那格改回三行形状，测试同时命中两条，恢复后绿。同类病灶（同一文件里第 3 项那格）就地修好。
+- 2026-09-29 [演进] **CI 加 `first-run` job：计划书 #3 的"clone→首次开工 ≤5 分钟（CI 计时）"不再是"本地 2.6 秒 + 一句待做"**。这条原本卡在"要它成立得先有 Actions 首跑"，首跑绿了就补上：干净 runner 上跑 `wsc init 03` → `git init` + 首次提交（钩子真跑）→ `wsc sync`，全程计时，>300000 ms 判红并把 init/sync 的尾巴发 `::error::`，实测值发 `::notice::`。本机把抽出来的 run 块原样跑过一遍（HOME 指到临时目录，不碰开发机全局配置）：1076 ms、`wsc check` 通过；runner 实测 ubuntu 2140 ms、windows 2228 ms（run #34）。脚本里显式写死 git 身份、且不用 `$RUNNER_TEMP` 拼路径——这两个都是本轮踩过并已记过账的坑。
 - 2026-09-29 [缺陷修复] **同一条 CHANGELOG 里藏了一个响铃符（0x07），人眼看不出来**：用 shell heredoc 生成 Python 源码来写文档时，字符串里的 `D:\\a\\_temp` 被 bash 先折成 `D:\a\_temp`，Python 再把 `\a` 解释成 BEL 控制字符写进文件——显示出来仍是正常文字，字节里已经是 0x07。这是本会话第三次踩"往 shell 里塞带反斜杠的 Python 源码"这一类坑（前两次是 `\n` 折叠把源码当场改坏），区别是前两次立刻报错，这次只有字节知道。已就地修回那一行（同一批次刚写进去的，不是历史条目），并改用 Edit 工具而不是 heredoc 来写这类文本。
   补一条机器钉子：`tests/test_distribution_surface.py::test_no_control_characters_in_tracked_text`——`git ls-files` 里所有 `.md`/`.py`/`.yml`/`.json`/`pre-commit` 不许出现 C0 控制字符（`\t` `\n` `\r` 除外）与 DEL，命中就报文件名与码位。这类"只有机器能发现"的缺陷不该指望人眼。验证：全套 245 条 OK（skipped=4，expected failures=1，434.1 秒），文档条数 244→245 同步。
 
