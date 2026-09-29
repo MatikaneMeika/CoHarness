@@ -16,7 +16,7 @@ git clone https://github.com/MatikaneMeika/CoHarness
 python CoHarness/wsc.py init <skeleton> <target-dir>     # solo / study / multi / doc, or 01-04
 ```
 
-Then say “开工：<task>” (or “ws <task>”) to any harness inside that project; it reads the project’s
+Then say “coharness <task>” to any harness inside that project; it reads the project’s
 own `AGENTS.md`. Write the convention once — switching tools or sessions does not require retelling it.
 
 Prefer a real command on `PATH`?
@@ -93,7 +93,7 @@ machine, then task lists grouped by role and per-card detail. Progress comes fro
 card's own `- [ ]` acceptance checklist, cross-checked against git and local run records;
 mismatches are flagged (`committed but unticked`, `diverged across worktrees`).
 
-247 tests, no install required:
+248 tests, no install required:
 
 ```bash
 python -m unittest discover -s tests

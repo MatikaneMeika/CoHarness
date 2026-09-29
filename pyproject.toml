@@ -72,5 +72,5 @@ coharness = [
     "LICENSE",
     "docs/*.md",
     "docs/rfcs/*.md",
-    "skills/collab-zone/SKILL.md",
+    "skills/coharness/SKILL.md",
 ]

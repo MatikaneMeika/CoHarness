@@ -64,7 +64,8 @@
 
 - **scaffold.py → wsc.py**：`init`（复制骨架 + 占位符清单 + 引导依赖安装 / 装 pre-commit）、`sync`（pull + 看板摘要 + stale 报告）、`check`（转发项目 check.py）、`doctor`（自检 node/backlog/uv/specify/git-wt，缺啥给一行安装命令）
 - **README.md 更新**：六层架构、03/02 依赖安装表、四工具接入表、"进阶参考"改写（Spec Kit/Backlog 已接入；Vibe Kanban 移除并注明 sunset）
-- **ZCode 用户级 skill** `~/.agents/skills/collab-zone/SKILL.md`：薄指针，不写任何规则本体
+- **ZCode 用户级 skill** `~/.agents/skills/coharness/SKILL.md`：薄指针，不写任何规则本体
+  （原目录名 `collab-zone`，2026-09-29 随触发词一起改成 `coharness`——旧词「开工：」/`ws` 太泛）
 
 ### Phase 5 — 验收（精简版：只验本计划新写的代码，成熟工具自身能力不重复验）
 

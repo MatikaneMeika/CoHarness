@@ -15,7 +15,7 @@ git clone https://github.com/MatikaneMeika/CoHarness
 python CoHarness/wsc.py init <骨架> <目标路径>    # 骨架: solo / study / multi / doc，或 01-04
 ```
 
-然后在项目里对 harness 说「开工：<任务描述>」。它会按项目内 AGENTS.md 里的约定干活。这套约定写一次，之后换工具、换会话都不用重讲。
+然后在项目里对 harness 说「coharness <任务描述>」。它会按项目内 AGENTS.md 里的约定干活。这套约定写一次，之后换工具、换会话都不用重讲。
 
 想要一个能直接敲的 `wsc` 命令（骨架与三个脚本一起装进环境，运行期仍零第三方依赖）：
 
@@ -103,7 +103,7 @@ python panel.py                            # 全屏三页：项目 → 任务 �
 `.coh-p2` 演练真出现过）。角色是从 `AGENTS.md` 的单写者所有权表推的，推不到就写"边界没落进所有权表"，不猜。
 终端默认全屏，本机 conhost 花屏就用 `--plain`。设计与否决记录在 `docs/rfcs/RFC-0002-面板展示面.md`。
 
-仓库自带 247 条自测，跑起来不需要装任何东西：
+仓库自带 248 条自测，跑起来不需要装任何东西：
 
 ```bash
 python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows × py3.11/3.13 上跑同样的命令
@@ -113,7 +113,7 @@ python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows × 
 
 ## 工具怎么接
 
-多数主流 harness 会自动读项目根的 AGENTS.md（ZCode、Codex、Qoder、opencode、Copilot CLI 这些都是）。只认自家文件的工具，init 时加 `--adapter claude,gemini,cursor,copilot,windsurf`（或 all）——生成的是各家**原生格式**（`.cursor/rules/coharness.mdc` 带 `alwaysApply`、`.windsurf/rules/coharness.md` 带 `trigger: always_on`、`CLAUDE.md`/`GEMINI.md` 用 `@AGENTS.md` 导入、Copilot 给两份：全局 `.github/copilot-instructions.md` + 路径特定 `.github/instructions/coharness.instructions.md`（YAML 头 `applyTo`）），内容只有指针与工具元数据，不复制第二份规则；`wsc adapters --verify` 当场查这一点。支持 skills 的工具可以选装 `skills/collab-zone/`（复制过去、改一行路径），不装也不影响使用。
+多数主流 harness 会自动读项目根的 AGENTS.md（ZCode、Codex、Qoder、opencode、Copilot CLI 这些都是）。只认自家文件的工具，init 时加 `--adapter claude,gemini,cursor,copilot,windsurf`（或 all）——生成的是各家**原生格式**（`.cursor/rules/coharness.mdc` 带 `alwaysApply`、`.windsurf/rules/coharness.md` 带 `trigger: always_on`、`CLAUDE.md`/`GEMINI.md` 用 `@AGENTS.md` 导入、Copilot 给两份：全局 `.github/copilot-instructions.md` + 路径特定 `.github/instructions/coharness.instructions.md`（YAML 头 `applyTo`）），内容只有指针与工具元数据，不复制第二份规则；`wsc adapters --verify` 当场查这一点。支持 skills 的工具可以选装 `skills/coharness/`（复制过去、改一行路径），不装也不影响使用。
 
 出现分歧时的裁决顺序：项目规则 > spec-kit 产物 > 任务卡 > 会话里的口头约定。
 
@@ -123,7 +123,7 @@ python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows × 
 
 ## 文档与来源
 
-- [ROUTER.md](ROUTER.md) —— 「开工：」的调度逻辑与角色匹配
+- [ROUTER.md](ROUTER.md) —— 「coharness」的调度逻辑与角色匹配
 - [CONTRIBUTING.md](CONTRIBUTING.md) —— 三条通道（缺陷 / 规则 / 能力）、登记门槛、晋升门禁、PR 检查清单
 - [docs/rfcs/](docs/rfcs/README.md) —— 设计取舍的论证档案（RFC-0001 认领原子化已采纳）
 - [docs/EVOLUTION-PROCESS.md](docs/EVOLUTION-PROCESS.md) —— 改进管线；[docs/CHANGELOG.md](docs/CHANGELOG.md) —— 本体变更日志

@@ -104,11 +104,29 @@ class SkeletonIntegrity(unittest.TestCase):
             self.assertNotIn("<骨架库>", (proj / "AGENTS.md").read_text(encoding="utf-8"))
         agents = (self.projects["03-multi-harness-project"] / "AGENTS.md").read_text(encoding="utf-8")
         self.assertIn(f"python {lib}/wsc.py claim", agents)
+        self.assertIn(f"{lib}/ROUTER.md", agents,
+                      "触发约定那行的调度权威没代入库路径：别的 harness 打开项目只能看见一个谜语名字")
         protocol = (self.projects["03-multi-harness-project"] / ".agent" / "workflows" /
                     "parallel-protocol.md").read_text(encoding="utf-8")
         self.assertIn(f"python {lib}/wsc.py claim", protocol)
         raw = (H.SKELETON / "AGENTS.md").read_text(encoding="utf-8")
         self.assertIn("{{COHARNESS_LIB}}", raw, "骨架本体保留占位符，只实例化时代入")
+
+    def test_trigger_word_is_coharness_everywhere(self):
+        """触发词只剩一个：「coharness」。旧词「开工：」/`ws` 太泛——任何 harness 都可能把它
+        当普通对话读走。这句话散在四套骨架的 AGENTS.md 头一行、ROUTER、双语 README 与 skill，
+        漏改一处就等于留了第二个入口，所以交给机器数而不是靠我记得。
+        """
+        for rel in ("ROUTER.md", "README.md", "README.en.md", "skills/coharness/SKILL.md"):
+            text = (H.REPO / rel).read_text(encoding="utf-8")
+            self.assertIn("coharness", text, f"{rel} 没有新触发词")
+            self.assertNotIn("「开工：X」", text, f"{rel} 还在把旧词当触发词写")
+            self.assertNotIn("`ws X`", text, f"{rel} 还在给旧简写别名")
+        for sk in SKELETONS:
+            head = (H.REPO / sk / "AGENTS.md").read_text(encoding="utf-8").splitlines()[2]
+            self.assertIn("「coharness X」", head, f"{sk} 的触发约定行没换词")
+            self.assertIn("{{COHARNESS_LIB}}/ROUTER.md", head,
+                          f"{sk} 的调度权威行没带库路径，换一个 harness 打开项目读不到 ROUTER")
 
     def test_skeletons_ship_no_run_residue(self):
         for sk in SKELETONS:
