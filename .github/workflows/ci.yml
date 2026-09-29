@@ -28,18 +28,18 @@ jobs:
         run: git --version
       - name: unittest（不安装任何依赖）
         # 失败时把红掉的测试名写成 annotation：job 日志要登录才能看，annotation 公开页面就能读。
-        # 上一版只 grep 不报平安，结果 windows 腿一条 annotation 都没有，连"有没有匹配到 FAIL 行"都不知道。
-        # 现在无条件先报 rc / 匹配数 / 总结行，再把逐条测试名和尾巴贴出来。
+        # 注意 GitHub 给 shell: bash 默认加 set -e -o pipefail：grep 没匹配到就返回 1，
+        # 会把整步中止掉——本仓库曾因此让五条全绿的腿判红。每条管道都要 || true。
         shell: bash
         run: |
           log=$(mktemp)
           python -m unittest discover -s tests -v > "$log" 2>&1
           rc=$?
           fails=$(grep -cE '^(FAIL|ERROR): ' "$log" || true)
-          ran=$(grep -E '^Ran |^OK|^FAILED' "$log" | tail -2 | tr '\n' ' ')
+          ran=$(grep -E '^Ran |^OK|^FAILED' "$log" | tail -2 | tr '\n' ' ' || true)
           echo "::error::rc=$rc 匹配到 $fails 条  总结行: $ran"
-          grep -E '^(FAIL|ERROR): ' "$log" | head -20 | sed 's/^/::error::/'
-          tail -6 "$log" | sed 's/^/::error::tail: /'
+          grep -E '^(FAIL|ERROR): ' "$log" | head -20 | sed 's/^/::error::/' || true
+          tail -6 "$log" | sed 's/^/::error::tail: /' || true
           exit $rc
 
   oracle:
@@ -59,8 +59,8 @@ jobs:
           .venv/bin/python -m unittest discover -s tests -v > "$log" 2>&1
           rc=$?
           fails=$(grep -cE '^(FAIL|ERROR): ' "$log" || true)
-          ran=$(grep -E '^Ran |^OK|^FAILED' "$log" | tail -2 | tr '\n' ' ')
+          ran=$(grep -E '^Ran |^OK|^FAILED' "$log" | tail -2 | tr '\n' ' ' || true)
           echo "::error::rc=$rc 匹配到 $fails 条  总结行: $ran"
-          grep -E '^(FAIL|ERROR): ' "$log" | head -20 | sed 's/^/::error::/'
-          tail -6 "$log" | sed 's/^/::error::tail: /'
+          grep -E '^(FAIL|ERROR): ' "$log" | head -20 | sed 's/^/::error::/' || true
+          tail -6 "$log" | sed 's/^/::error::tail: /' || true
           exit $rc
