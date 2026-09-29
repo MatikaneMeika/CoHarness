@@ -31,13 +31,14 @@ jobs:
         # 这条差别很实在——本仓库曾因 CI 红却读不到日志，只能靠本地复现猜了两轮。
         shell: bash
         run: |
-          python -m unittest discover -s tests -v > "$RUNNER_TEMP/ci-test.log" 2>&1
+          log=$(mktemp)   # 不能用 "$RUNNER_TEMP/..."：Git bash 里那是带反斜杠的路径，重定向直接失败
+          python -m unittest discover -s tests -v > "$log" 2>&1
           rc=$?
           if [ $rc -ne 0 ]; then
-            grep -E '^(FAIL|ERROR): ' "$RUNNER_TEMP/ci-test.log" | head -20 | sed 's/^/::error::/'
-            grep -E '^(Ran |OK|FAILED)' "$RUNNER_TEMP/ci-test.log" | head -5 | sed 's/^/::error::/'
+            grep -E '^(FAIL|ERROR): ' "$log" | head -20 | sed 's/^/::error::/'
+            grep -E '^(Ran |OK|FAILED)' "$log" | head -5 | sed 's/^/::error::/'
           fi
-          tail -4 "$RUNNER_TEMP/ci-test.log"
+          tail -4 "$log"
           exit $rc
 
   oracle:
@@ -53,11 +54,12 @@ jobs:
       - name: 全套测试（此时差分用例不 skip）
         shell: bash
         run: |
-          .venv/bin/python -m unittest discover -s tests -v > "$RUNNER_TEMP/ci-test.log" 2>&1
+          log=$(mktemp)
+          .venv/bin/python -m unittest discover -s tests -v > "$log" 2>&1
           rc=$?
           if [ $rc -ne 0 ]; then
-            grep -E '^(FAIL|ERROR): ' "$RUNNER_TEMP/ci-test.log" | head -20 | sed 's/^/::error::/'
-            grep -E '^(Ran |OK|FAILED)' "$RUNNER_TEMP/ci-test.log" | head -5 | sed 's/^/::error::/'
+            grep -E '^(FAIL|ERROR): ' "$log" | head -20 | sed 's/^/::error::/'
+            grep -E '^(Ran |OK|FAILED)' "$log" | head -5 | sed 's/^/::error::/'
           fi
-          tail -4 "$RUNNER_TEMP/ci-test.log"
+          tail -4 "$log"
           exit $rc
