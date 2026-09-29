@@ -56,6 +56,10 @@
 
 ### 已知边界（未成立，别当成已完成）
 - GitHub Actions 首跑已成立（run #33 全绿）；**发布后的装机成功率**与社区指标（star / 外部 PR）仍需时间
+- CI 的 `actions/checkout@v4` / `setup-python@v5` / `setup-uv@v4` 每条腿报一条 Node 20 deprecation
+  warning（共 5 条，纯噪音，不影响判定）。**故意没跟大版本**：checkout 已到 v7、setup-python v7、
+  setup-uv v10，其中 setup-uv 的 v5/v6 发布说明自己写着"改了默认值 / 含破坏性变更"，
+  而这里的收益只是消掉 warning——发布后单独一条提交升，让 CI 自己判
 - `I-004`：合并后 main 的非法态仍无自动复查——`maintain.py audit` 提供可查面，`evolve.py --apply-check`
   只做晋升时的复查；服务端钩子/CI 门禁仍待议
 - 去中心化审核池与 LLM-as-Judge：ADR-3/ADR-4 明确推迟，重启条件写在 `docs/EVOLUTION-PLAN.md`
