@@ -20,6 +20,8 @@ try:
         _norm_prefix,
         _table_rows,
         _title,
+        board_fingerprint,
+        clip,
         checklist,
         collect_projects,
         commits_touching,
@@ -36,6 +38,7 @@ try:
         role_of,
         term_width,
         unfilled,
+        viewport,
         worktree_copies)
 except ImportError:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -49,6 +52,8 @@ except ImportError:
         _norm_prefix,
         _table_rows,
         _title,
+        board_fingerprint,
+        clip,
         checklist,
         collect_projects,
         commits_touching,
@@ -65,6 +70,7 @@ except ImportError:
         role_of,
         term_width,
         unfilled,
+        viewport,
         worktree_copies)
 
 
@@ -74,11 +80,16 @@ def _utf8_streams():
             stream.reconfigure(encoding="utf-8", errors="replace")
 
 
-MSVCRT_PFX = {"H": "left", "P": "up", "K": "up", "M": "right", "N": "down",
-              "J": "down", "Q": "ENT", "S": "BS"}
+# Windows 增强键的第二字符码是 VK 码低字节（H=↑ P=↓ K=← M=→ G=Home O=End
+# I=PgUp Q=PgDn S=Del），2026-09-29 前的表把方向键相互配错，全屏模式里
+# 按方向键走错方向。POSIX 的 CSI 序列补长键：旧实现固定读 2 字符，Home/End/PgUp/PgDn 全失灵。
+MSVCRT_PFX = {"H": "up", "P": "down", "K": "left", "M": "right",
+              "G": "home", "O": "end", "I": "pgup", "Q": "pgdn", "S": "BS"}
 MSVCRT_KEYS = {"\r": "ENT", "\n": "ENT", "\x1b": "ESC", "\x08": "BS", "\x7f": "BS"}
 POSIX_KEYS = {"\r": "ENT", "\n": "ENT", "\x7f": "BS", "\x08": "BS"}
-POSIX_SEQ = {"[A": "up", "[B": "down", "[C": "right", "[D": "left"}
+POSIX_SEQ = {"[A": "up", "[B": "down", "[C": "right", "[D": "left",
+             "[H": "home", "[F": "end", "[1~": "home", "[4~": "end",
+             "[5~": "pgup", "[6~": "pgdn", "[7~": "home", "[8~": "end"}
 
 
 def decode_msvcrt(ch, ch2=""):
@@ -92,6 +103,20 @@ def decode_posix(ch, rest=""):
     if ch == "\x1b":
         return POSIX_SEQ.get(rest, "ESC")
     return POSIX_KEYS.get(ch, ch)
+
+
+def read_escape_sequence(readch, has_more, maxlen=6):
+    """把 ESC 后面的转义序列读满（纯函数：读字符与"还有没有"都由调用方注入）。
+
+    读到字母或 '~'（CSI 序列的收尾）就停，不许把跟在后面的普通字符吞掉；
+    流中断就到哪算哪——decode 层认不出的形状兜底成 ESC。
+    """
+    out = []
+    while len(out) < maxlen and has_more():
+        out.append(readch())
+        if out[-1].isalpha() or out[-1] == "~":
+            break
+    return "".join(out)
 
 
 def read_key(timeout):
@@ -120,8 +145,14 @@ def read_key(timeout):
         if not r:
             return "tick"
         ch = sys.stdin.read(1)
-        rest = sys.stdin.read(2) if ch == "\x1b" else ""
-        return decode_posix(ch, rest)
+        if ch == "\x1b":
+            if not select.select([sys.stdin], [], [], 0.05)[0]:
+                return decode_posix(ch)                # 单独的 ESC：不再拖住等下一击键
+            rest = read_escape_sequence(
+                lambda: sys.stdin.read(1),
+                lambda: bool(select.select([sys.stdin], [], [], 0.02)[0]))
+            return decode_posix(ch, rest)
+        return decode_posix(ch)
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
@@ -149,15 +180,24 @@ def main(argv=None):
         print("没有可显示的项目：登记表里那些路径已经不在了（`wsc init` 会重新登记）。")
         return 1
 
-    state = {"page": "projects", "sel": 0, "cursor": 0, "card": None, "quit": False}
+    state = {"page": "projects", "sel": 0, "cursor": 0, "card": None, "quit": False,
+             "filter": "all", "top": 0}
     if args.project and paths and (paths[0] / "scripts" / "check.py").is_file():
         state["page"] = "tasks"
     width = args.width or term_width()
     color = not args.plain and sys.stdout.isatty()
+    snap_cache = {}
 
     def build(deep):
+        """逐项目出快照；deep 时按 (HEAD, 卡片 mtime) 增量复用——项目一多，没变化
+        的项目就不必每轮从头重算（报警/分叉这些 git 查询是大头）。"""
         snaps = []
         for path in paths:
+            fp = (str(path), board_fingerprint(path))
+            hit = snap_cache.get(fp) if deep else None
+            if hit is not None:
+                snaps.append(hit)
+                continue
             try:
                 s = project_snapshot(path, deep=deep)
             except SystemExit as e:
@@ -166,6 +206,8 @@ def main(argv=None):
             entry = next((e for e in wsc.read_registry()
                           if Path(str(e.get("path", ""))).resolve() == path), {})
             s["skeleton"] = str(entry.get("skeleton", ""))
+            if deep:
+                snap_cache[fp] = s
             snaps.append(s)
         return snaps
 
@@ -176,19 +218,28 @@ def main(argv=None):
             return 1
         if state["page"] != "tasks":
             state["page"], state["sel"], state["cursor"] = "projects", 0, 0
-        lines, _ = current_page_lines(snaps, state, width, color)
+        lines, _, _ = current_page_lines(snaps, state, width, color)
         print("\n".join(lines))
         return 0
 
     DEPTH = {"projects": 0, "tasks": 1, "card": 2}
     FIELD = {"tasks": "sel", "card": "card"}
+    FILTER_CYCLE = ["all", "doing", "todo", "done"]
     # 顶层也吃 deep：浅快照算不出报警，画 0 等于把"没查"报成"没有报警"（实测卡上挂着
-    # "跨工作树分叉"时顶层仍是 0）。代价由 board 的 HEAD 缓存兜住：HEAD 未变只多一次 rev-parse。
+    # "跨工作树分叉"时顶层仍是 0）。代价由 board 的 HEAD 缓存与上面的指纹缓存兜住。
     snaps = build(deep=True)
     while True:
-        lines, ids = current_page_lines(snaps, state, width, color)
+        lines, ids, cursor_row = current_page_lines(snaps, state, width, color)
+        try:
+            height = max(5, os.get_terminal_size().lines - 2)
+        except (OSError, ValueError):
+            height = 20
+        state["top"] = viewport(len(lines), cursor_row, state.get("top", 0), height)
+        shown = lines[state["top"]:state["top"] + height]
+        overflow = f"  -*- {len(lines)} 行，PgUp/PgDn 翻页 · s 筛选" if len(lines) > height else ""
         sys.stdout.write("\033[2J\033[H\033[?25l")
-        sys.stdout.write("\n".join(l[:width] for l in lines) + "\n")
+        sys.stdout.write("\n".join(clip(l, width) for l in shown)
+                         + ("\n" + overflow if overflow else "") + "\n")
         sys.stdout.flush()
         key = read_key(args.watch or 60)
         if key == "tick":
@@ -198,12 +249,19 @@ def main(argv=None):
         if key == "r":
             snaps = build(deep=True)
             continue
+        if key == "s" and state["page"] == "tasks":
+            cyc = FILTER_CYCLE.index(state.get("filter", "all"))
+            state["filter"] = FILTER_CYCLE[(cyc + 1) % len(FILTER_CYCLE)]
+            state["cursor"], state["top"] = 0, 0
+            continue
         if key == "ESC":
             key = "back" if state["page"] != "projects" else "q"
         prev_page, prev_cursor, ids_before = state["page"], state["cursor"], ids
         state = navigate(state, KEYMAP.get(key, key), max(len(ids), 1))
         if state.get("quit"):
             break
+        if DEPTH[state["page"]] != DEPTH[prev_page]:
+            state["top"] = 0                      # 换页：视口回到页顶
         if DEPTH[state["page"]] > DEPTH[prev_page]:
             # 下钻：光标所在位置就是被选中的对象，ids 是这一页的真实下标顺序
             state[FIELD[state["page"]]] = ids_before[min(prev_cursor, len(ids_before) - 1)] \

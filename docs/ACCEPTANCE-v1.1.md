@@ -1,7 +1,7 @@
 # 验收对照 — 优化计划书第 7 节的九项指标（截至 2026-09-29）
 
 口径只有一条：**本地能证的给证据，需要外部条件的写明"未成立"**，不混为已交付。
-全套自测：`python -m unittest discover -s tests` → **256 条 OK**（skipped=4 为差分预言机用例，
+全套自测：`python -m unittest discover -s tests` → **266 条 OK**（skipped=4 为差分预言机用例，
 装了 dev extra 后 skipped=0；expected failures 已清零——I-004 于 2026-09-29 由 pre-push 推送门闭口）。
 
 | # | 阶段 | 指标 | 基线 | 目标 | 现在 | 证据 / 缺什么 |

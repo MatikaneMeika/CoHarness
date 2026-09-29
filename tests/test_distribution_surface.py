@@ -28,8 +28,10 @@ FIRST_PARTY = {"wsc", "maintain", "board"}         # 同目录自带模块（pan
 # docs/EVOLUTION-PLAN.md 的 ADR-10 附注）。这条上限是最后一次为 wsc.py 上调。
 # 2026-09-29 check.py 650→700：I-005 的所有权执法必须长在执法面本体（check.py 随骨架
 # 分发是单文件契约，拆不出去；维持它的教学性注释优先于压缩）。这是为 check.py 的第一次上调。
+# 2026-09-29 展示面上调（board 580→650、panel 220→300）：滚动/翻页/状态筛选与长转义键
+# 是展示面承诺内的功能生长；panel 的增量是读键/视口 IO，渲染逻辑仍在 board（可测的那边）。
 LINE_BUDGET = {H.WSC: 1250, H.CHECK_SRC: 700, H.REPO / "evolve.py": 400,
-               H.REPO / "maintain.py": 700, H.REPO / "board.py": 580, H.REPO / "panel.py": 220}
+               H.REPO / "maintain.py": 700, H.REPO / "board.py": 650, H.REPO / "panel.py": 300}
 NETWORK_TOKENS = ("urllib.request", "http.client", "socket", "ftplib", "smtplib",
                   "poplib", "imaplib", "telnetlib", "requests", "urllib3", "httpx", "aiohttp")
 

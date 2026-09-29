@@ -179,7 +179,11 @@ def commits_touching(project, prefixes, limit=3):
 
 
 def current_page_lines(snapshots, state, width, color):
-    """按当前页渲染；返回 (lines, ids)。ids[cursor] 就是"进入"要选中的那个对象的下标。"""
+    """按当前页渲染；返回 (lines, ids, cursor_row)。
+
+    ids[cursor] 是"进入"要选中的那个对象的**原始下标**（筛选后也指向未筛选的卡列表），
+    cursor_row 是光标所在行号——panel 的 viewport 用它把视口对准。
+    """
     if state["page"] == "projects":
         rows = []
         for s in snapshots:
@@ -190,14 +194,23 @@ def current_page_lines(snapshots, state, width, color):
                          # 浅快照算不出报警：那是"没查"，不是"没有"——报 None，由渲染层画成 - 而不是 0
             "flags": (sum(1 for c in s["cards"] if c["flags"]) if s.get("deep") else None),
                          "errors": len(s["card_errors"])})
-        return render_projects(rows, state["cursor"], width, color), list(range(len(rows)))
+        lines, cursor_row = render_projects(rows, state["cursor"], width, color)
+        return lines, list(range(len(rows))), cursor_row
     snap = snapshots[state["sel"]]
     if state["page"] == "tasks":
-        lines, order = render_tasks(snap, state["cursor"], width, color)
-        return lines, order
+        flt = state.get("filter", "all")
+        cards = snap["cards"]
+        if flt != "all":
+            cards = [c for c in cards if c["status"] == flt]
+        lines, order, cursor_row = render_tasks(
+            dict(snap, cards=cards, total_cards=len(snap["cards"]), filter=flt),
+            state["cursor"], width, color)
+        # order 是"筛选后列表"的下标，翻译回原始下标：进卡页要用真下标取卡
+        keep = [i for i, c in enumerate(snap["cards"]) if flt == "all" or c["status"] == flt]
+        return lines, [keep[j] for j in order], cursor_row
     if not snap["cards"]:
-        return ["  这个项目还没有任务卡。"], []
-    return render_card(snap, snap["cards"][state["card"]], width, color), [state["card"]]
+        return ["  这个项目还没有任务卡。"], [], 0
+    return render_card(snap, snap["cards"][state["card"]], width, color), [state["card"]], 0
 
 
 def grouped_by_role(cards):
@@ -230,6 +243,20 @@ def head_sha(project):
     return out.strip() if ok else ""
 
 
+def board_fingerprint(project):
+    """快照缓存键：(HEAD, 卡片文件 mtime 序列)。
+
+    HEAD 没动、卡一个字没改，deep 快照就能整个复用——项目一多，build() 不必
+    每轮把每个项目从头重算。mtime 抓"改了卡但没提交"的那部分（那部分 HEAD 看不见）。
+    """
+    tasks = Path(project) / "backlog" / "tasks"
+    try:
+        mtimes = tuple(sorted((p.name, p.stat().st_mtime_ns) for p in tasks.glob("*.md")))
+    except OSError:
+        mtimes = ()
+    return head_sha(project), mtimes
+
+
 def load_check(project):
     """把**项目自己的** scripts/check.py 载入内存当解析器用。
 
@@ -253,8 +280,12 @@ def load_check(project):
     return mod
 
 
+VIEW_STEP = 20
+
+
 def navigate(state, key, count):
-    """导航状态机（纯函数，测试直接吃它）。"""
+    """导航状态机（纯函数，测试直接吃它）。pgup/pgdn/home/end 粗调视口 top，
+    光标行的精对准由 panel 的 viewport() 兜（那边知道真实终端高度）。"""
     s = dict(state)
     if key in ("q", "quit", "ESC"):
         s["page"], s["quit"] = s["page"], True
@@ -268,7 +299,25 @@ def navigate(state, key, count):
         s["page"] = {"card": "tasks", "tasks": "projects", "projects": "projects"}[s["page"]]
         if s["page"] == "projects":
             s["card"] = None
+    elif key in ("pgup", "pgdn", "home", "end"):
+        top = s.get("top", 0)
+        s["top"] = (max(0, top - VIEW_STEP) if key == "pgup"
+                    else top + VIEW_STEP if key == "pgdn"
+                    else 0 if key == "home" else top + (1 << 30))
     return s
+
+
+def viewport(total, cursor_row, top, height):
+    """把视口 [top, top+height) 对准 cursor_row，返回新的 top（钳制在合法范围）。
+
+    翻页键粗调，光标移动细调：光标行必须始终可见，视口不许滑出末行。
+    """
+    top = max(0, min(top, max(0, total - 1)))
+    if cursor_row < top:
+        top = cursor_row
+    elif cursor_row >= top + height:
+        top = cursor_row - height + 1
+    return max(0, min(top, max(0, total - height)))
 
 
 def project_card_facts(project):
@@ -422,12 +471,15 @@ def render_card(snap, card, width=78, color=True):
 
 
 def render_projects(rows, cursor, width=78, color=True):
-    """第 1 页：本机装出来的项目。"""
+    """第 1 页：本机装出来的项目。返回 (行列表, 光标行号)。"""
     out = []
+    cursor_row = 2                                    # 标题 + 表头之后就是第一行数据
     _title(out, f"CoHarness 面板 · 本机项目（{len(rows)}）", width)
     out.append("   " + pad("项目（AGENTS.md 没填名就显示路径）", 34) + pad("骨架", 26)
                + rpad("在做", 6) + rpad("待办", 6) + rpad("报警", 6))
     for i, r in enumerate(rows):
+        if i == cursor:
+            cursor_row = len(out)
         mark = MARKS["cursor"] if i == cursor else " "
         warn = "-" if r["flags"] is None else r["flags"] + r["errors"]
         out.append(mark + "  " + pad(clip(_clip_left(r["name"], 34), 34), 34)
@@ -438,12 +490,13 @@ def render_projects(rows, cursor, width=78, color=True):
         out.append(f"  登记表位置：{wsc.registry_path()}")
     out.append("")
     out.append("  ↑↓ 选择 · Enter 进入 · q 退出")
-    return out
+    return out, cursor_row
 
 
 def render_tasks(snap, cursor, width=78, color=True):
-    """第 2 页：任务列表，按角色分组，核心角色置顶。"""
+    """第 2 页：任务列表，按角色分组，核心角色置顶。返回 (行列表, 下标序, 光标行号)。"""
     out = []
+    cursor_row = 0
     _title(out, f"{_clip_left(snap['label'], 40)} · 任务看板", width)
     line = (f"骨架 schema {snap['schema'] or '未声明'} · 目标 "
             f"{_clip(snap['goal'], 40) or '（装机时没填，AGENTS.md 里还是占位符）'}")
@@ -471,6 +524,8 @@ def render_tasks(snap, cursor, width=78, color=True):
         out.append((BOLD + CYAN if core and color else "") + _clip(head, width)
                    + (RESET if core and color else ""))
         for c in cards:
+            if pos == cursor:
+                cursor_row = len(out)
             mark = MARKS["cursor"] if pos == cursor else " "
             pos += 1
             order.append(index_of[id(c)])
@@ -483,11 +538,15 @@ def render_tasks(snap, cursor, width=78, color=True):
             col = RED if c["flags"] else (YELLOW if c["stale"] else "")
             out.append((col + row + RESET) if (col and color) else row)
     out.append("")
-    out.append(f"  共 {len(snap['cards'])} 张 · 完成度 "
+    flt = snap.get("filter", "all")
+    n_shown = (f"{len(snap['cards'])}/{snap['total_cards']}" if flt != "all"
+               else str(len(snap["cards"])))
+    tail = f" · 筛选 {flt}（按 s 换）" if flt != "all" else ""
+    out.append(f"  共 {n_shown} 张{tail} · 完成度 "
                f"{sum(c['done'] for c in snap['cards'])}/{sum(c['total'] for c in snap['cards'])}"
                " 验收项已勾")
-    out.append("  ↑↓ 选择 · Enter 看卡 · Backspace 返回 · r 立即刷新 · q 退出")
-    return out, order
+    out.append("  ↑↓ 选择 · Enter 看卡 · Backspace 返回 · s 筛选 · PgUp/PgDn 翻页 · r 刷新 · q 退出")
+    return out, order, cursor_row
 
 
 def _prefix_variants(p):

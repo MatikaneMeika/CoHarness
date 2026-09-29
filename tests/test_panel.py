@@ -11,6 +11,7 @@ import subprocess
 import sys
 import types
 import unittest
+import unittest.mock
 from pathlib import Path
 
 import helpers as H
@@ -200,15 +201,15 @@ class BoardView(unittest.TestCase):
         """浅快照算不出报警位——那格画 0 等于把"没查"报成"没有报警"（真机踩过：
         卡上挂着"跨工作树分叉"，顶层仍显示 0，而 --plain 显示 1）。"""
         st = {"page": "projects", "sel": 0, "cursor": 0, "card": None}
-        shallow, _ = board.current_page_lines([dict(self.snap, deep=False)], st, 78, False)
-        deep, _ = board.current_page_lines([dict(self.snap, deep=True)], st, 78, False)
+        shallow, _, _ = board.current_page_lines([dict(self.snap, deep=False)], st, 78, False)
+        deep, _, _ = board.current_page_lines([dict(self.snap, deep=True)], st, 78, False)
         self.assertTrue(shallow[2].rstrip().endswith("-"),
                         f"浅快照的报警位不是 -：{shallow[2]!r}")
         self.assertTrue(deep[2].rstrip().endswith("1"),
                         f"深快照该报出那一条报警：{deep[2]!r}")
 
     def test_plain_render_emits_no_escape_sequences(self):
-        lines, order = board.render_tasks(self.snap, 0, 78, color=False)
+        lines, order, _ = board.render_tasks(self.snap, 0, 78, color=False)
         text = "\n".join(lines)
         self.assertNotIn("\033", text)
         self.assertEqual(order, [0])
@@ -264,6 +265,102 @@ class Navigate(unittest.TestCase):
         self.assertTrue(board.navigate(self.base(), "q", 1)["quit"])
         self.assertEqual(board.navigate(self.base(), "back", 1)["page"], "projects")
 
+    def test_pgup_pgdn_home_end_move_the_viewport(self):
+        s = dict(self.base(), top=0)
+        s = board.navigate(s, "pgdn", 40)
+        self.assertEqual(s["top"], board.VIEW_STEP)
+        s = board.navigate(s, "pgdn", 40)
+        self.assertEqual(s["top"], board.VIEW_STEP * 2)
+        s = board.navigate(s, "pgup", 40)
+        self.assertEqual(s["top"], board.VIEW_STEP)
+        s = board.navigate(s, "pgup", 40)
+        self.assertEqual(s["top"], 0, "在最顶上再上翻不许变负")
+        s = board.navigate(s, "end", 40)
+        self.assertGreater(s["top"], 0, "end 应该把视口推到底（panel 负责钳制）")
+        self.assertEqual(board.navigate(s, "home", 40)["top"], 0)
+
+
+class ScrollFilterKeys(unittest.TestCase):
+    """滚动/筛选/视口：行数超屏要能平移，卡多的时候要能按状态收窄，窄终端不许破宽度承诺。"""
+
+    def setUp(self):
+        def card(i):
+            st = ("todo", "doing", "review", "done")[i % 4]
+            return {"id": f"T-{i:03d}", "title": f"任务{i}", "status": st,
+                    "assignees": ["h"] if st in ("doing", "review") else [], "role": "coder",
+                    "allowed": ["docs/"], "rel": f"backlog/tasks/T-{i:03d}.md",
+                    "done": 0, "total": 1, "items": [(False, "x")], "commits": 0,
+                    "recent": [], "authors": set(), "copies": [], "flags": [],
+                    "updated": "2026-09-28 09:00", "stale": False}
+        self.snap = {"path": Path("P"), "name": "示例项目", "label": "示例项目", "goal": "",
+                     "run": "", "schema": "3", "columns": ["todo", "doing", "review", "done"],
+                     "minimal": False, "card_errors": [], "owners": [], "heads": [],
+                     "diverged": 0, "cards": [card(i) for i in range(40)],
+                     "telemetry": {"runs": 0, "bad": 0, "file": Path("t"), "last": None,
+                                   "harnesses": []}}
+
+    def tasks_state(self, **kw):
+        return dict({"page": "tasks", "sel": 0, "cursor": 0, "card": None,
+                     "quit": False, "filter": "all", "top": 0}, **kw)
+
+    def test_filter_narrows_tasks_and_ids_still_point_at_original_cards(self):
+        lines, ids, row = board.current_page_lines(
+            [self.snap], self.tasks_state(filter="doing"), 78, False)
+        self.assertEqual(len(ids), 10, "40 张里 doing 应有 10 张")
+        self.assertEqual(ids, [i for i in range(40) if self.snap["cards"][i]["status"] == "doing"],
+                         "ids 必须指回未筛选卡片的真实下标，Enter 进卡页才不会进错卡")
+        self.assertIn("doing", "\n".join(lines))
+
+    def test_filter_all_shows_everything(self):
+        _, ids, _ = board.current_page_lines([self.snap], self.tasks_state(), 78, False)
+        self.assertEqual(len(ids), 40)
+
+    def test_viewport_keeps_the_cursor_row_visible(self):
+        self.assertEqual(board.viewport(50, 3, 0, 20), 0, "光标在窗口内：视口不动")
+        self.assertEqual(board.viewport(50, 25, 0, 20), 6, "光标掉出窗口底：视口跟下去")
+        self.assertEqual(board.viewport(50, 4, 10, 20), 4, "光标在窗口上方：视口跟上去，光标贴窗口顶")
+        self.assertEqual(board.viewport(50, 49, 0, 20), 30, "底部钳制：不许滑出末行")
+
+    def test_cursor_row_marks_the_selected_card_line(self):
+        lines, ids, row = board.current_page_lines(
+            [self.snap], self.tasks_state(cursor=5), 78, False)
+        self.assertIn("T-005", lines[row], f"cursor_row 应指向第 5 张可见卡：{lines[row]!r}")
+
+    def test_narrow_width_still_clips_by_display_width(self):
+        for w in (60, 100):
+            lines, _, _ = board.current_page_lines(
+                [self.snap], self.tasks_state(), w, False)
+            bad = [l for l in lines if board.dw(board.clip(l, w)) > w]
+            self.assertFalse(bad, f"宽度 {w} 下有行超出显示宽度：{bad[:2]}")
+
+    def test_term_width_falls_back_when_no_terminal(self):
+        with unittest.mock.patch.object(board.os, "get_terminal_size",
+                                        side_effect=OSError("no tty")):
+            self.assertEqual(board.term_width(default=99), 99)
+
+
+class PosixLongEscapes(unittest.TestCase):
+    """POSIX 读键要吃满整个转义序列：旧实现固定读 2 字符，Home/End/PgUp/PgDn 全都失灵。"""
+
+    def test_long_sequences_decode(self):
+        for rest, want in (("[5~", "pgup"), ("[6~", "pgdn"), ("[H", "home"), ("[F", "end"),
+                           ("[1~", "home"), ("[4~", "end"), ("[A", "up"), ("[B", "down")):
+            self.assertEqual(panel_mod.decode_posix("\x1b", rest), want, rest)
+
+    def test_drain_reads_the_whole_sequence(self):
+        seq = iter("[5~xyz")
+        self.assertEqual(panel_mod.read_escape_sequence(lambda: next(seq), lambda: True, 4),
+                         "[5~", "读到 '~' 就该停，不许把后续普通字符吞掉")
+        self.assertEqual(panel_mod.read_escape_sequence(lambda: next(iter("AB")),
+                                                        lambda: False, 4), "",
+                         "无字符可读就返回空串：decode 层认不出形状，兜底成 ESC")
+
+    def test_msvcrt_standard_enhanced_key_codes(self):
+        for ch2, want in (("H", "up"), ("P", "down"), ("K", "left"), ("M", "right"),
+                          ("G", "home"), ("O", "end"), ("I", "pgup"), ("Q", "pgdn"),
+                          ("S", "BS")):
+            self.assertEqual(panel_mod.decode_msvcrt("\x00", ch2), want, ch2)
+
 
 class EndToEnd(unittest.TestCase):
     def test_plain_mode_lists_registered_projects_and_opens_one(self):
@@ -316,8 +413,11 @@ class TerminalIO(unittest.TestCase):
         self.assertEqual(panel_mod.read_key(0.05), "tick")
 
     def test_msvcrt_key_decoding(self):
+        # 2026-09-29 修正：第二字符码是 VK 码低字节（旧表把 ↑/↓/← 写错位）
         self.assertEqual(panel_mod.decode_msvcrt("\r"), "ENT")
-        self.assertEqual(panel_mod.decode_msvcrt("\x00", "P"), "up")
+        self.assertEqual(panel_mod.decode_msvcrt("\x00", "H"), "up")
+        self.assertEqual(panel_mod.decode_msvcrt("\xe0", "P"), "down")
+        self.assertEqual(panel_mod.decode_msvcrt("\xe0", "K"), "left")
         self.assertEqual(panel_mod.decode_msvcrt("\xe0", "M"), "right")
         self.assertEqual(panel_mod.decode_msvcrt("j"), "j")
 
