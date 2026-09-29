@@ -117,7 +117,25 @@ def hooks_dir(project):
     if r.returncode != 0:
         return None
     p = Path(out(r).strip())
-    return p if p.is_absolute() else Path(project) / p
+    p = p if p.is_absolute() else Path(project) / p
+    # 必须 resolve：Windows 上 worktree 与主仓库问出来的路径可能一个是 8.3 短名
+    # （CI runner 的 TEMP 就是 C:\Users\RUNNER~1\…）、一个是长名，字符串比不等但指向同一处。
+    return p.resolve()
+
+
+def short_path(p):
+    """取 Windows 的 8.3 短名（拿不到就返回 None）。CI 的 runner 上 TEMP 本身就是短名，
+    本机默认不是——用这个函数造出同样的条件，短名/长名的比较才在本地也测得到。"""
+    if os.name != "nt":
+        return None
+    try:
+        from ctypes import create_unicode_buffer, windll
+    except ImportError:
+        return None
+    buf = create_unicode_buffer(260)
+    if windll.kernel32.GetShortPathNameW(str(p), buf, 260):
+        return Path(buf.value)
+    return None
 
 
 def install_hook(project):

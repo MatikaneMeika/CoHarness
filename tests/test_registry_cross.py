@@ -48,10 +48,26 @@ class CrossGround(unittest.TestCase):
         proj = self.instantiate("p1")
         data = self.entries()
         self.assertEqual(len(data), 1)
-        self.assertEqual(Path(data[0]["path"]), proj)
+        # 比 resolve 后的位置，不比字符串：runner 的 TEMP 是 8.3 短名（C:\Users\RUNNER~1\…），
+        # 而 wsc 存的是长名，两边指向同一个目录。
+        self.assertEqual(Path(data[0]["path"]).resolve(), proj.resolve())
         self.assertEqual(data[0]["skeleton"], "03-multi-harness-project")
         self.assertRegex(data[0]["skeleton_commit"], r"^[0-9a-f]{7,}$")
         self.assertRegex(data[0]["instantiated_at"], r"^\d{4}-\d{2}-\d{2}")
+
+    def test_short_and_long_paths_register_as_the_same_project(self):
+        """Windows 专供：用 8.3 短名当参数装机，登记表里不许因此多出第二条记录。"""
+        short = H.short_path(self.tmp)
+        if not short or short == self.tmp:
+            self.skipTest("这个卷没启用 8.3 短名，造不出 runner 的条件")
+        proj = short / "p1"
+        r = H.wsc("init", "03", str(proj), extra_env=self.env)
+        self.assertEqual(r.returncode, 0, msg=H.out(r))
+        again = H.wsc("init", "03", str(self.tmp / "p1"), extra_env=self.env)
+        self.assertNotEqual(again.returncode, 0, "短名与长名是同一个目录，第二次必须被「非空」挡住")
+        self.assertEqual(len([e for e in self.entries()
+                              if Path(e["path"]).resolve() == (self.tmp / "p1").resolve()]), 1,
+                         "同一路径的两种写法不许各占一条")
 
     def test_re_init_same_project_does_not_duplicate_the_entry(self):
         proj = self.instantiate("p1")
@@ -59,13 +75,13 @@ class CrossGround(unittest.TestCase):
         self.assertNotEqual(again.returncode, 0, "非空目录应被 init 拒绝")
         self.assertIn("目标目录非空", H.out(again))
         self.assertEqual(len([e for e in self.entries()
-                              if Path(e["path"]) == proj]), 1)
+                              if Path(e["path"]).resolve() == proj.resolve()]), 1)
 
     def test_two_inits_register_two_distinct_entries(self):
         p1 = self.instantiate("p1")
         p2 = self.instantiate("p2")
-        paths = {Path(e["path"]) for e in self.entries()}
-        self.assertEqual(paths, {p1, p2})
+        paths = {Path(e["path"]).resolve() for e in self.entries()}
+        self.assertEqual(paths, {p1.resolve(), p2.resolve()})
 
     def test_two_projects_with_the_same_proposal_reach_the_threshold(self):
         self.instantiate("p1", [row("I-001", "卡片与登记自授权放行")])

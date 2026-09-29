@@ -103,7 +103,7 @@ python panel.py                            # 全屏三页：项目 → 任务 �
 `.coh-p2` 演练真出现过）。角色是从 `AGENTS.md` 的单写者所有权表推的，推不到就写"边界没落进所有权表"，不猜。
 终端默认全屏，本机 conhost 花屏就用 `--plain`。设计与否决记录在 `docs/rfcs/RFC-0002-面板展示面.md`。
 
-仓库自带 245 条自测，跑起来不需要装任何东西：
+仓库自带 246 条自测，跑起来不需要装任何东西：
 
 ```bash
 python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows × py3.11/3.13 上跑同样的命令
