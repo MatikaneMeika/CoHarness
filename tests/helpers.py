@@ -25,12 +25,20 @@ GIT_ID = ["-c", "user.name=coharness-test", "-c", "user.email=coharness-test@inv
 COH_HOME = Path(tempfile.mkdtemp(prefix="coh-home-"))
 atexit.register(shutil.rmtree, str(COH_HOME), True)
 
+# 测试一律看不见开发机的全局 git 配置。CI 的 runner 上没有 user.name/user.email，
+# 本机有——这个差异曾让一条只设了 user.name 的测试在本机绿、四条 stdlib 腿全红。
+# 需要身份的测试要么用 GIT_ID（-c 注入），要么给仓库写 local config，不许蹭全局。
+EMPTY_GITCONFIG = COH_HOME / "gitconfig"
+EMPTY_GITCONFIG.write_text("", encoding="utf-8")
+
 
 def run(argv, cwd=None, native_env=False, extra_env=None, timeout=180):
     # PYTHONIOENCODING 只统一子进程 stdio 编码，不改 locale 首选编码，
     # 这样 wsc 内部 subprocess(text=True) 的解码缺陷仍能被测出（见 test_console_encoding）
     env = dict(os.environ) if native_env else dict(os.environ, PYTHONIOENCODING="utf-8")
     env.setdefault("COHARNESS_HOME", str(COH_HOME))
+    env.setdefault("GIT_CONFIG_GLOBAL", str(EMPTY_GITCONFIG))
+    env.setdefault("GIT_CONFIG_SYSTEM", str(EMPTY_GITCONFIG))
     if extra_env:
         env.update(extra_env)
     return subprocess.run([str(a) for a in argv], cwd=str(cwd) if cwd is not None else None,

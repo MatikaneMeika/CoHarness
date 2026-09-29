@@ -128,6 +128,7 @@ class ClaimGround(unittest.TestCase):
         H.git(solo, "add", "-A")
         H.git(solo, "commit", "-q", "-m", "本地卡入库")
         H.git(solo, "config", "user.name", "solo")
+        H.git(solo, "config", "user.email", "solo@invalid")   # 只设 name 不够：commit 要两样都有
         H.install_hook(solo)
         r = H.wsc("claim", str(solo), "T-001", "harness-solo")
         self.assertEqual(r.returncode, 0, msg=H.out(r))

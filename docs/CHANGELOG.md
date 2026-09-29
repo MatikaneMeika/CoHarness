@@ -2,6 +2,10 @@
 
 > 格式：`- YYYY-MM-DD [晋升 I-xxx@来源项目] 摘要`；非晋升的本体演进用 `[演进]` 标签，缺陷修复用 `[缺陷修复]` 并附复现方式。只增不改。
 
+- 2026-09-29 [缺陷修复] **四条 CI 腿从第 1 次运行就红，本机 244 条却全绿：测试蹭了开发机的全局 git 配置**（复现：把 `HOME`/`USERPROFILE`/`GIT_CONFIG_GLOBAL` 指到一个空目录再跑全套 → 2 条判红，内层试装副本的套件也判红；还原成本机环境就全绿）：`tests/test_claim.py::test_claim_without_remote_stays_local` 只给仓库写了 `user.name`，没写 `user.email`，`wsc claim` 内部那次 `git commit` 在本机被全局配置兜住、在 runner 上直接 `Please tell me who you are` 退出 1；另一条红是连带——`--apply-check` 门禁会在临时副本里再跑一遍全套，内层一红门禁就判「补丁让自测变红」。**根因不是 CI 环境特殊，是测试没把自己和开发机隔开**——这种「本机绿」测不出真实用户的失败。
+  两处一起改：①那条测试补上 `user.email`（只设 name 不够，commit 两样都要）；②`tests/helpers.py` 的 `run()` 从此强制封闭 git 环境——把 `GIT_CONFIG_GLOBAL` 与 `GIT_CONFIG_SYSTEM` 指到一个空文件，测试要身份只能走 `GIT_ID`（`-c` 注入）或给仓库写 local config，蹭不到全局。这条改动本身就是回归测试：以后再有测试依赖开发机配置，本机就会红，不用等 CI 才发现。
+  取证过程也记一下：匿名状态下 job 日志读不到（raw logs 全 404，annotations 只有 Process completed with exit code 1），但公开页面给了两条决定性事实——oracle job 通过、stdlib 四条腿全红，且连 windows/py3.13 也红（我本机同版本是绿的）。于是把嫌疑从「Linux 轴」改到「runner 的干净环境」，一次本地复现就中了。验证：封闭环境下 `python -m unittest discover -s tests` 244 条 OK（skipped=4，expected failures=1，443.5 秒）。
+
 - 2026-09-28 [演进] `skills/collab-zone/SKILL.md` 的日常操作命令旁补一行只读看板：`python <WS>/panel.py --plain [项目路径]`。第四门面落地后 skill 的命令清单没跟着长，照着 skill 干活的 harness 就永远不知道有这个东西——分发物之间的口径也要一致。验证：`test_skeleton_integrity` 5 条、`test_packaging` 7 条、`test_adapters` 11 条仍 OK。
 
 - 2026-09-28 [缺陷修复] **测试装钩子少了 chmod：本机测不出来，但测的就不是产品装出来的那个钩子**（复现方式是对照读码：`wsc.install_pre_commit` 复制钩子后 `target.chmod(0o755)`，而 `tests/helpers.py:install_hook` 只 `shutil.copyfile` 就走完——Windows 不看执行位，本机 244 条全绿也照不出这个差异；unix 上不可执行的 `pre-commit` 会被 git 跳过或报权限错，于是 `test_hook_e2e` / `test_check_diff` 里那些"提交必须被拦"的断言在 Linux runner 上测的是另一回事）。修法：测试侧与产品侧做同一件事（同样 copyfile + chmod 0o755 + 同样的 OSError 兜底），并把理由写在旁边。**如实说明这是按机制推出来的保真度修复，不是已证实的 CI 红因**——Linux 那一轴的 job 日志我读不到（未认证 API 被出口 IP 限流，本机无 WSL/docker/act），已排除的轴：py3.11 整跑绿、`core.autocrlf=true` 重新检出整跑绿、git 身份与默认分支与路径大小写静态排查无命中。剩下的定位要一次 `gh auth login`。
