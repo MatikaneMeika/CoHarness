@@ -3,6 +3,7 @@
 这一节防的是两套口径：`wsc.py` 里的 DEGRADE 表和骨架 AGENTS.md 的「降级行为」节各说各话——
 harness 读项目内文档，维护者读工具输出，两边不一致就等于没人知道缺依赖时该怎么办。
 """
+import importlib.util
 import sys
 import unittest
 from pathlib import Path
@@ -21,12 +22,17 @@ NEEDS = {
 
 
 def load_degrade():
-    src = H.WSC.read_text(encoding="utf-8")
-    ns = {}
-    start = src.index("DEGRADE = {")
-    end = src.index("\n}\n", start) + 3
-    exec(compile(src[start:end], "degrade_table", "exec"), ns)   # 只取数据表，不导入整个 wsc
-    return ns["DEGRADE"]
+    # 按固定路径装载 wsc 模块读数据表；装载期间关字节码写入，仓库根不留 __pycache__，
+    # 也不用 exec/compile 切源码（安全门按 CWE-95 判红）。
+    spec = importlib.util.spec_from_file_location("coh_wsc_under_test", H.WSC)
+    mod = importlib.util.module_from_spec(spec)
+    prev = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        sys.dont_write_bytecode = prev
+    return mod.DEGRADE
 
 
 class DegradeSpec(unittest.TestCase):

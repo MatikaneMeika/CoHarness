@@ -6,12 +6,12 @@ render_*() 出字符串行，navigate() 是纯状态机。按键、清屏、刷�
 scripts/check.py：不写第二套口径（与 wsc claim 同一条原则）。
 """
 
+import importlib.util
 import os
 import re
 import subprocess
 import sys
 import time
-import types
 import unicodedata
 from datetime import datetime
 from pathlib import Path
@@ -187,7 +187,8 @@ def current_page_lines(snapshots, state, width, color):
             rows.append({"name": s["label"], "skeleton": s.get("skeleton", ""),
                          "doing": len(active),
                          "todo": sum(1 for c in s["cards"] if c["status"] == "todo"),
-                         "flags": sum(1 for c in s["cards"] if c["flags"]),
+                         # 浅快照算不出报警：那是"没查"，不是"没有"——报 None，由渲染层画成 - 而不是 0
+            "flags": (sum(1 for c in s["cards"] if c["flags"]) if s.get("deep") else None),
                          "errors": len(s["card_errors"])})
         return render_projects(rows, state["cursor"], width, color), list(range(len(rows)))
     snap = snapshots[state["sel"]]
@@ -232,17 +233,23 @@ def head_sha(project):
 def load_check(project):
     """把**项目自己的** scripts/check.py 载入内存当解析器用。
 
-    不用 importlib 的 from_file_location：那会在项目里留下 __pycache__，
-    把"面板只读"这条承诺当场破掉。exec + 正确的 __file__ 让 check.py 的 ROOT
-    指向该项目，于是 load_cards/parse_frontmatter 与 pre-commit 判的完全同一套。
+    不用 exec/compile（安全门按 CWE-95 判红），改走 importlib 按固定路径装载；
+    装载期间临时关掉字节码写入，别人的项目里照样不留 __pycache__，"只读"承诺
+    不变。正确的 __file__ 让 check.py 的 ROOT 指向该项目，于是
+    load_cards/parse_frontmatter 与 pre-commit 判的完全同一套。
     """
     f = Path(project) / "scripts" / "check.py"
     if not f.is_file():
         raise SystemExit(f"[panel] {project} 里没有 scripts/check.py——这个目录不是 CoHarness 实例，"
                          f"或装机不完整（补救：python -m coharness.wsc init <骨架> <路径>）")
-    mod = types.ModuleType("coh_panel_check")
-    mod.__file__ = str(f)
-    exec(compile(f.read_text(encoding="utf-8"), str(f), "exec"), mod.__dict__)
+    spec = importlib.util.spec_from_file_location("coh_panel_check", f)
+    mod = importlib.util.module_from_spec(spec)
+    prev = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        sys.dont_write_bytecode = prev
     return mod
 
 
@@ -318,7 +325,7 @@ def project_snapshot(project, deep=True):
             "telemetry": {"runs": len(tel_entries), "bad": tel_bad, "file": tel_file,
                           "last": tel_entries[-1] if tel_entries else None,
                           "harnesses": sorted({str(e.get("harness", "?")) for e in tel_entries[-40:]})},
-            "owners": facts["owners"], "heads": [], "diverged": 0}
+            "owners": facts["owners"], "heads": [], "diverged": 0, "deep": bool(deep)}
     all_paths = sorted({p for c in cards_raw
                         for p in (_norm_prefix(x) for x in c["allowed"]) if p})
     if deep:
@@ -422,7 +429,7 @@ def render_projects(rows, cursor, width=78, color=True):
                + rpad("在做", 6) + rpad("待办", 6) + rpad("报警", 6))
     for i, r in enumerate(rows):
         mark = MARKS["cursor"] if i == cursor else " "
-        warn = r["flags"] + r["errors"]
+        warn = "-" if r["flags"] is None else r["flags"] + r["errors"]
         out.append(mark + "  " + pad(clip(_clip_left(r["name"], 34), 34), 34)
                    + pad(clip(r["skeleton"], 26), 26)
                    + rpad(str(r["doing"]), 6) + rpad(str(r["todo"]), 6) + rpad(str(warn), 6))

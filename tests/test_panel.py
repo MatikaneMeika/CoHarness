@@ -196,6 +196,17 @@ class BoardView(unittest.TestCase):
                      "telemetry": {"runs": 0, "bad": 0, "file": Path("t"), "last": None,
                                    "harnesses": []}}
 
+    def test_alarm_column_dashes_instead_of_zero_when_shallow(self):
+        """浅快照算不出报警位——那格画 0 等于把"没查"报成"没有报警"（真机踩过：
+        卡上挂着"跨工作树分叉"，顶层仍显示 0，而 --plain 显示 1）。"""
+        st = {"page": "projects", "sel": 0, "cursor": 0, "card": None}
+        shallow, _ = board.current_page_lines([dict(self.snap, deep=False)], st, 78, False)
+        deep, _ = board.current_page_lines([dict(self.snap, deep=True)], st, 78, False)
+        self.assertTrue(shallow[2].rstrip().endswith("-"),
+                        f"浅快照的报警位不是 -：{shallow[2]!r}")
+        self.assertTrue(deep[2].rstrip().endswith("1"),
+                        f"深快照该报出那一条报警：{deep[2]!r}")
+
     def test_plain_render_emits_no_escape_sequences(self):
         lines, order = board.render_tasks(self.snap, 0, 78, color=False)
         text = "\n".join(lines)
@@ -373,6 +384,20 @@ class InteractiveLoop(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn("T-020", out)
         self.assertNotIn("Traceback", out)
+
+
+    def test_the_loop_never_builds_a_shallow_snapshot(self):
+        """交互模式一律 deep：报警位是这个面板存在的理由，宁可多一次 rev-parse。"""
+        calls, real = [], panel_mod.project_snapshot
+        panel_mod.project_snapshot = lambda p, deep=True: (
+            calls.append(deep), real(p, deep=deep))[1]
+        try:
+            rc, out, keys = self._run(["ENT", "BS", "ENT", "q"])
+        finally:
+            panel_mod.project_snapshot = real
+        self.assertEqual(rc, 0)
+        self.assertIn(True, calls)
+        self.assertNotIn(False, calls, "还有一处在用浅快照，顶层报警会报成 0")
 
 
 class RefreshCost(unittest.TestCase):

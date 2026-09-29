@@ -182,7 +182,9 @@ def main(argv=None):
 
     DEPTH = {"projects": 0, "tasks": 1, "card": 2}
     FIELD = {"tasks": "sel", "card": "card"}
-    snaps = build(deep=False)
+    # 顶层也吃 deep：浅快照算不出报警，画 0 等于把"没查"报成"没有报警"（实测卡上挂着
+    # "跨工作树分叉"时顶层仍是 0）。代价由 board 的 HEAD 缓存兜住：HEAD 未变只多一次 rev-parse。
+    snaps = build(deep=True)
     while True:
         lines, ids = current_page_lines(snaps, state, width, color)
         sys.stdout.write("\033[2J\033[H\033[?25l")
@@ -191,10 +193,10 @@ def main(argv=None):
         key = read_key(args.watch or 60)
         if key == "tick":
             if args.watch:
-                snaps = build(deep=state["page"] != "projects")
+                snaps = build(deep=True)
             continue
         if key == "r":
-            snaps = build(deep=state["page"] != "projects")
+            snaps = build(deep=True)
             continue
         if key == "ESC":
             key = "back" if state["page"] != "projects" else "q"
@@ -210,7 +212,6 @@ def main(argv=None):
             snaps = build(deep=True)
         elif DEPTH[state["page"]] < DEPTH[prev_page] and state["page"] == "projects":
             state["cursor"] = min(state["sel"], max(len(snaps) - 1, 0))
-            snaps = build(deep=False)
     sys.stdout.write("\033[?25h\n")
     return 0
 

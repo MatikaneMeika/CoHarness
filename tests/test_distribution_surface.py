@@ -84,31 +84,28 @@ class DistributionSurface(unittest.TestCase):
             calls = [n.func.id for n in ast.walk(tree)
                      if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)]
             self.assertNotIn("eval", calls, f"{p.name} 用了 eval")
-            if p != H.CHECK_SRC and p != H.REPO / "board.py":
-                # board.py 的执行点是唯一放行的，见 test_only_the_projects_own_check_py_may_be_executed
-                pass
-            if p != H.CHECK_SRC and p != H.REPO / "board.py":
-                self.assertNotIn("exec", calls, f"{p.name} 用了 exec")
+            self.assertNotIn("exec", calls, f"{p.name} 用了 exec")
 
-    def test_only_the_projects_own_check_py_may_be_executed(self):
-        """整个工具链唯一的动态执行点：展示面载入**项目自己的** scripts/check.py。
+    def test_panel_loads_check_py_without_dynamic_execution(self):
+        """展示面复用**项目自己的** scripts/check.py，但不许动态执行。
 
-        放行理由：pre-commit 每次提交都在执行这份文件，面板只是把它读卡片的那部分
-        在同一进程里再读一遍——为的是"卡片格式与边界只有一套口径"。用 exec 而不是
-        importlib 是因为后者会在别人的项目里留下 __pycache__（破"只读"承诺）。
-        这条测试把口子钉死在一处：多一个 exec、或执行的路径不再是 scripts/check.py，就红。
+        历史口径是"全链唯一的 exec 口子"，安全门按 CWE-95 把它判成高危、拦截提交；
+        改用 importlib 按固定路径装载，装载期间临时关掉字节码写入——别人的项目里
+        照样不留 __pycache__，"只读"承诺不变，动态执行口子归零。
+        这条钉子钉两件事：board.py 无任何 exec/eval/compile；load_check 装载的
+        路径必须是 <项目>/scripts/check.py，不是任意路径。
         """
         src = (H.REPO / "board.py").read_text(encoding="utf-8")
         tree = ast.parse(src)
         calls = [n.func.id for n in ast.walk(tree)
                  if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)]
-        self.assertEqual(calls.count("exec"), 1, "exec 只允许出现在 load_check 一处")
-        self.assertEqual(calls.count("compile"), 1)
+        for bad in ("exec", "eval", "compile"):
+            self.assertNotIn(bad, calls, f"board.py 出现 {bad}()——动态执行必须为零")
         fn = next(n for n in tree.body
                   if isinstance(n, ast.FunctionDef) and n.name == "load_check")
         seg = ast.get_source_segment(src, fn) or ""
         self.assertIn('Path(project) / "scripts" / "check.py"', seg,
-                      "被执行的必须是项目自己的执法脚本，不是任意路径")
+                      "装载的必须是项目自己的执法脚本，不是任意路径")
 
     def test_scripts_stay_readable_within_budget(self):
         for p in ALL:

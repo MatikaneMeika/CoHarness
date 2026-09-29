@@ -185,8 +185,10 @@ W5/W7/W9/W12 落地后，`wsc.py` 一度涨到 1137 行——**自己写的行�
   **这是最后一次为 `wsc.py` 上调**，之后的新命令**按面归位**：改已实例化项目的指纹/迁移/体检进
   `maintain.py`，晋升审核进 `evolve.py`，只读呈现进展示面（`board.py` 装配与渲染 + `panel.py` 终端，
   拆两个文件是为了让渲染能被 unittest 直接吃）。已写进 `CONTRIBUTING.md` 的代码约束同步改过。
-- 展示面破例带一次 `exec`（载入项目自己的 `scripts/check.py`，为的是卡片口径只有一套）：
-  范围由 `test_only_the_projects_own_check_py_may_be_executed` 钉死在一次 exec、一次 compile、一条路径。
+- 展示面曾经破例带一次 `exec`（载入项目自己的 `scripts/check.py`，为的是卡片口径只有一套）：
+  2026-09-29 被安全门按 CWE-95 判成高危拦截提交后改为 `importlib` 固定路径装载 +
+  临时关闭字节码写入（照样不留 `__pycache__`），动态执行口子归零，
+  由 `test_panel_loads_check_py_without_dynamic_execution` 钉死"零 exec/eval/compile + 一条路径"。
 - `evolve.py` / `maintain.py` 只允许 `import wsc` 复用读表与调用形状，不许引入第三方：
   审核与维护都不该成为下游项目的依赖面。
 - 计划书对照表里 ADR-7/8/9 的回绝理由不变（copier 走 git URL 取模板与"零网络 + clone 即用"冲突；

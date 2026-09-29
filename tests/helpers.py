@@ -3,12 +3,12 @@
 只在骨架库自己的测试里用，不进任何骨架分发物（ADR-10：分发面保持纯标准库零依赖）。
 """
 import atexit
+import importlib.util
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
-import types
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -71,13 +71,18 @@ def out(res):
 def load_check_module():
     """把骨架里的 check.py 载入内存做解析器单元测试。
 
-    不用 importlib 的 from_file_location：那会在骨架目录留下 __pycache__，
-    而"骨架混入运行残留"正是 EVOLUTION-PLAN.md:113 记过的坑。
+    importlib 按固定路径装载，装载期间临时关掉字节码写入：不在骨架目录留
+    __pycache__（"骨架混入运行残留"正是 EVOLUTION-PLAN.md:113 记过的坑），
+    也不再走 exec/compile（安全门按 CWE-95 判红）。
     """
-    src = CHECK_SRC.read_text(encoding="utf-8")
-    mod = types.ModuleType("coh_check_under_test")
-    mod.__file__ = str(CHECK_SRC)
-    exec(compile(src, str(CHECK_SRC), "exec"), mod.__dict__)
+    spec = importlib.util.spec_from_file_location("coh_check_under_test", CHECK_SRC)
+    mod = importlib.util.module_from_spec(spec)
+    prev = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        sys.dont_write_bytecode = prev
     return mod
 
 
