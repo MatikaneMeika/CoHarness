@@ -1028,7 +1028,7 @@ def _find_card(project: Path, card_id: str):
 
 
 def _card_fields(text: str):
-    get = lambda k: (re.search(rf"^{k}:\s*(.*)$", text, re.M) or [None, ""])[1].strip()
+    get = lambda k: (re.search(rf"^{k}:[ \t]*(.*)$", text, re.M) or [None, ""])[1].strip()
     assignee = get("assignee")
     who = [w for w in re.split(r"[,\s]+", assignee.strip("[]\"'")) if w]
     return get("status").strip("\"'").lower(), who

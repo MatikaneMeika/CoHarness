@@ -121,5 +121,29 @@ class TestImproveAndDoctor(TempCase):
             self.assertIn(label, H.out(res))
 
 
+class TestCardFieldParsing(TempCase):
+    """wsc._card_fields 的解析口径：认领冲突判定（--tasks 与 claim）都吃它的输出。"""
+
+    @staticmethod
+    def fields(text):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("coh_wsc_fields", H.WSC)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod._card_fields(text)
+
+    def test_empty_value_does_not_swallow_next_line(self):
+        """空字段值不许把下一行吞成自己的值：`assignee:` 挨着 `title:` 时，
+        `:\\s*` 会越过换行把下一行整个抓进来——空 assignee 就被当成了有认领者，
+        认领冲突判定与 claim 都会跟着错。工作区残留修复（2026-09-29）的钉子。"""
+        status, who = self.fields("status: doing\nassignee: \ntitle: 顺手一行\n")
+        self.assertEqual(status, "doing")
+        self.assertEqual(who, [], "空 assignee 不该抓到下一行的 title")
+
+    def test_plain_values_still_parse(self):
+        self.assertEqual(self.fields("status: doing\nassignee: [zcode-0926a]"),
+                         ("doing", ["zcode-0926a"]))
+
+
 if __name__ == "__main__":
     unittest.main()
