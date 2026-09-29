@@ -8,6 +8,7 @@
 import ast
 import collections
 import re
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -133,6 +134,26 @@ class DistributionSurface(unittest.TestCase):
             text = (H.REPO / rel).read_text(encoding="utf-8")
             hits = re.findall(r"[（(][^）)]{0,12}\d{3,}\s*行[^）)]*[）)]", text)
             self.assertEqual(hits, [], f"{rel} 写死了行数 {hits}，改由行数上限测试钉住")
+
+    def test_no_control_characters_in_tracked_text(self):
+        """文本里不许留 C0 控制字符：本轮就出过一次——生成 Python 源码的 shell 里写 `D:\\a\\_temp`，
+        `\\a` 被当成响铃符写进 CHANGELOG，人眼看是正常文字，字节里藏了 0x07。
+        这类字符只能由机器发现，不能指望读。"""
+        banned = {chr(c) for c in range(0x20) if chr(c) not in "\t\n\r"} | {chr(0x7f)}
+        out = subprocess.run(["git", "ls-files"], cwd=str(H.REPO), capture_output=True,
+                             text=True, encoding="utf-8", errors="replace").stdout
+        bad = []
+        for rel in out.splitlines():
+            if not rel.endswith((".md", ".py", ".yml", ".toml", ".json", "pre-commit")):
+                continue
+            f = H.REPO / rel
+            if not f.is_file():
+                continue
+            text = f.read_text(encoding="utf-8", errors="replace")
+            hits = sorted({hex(ord(c)) for c in text if c in banned})
+            if hits:
+                bad.append((rel, hits))
+        self.assertEqual(bad, [], f"这些文件里藏了控制字符：{bad}")
 
     def test_docs_declare_the_real_self_test_count(self):
         """写死条数比写死行数值得留（"零依赖 N 条"是对用户的承诺），但必须跟实跑对齐。
