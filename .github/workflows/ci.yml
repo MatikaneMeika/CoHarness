@@ -27,7 +27,18 @@ jobs:
       - name: git 版本（钩子端到端测试要用 sh 跑 pre-commit）
         run: git --version
       - name: unittest（不安装任何依赖）
-        run: python -m unittest discover -s tests -v
+        # 失败时把红掉的测试名写成 annotation：job 日志要登录才能看，annotation 公开页面就能读。
+        # 这条差别很实在——本仓库曾因 CI 红却读不到日志，只能靠本地复现猜了两轮。
+        shell: bash
+        run: |
+          python -m unittest discover -s tests -v > "$RUNNER_TEMP/ci-test.log" 2>&1
+          rc=$?
+          if [ $rc -ne 0 ]; then
+            grep -E '^(FAIL|ERROR): ' "$RUNNER_TEMP/ci-test.log" | head -20 | sed 's/^/::error::/'
+            grep -E '^(Ran |OK|FAILED)' "$RUNNER_TEMP/ci-test.log" | head -5 | sed 's/^/::error::/'
+          fi
+          tail -4 "$RUNNER_TEMP/ci-test.log"
+          exit $rc
 
   oracle:
     name: 差分预言机对照（python-frontmatter）
@@ -40,4 +51,13 @@ jobs:
           uv venv .venv
           uv pip install --python .venv/bin/python python-frontmatter pyyaml
       - name: 全套测试（此时差分用例不 skip）
-        run: .venv/bin/python -m unittest discover -s tests -v
+        shell: bash
+        run: |
+          .venv/bin/python -m unittest discover -s tests -v > "$RUNNER_TEMP/ci-test.log" 2>&1
+          rc=$?
+          if [ $rc -ne 0 ]; then
+            grep -E '^(FAIL|ERROR): ' "$RUNNER_TEMP/ci-test.log" | head -20 | sed 's/^/::error::/'
+            grep -E '^(Ran |OK|FAILED)' "$RUNNER_TEMP/ci-test.log" | head -5 | sed 's/^/::error::/'
+          fi
+          tail -4 "$RUNNER_TEMP/ci-test.log"
+          exit $rc

@@ -2,6 +2,8 @@
 
 > 格式：`- YYYY-MM-DD [晋升 I-xxx@来源项目] 摘要`；非晋升的本体演进用 `[演进]` 标签，缺陷修复用 `[缺陷修复]` 并附复现方式。只增不改。
 
+- 2026-09-29 [演进] **CI 失败要把红掉的测试名写成 annotation——日志要登录才能看，annotation 不用**（起因是本轮实测：封闭环境修好之后推一次，ubuntu 两条腿与 oracle 都绿了，只剩 windows 两条腿红，而我读不到 job 日志：raw logs 匿名 404、未认证 API 被出口 IP 限流、annotations 只有 "Process completed with exit code 1"。等于每轮都要靠本地猜）：`ci.yml` 两个跑自测的步骤改成 `shell: bash` + 先把输出写到 `"$RUNNER_TEMP/ci-test.log"`，非零退出前用 `grep -E '^(FAIL|ERROR): '` 与 `grep -E '^(Ran |OK|FAILED)'` 把测试名和总结行以 `::error::` 形式打出来，再 `tail -4` 保留原始结尾，最后 `exit $rc` 保持红。写进 RUNNER_TEMP 而不是工作树，免得给"面板只读、跑完工作区不变"那类断言添变量。验证：`../.venv-coh` 里的 PyYAML 解析 `ci.yml` 通过（stdlib 4 步、最后一步 shell=bash）；同一段 grep+sed 管道拿假日志本地跑过，输出形如 `::error::FAIL: test_x (t.A.test_x)`。
+
 - 2026-09-29 [缺陷修复] **四条 CI 腿从第 1 次运行就红，本机 244 条却全绿：测试蹭了开发机的全局 git 配置**（复现：把 `HOME`/`USERPROFILE`/`GIT_CONFIG_GLOBAL` 指到一个空目录再跑全套 → 2 条判红，内层试装副本的套件也判红；还原成本机环境就全绿）：`tests/test_claim.py::test_claim_without_remote_stays_local` 只给仓库写了 `user.name`，没写 `user.email`，`wsc claim` 内部那次 `git commit` 在本机被全局配置兜住、在 runner 上直接 `Please tell me who you are` 退出 1；另一条红是连带——`--apply-check` 门禁会在临时副本里再跑一遍全套，内层一红门禁就判「补丁让自测变红」。**根因不是 CI 环境特殊，是测试没把自己和开发机隔开**——这种「本机绿」测不出真实用户的失败。
   两处一起改：①那条测试补上 `user.email`（只设 name 不够，commit 两样都要）；②`tests/helpers.py` 的 `run()` 从此强制封闭 git 环境——把 `GIT_CONFIG_GLOBAL` 与 `GIT_CONFIG_SYSTEM` 指到一个空文件，测试要身份只能走 `GIT_ID`（`-c` 注入）或给仓库写 local config，蹭不到全局。这条改动本身就是回归测试：以后再有测试依赖开发机配置，本机就会红，不用等 CI 才发现。
   取证过程也记一下：匿名状态下 job 日志读不到（raw logs 全 404，annotations 只有 Process completed with exit code 1），但公开页面给了两条决定性事实——oracle job 通过、stdlib 四条腿全红，且连 windows/py3.13 也红（我本机同版本是绿的）。于是把嫌疑从「Linux 轴」改到「runner 的干净环境」，一次本地复现就中了。验证：封闭环境下 `python -m unittest discover -s tests` 244 条 OK（skipped=4，expected failures=1，443.5 秒）。
