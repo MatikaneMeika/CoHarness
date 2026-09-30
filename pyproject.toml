@@ -12,7 +12,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "coharness"
-version = "1.2.0"
+version = "1.2.1"
 description = "四套 Markdown 协作骨架 + 零依赖工具链：让多个 AI 工具在同一个仓库里不打架"
 readme = "README.md"
 requires-python = ">=3.11"
