@@ -106,10 +106,10 @@ python panel.py                              # 在克隆里跑同一个入口，
 两条都真机验过：`mintty -e coh-panel`，没装机的克隆里 `mintty -e python <库>\panel.py`。
 设计与否决记录在 `docs/rfcs/RFC-0002-面板展示面.md`。
 
-仓库自带 283 条自测，跑起来不需要装任何东西：
+仓库自带 290 条自测，跑起来不需要装任何东西：
 
 ```bash
-python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows × py3.11/3.13 上跑同样的命令
+python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows/macos × py3.11/3.12/3.13 上跑同样的命令
 ```
 
 覆盖的是承诺本身：check.py 的每条执法（命名、卡格式、认领冲突、改动挂卡、stale）、面板只读与分叉报警、pre-commit 端到端拦与放、`wsc init` 在各种目标目录下的行为、四套骨架的目录地图与占位符是否自洽。另有一条差分测试拿 `python-frontmatter` 当预言机对照自写解析器——那是开发期的事，没装就自动跳过，不影响上面这条命令，也不进任何骨架。
