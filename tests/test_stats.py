@@ -39,6 +39,18 @@ class StatsGround(unittest.TestCase):
         self.assertIn("ts", e)
         self.assertIn("harness", e)
 
+    def test_telemetry_is_trimmed_so_readers_stay_bounded(self):
+        """记账文件不许无界增长：stats/面板每次都要读全量，几千行之后展示面会被拖慢。
+        超过上限就截到最近一段——最新那行必须在（它是"最近一次 check"的数据源）。"""
+        self.tel.parent.mkdir(parents=True, exist_ok=True)
+        filler = "\n".join(json.dumps({"ts": "2020-01-01T00:00:00", "n": i})
+                           for i in range(2001))
+        self.tel.write_text(filler + "\n", encoding="utf-8", newline="\n")
+        H.check(self.proj, "--tasks")
+        lines = self.tel.read_text(encoding="utf-8").splitlines()
+        self.assertLessEqual(len(lines), 1000, f"记账文件没被截断：{len(lines)} 行")
+        self.assertIn("rc", json.loads(lines[-1]), "最新一行必须留下")
+
     def test_telemetry_stays_out_of_git(self):
         H.check(self.proj)
         self.assertTrue(self.tel.exists())

@@ -26,7 +26,7 @@ except ImportError:                    # curl/源码树直跑
 
 # 渲染层的名字再导出（名字表只写一份，逐个绑成模块全局）：展示面对外仍是 board.*
 for _name in ("CORE", "UNKNOWN_ROLE", "RESET", "BOLD", "DIM", "RED", "GREEN", "YELLOW",
-              "CYAN", "MAGENTA", "MARKS", "_bar", "_clip", "_clip_left", "_title", "clip",
+              "CYAN", "MAGENTA", "MARKS", "_bar", "_clip_left", "_title", "clip",
               "dw", "grouped_by_role", "pad", "render_card", "render_projects",
               "render_tasks", "rpad"):
     globals()[_name] = getattr(board_render, _name)
@@ -240,11 +240,21 @@ def load_check(project):
     装载期间临时关掉字节码写入，别人的项目里照样不留 __pycache__，"只读"承诺
     不变。正确的 __file__ 让 check.py 的 ROOT 指向该项目，于是
     load_cards/parse_frontmatter 与 pre-commit 判的完全同一套。
+
+    装载结果按 (路径, mtime) 缓存：watch 每 5 秒快照一次，指纹缓存只挡住快照重算、
+    挡不住模块装载——不缓存的话多项目 watch 每轮都在重编同一份执法脚本。
     """
     f = Path(project) / "scripts" / "check.py"
     if not f.is_file():
         raise SystemExit(f"[panel] {project} 里没有 scripts/check.py——这个目录不是 CoHarness 实例，"
                          f"或装机不完整（补救：python -m coharness.wsc init <骨架> <路径>）")
+    bucket = _pcache(project)
+    try:
+        stamp = f.stat().st_mtime_ns
+    except OSError:
+        stamp = None
+    if stamp is not None and bucket.get("check_stamp") == (str(f), stamp):
+        return bucket["check_mod"]
     spec = importlib.util.spec_from_file_location("coh_panel_check", f)
     mod = importlib.util.module_from_spec(spec)
     prev = sys.dont_write_bytecode
@@ -253,6 +263,8 @@ def load_check(project):
         spec.loader.exec_module(mod)
     finally:
         sys.dont_write_bytecode = prev
+    if stamp is not None:
+        bucket["check_stamp"], bucket["check_mod"] = (str(f), stamp), mod
     return mod
 
 

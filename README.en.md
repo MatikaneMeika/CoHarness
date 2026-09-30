@@ -100,7 +100,7 @@ panel in a terminal that hands out a real TTY — Git's own mintty, verified bot
 
 ## Self-tests
 
-291 tests, no install required:
+296 tests, no install required:
 
 ```bash
 python -m unittest discover -s tests

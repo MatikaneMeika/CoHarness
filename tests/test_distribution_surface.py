@@ -109,6 +109,13 @@ class DistributionSurface(unittest.TestCase):
                            if m.split(".")[0] not in sys.stdlib_module_names and m not in FIRST_PARTY)
             self.assertEqual(extra, [], f"{p.name} 引了第三方依赖: {extra}")
 
+    def test_hint_paths_are_joined_not_hardcoded(self):
+        """提示语里的路径要拼 os.sep：写死反斜杠的 `{note}\\pre-commit` 在 POSIX 上照原样打印，
+        用户看到的是 `hooks\\pre-commit`（Windows 口径渗进跨平台输出）。"""
+        src = (H.REPO / "wsc.py").read_text(encoding="utf-8")
+        for bad in (r"\\pre-commit", r"\\pre-push"):
+            self.assertNotIn(bad, src, f"wsc.py 里写死了反斜杠路径 {bad}——用 os.path.join")
+
     def test_scripts_make_no_network_call(self):
         for p in ALL:
             src = p.read_text(encoding="utf-8")

@@ -59,20 +59,22 @@ def rpad(text, width):
 
 
 def _clip_left(text, width):
-    """路径要保尾巴（区分 proj/p 的在最后一节），所以从左截。"""
+    """路径要保尾巴（区分 proj/p 的在最后一节），所以从左截——同样按显示宽度算。"""
     text = str(text)
-    return text if len(text) <= width else "…" + text[-(width - 1):]
-
-
-def _clip(text, width):
-    text = str(text)
-    if len(text) <= width:
+    if dw(text) <= width:
         return text
-    return text[:max(0, width - 1)] + "…"
+    out, used = "", 0
+    for ch in reversed(text):
+        w = 2 if unicodedata.east_asian_width(ch) in "WF" else 1
+        if used + w > max(0, width - 1):
+            break
+        out, used = ch + out, used + w
+    return "…" + out
 
 
 def _title(lines, text, width):
-    lines.append(MARKS["bar"] * 3 + " " + text + " " + MARKS["bar"] * max(0, width - len(text) - 5))
+    lines.append(MARKS["bar"] * 3 + " " + text + " "
+                 + MARKS["bar"] * max(0, width - dw(text) - 5))
     return lines
 
 
@@ -94,15 +96,17 @@ def grouped_by_role(cards):
 def render_card(snap, card, width=78, color=True):
     """第 3 页：卡详情——勾选项、git 佐证、跨工作树副本、可复制的命令。"""
     out = []
-    _title(out, f"{card['id']} · {card['title']}", width)
+    # 标题文字按可用宽度截（宽度 - 两侧的 "#" 边饰）：不截的话长卡名会让整行超宽，
+    # --plain 下直接在终端里折行
+    _title(out, clip(f"{card['id']} · {card['title']}", max(0, width - 5)), width)
     out.append(f"  状态 {card['status']} · 认领 {', '.join(card['assignees']) or '—'}"
                f" · 角色 {card['role']} · 更新 {card['updated'] or '—'}")
     out.append(f"  验收清单 {_bar(card['done'], card['total'], 14)}")
     for done, text in card["items"]:
         mark = MARKS["ok"] if done else MARKS["idle"]
         col = GREEN if done else DIM
-        out.append((col + f"    [{mark}] {_clip(text, width - 10)}" + RESET) if color
-                   else f"    [{mark}] {_clip(text, width - 10)}")
+        out.append((col + f"    [{mark}] {clip(text, width - 10)}" + RESET) if color
+                   else f"    [{mark}] {clip(text, width - 10)}")
     if not card["items"]:
         out.append("    （这张卡没有验收清单节——勾选项即完成度的前提是写了清单）")
     reviews = card.get("reviews") or []
@@ -114,8 +118,8 @@ def render_card(snap, card, width=78, color=True):
             out.append((RED + head + RESET) if (r["unread"] and color) else head)
             if r["comment"]:
                 col = "" if r["unread"] else DIM
-                out.append((col + f"      {_clip(r['comment'], width - 8)}" + RESET)
-                           if col and color else f"      {_clip(r['comment'], width - 8)}")
+                out.append((col + f"      {clip(r['comment'], width - 8)}" + RESET)
+                           if col and color else f"      {clip(r['comment'], width - 8)}")
     out.append("")
     out.append(f"  边界内提交：{card['commits']} 次"
                + (f"，作者 {', '.join(card['authors'])}" if card["authors"] else ""))
@@ -148,7 +152,7 @@ def render_projects(rows, cursor, width=78, color=True):
     """第 1 页：本机装出来的项目。返回 (行列表, 光标行号)。"""
     out = []
     cursor_row = 2                                    # 标题 + 表头之后就是第一行数据
-    _title(out, f"CoHarness 面板 · 本机项目（{len(rows)}）", width)
+    _title(out, clip(f"CoHarness 面板 · 本机项目（{len(rows)}）", max(0, width - 5)), width)
     out.append("   " + pad("项目（AGENTS.md 没填名就显示路径）", 34) + pad("骨架", 26)
                + rpad("在做", 6) + rpad("待办", 6) + rpad("报警", 6))
     for i, r in enumerate(rows):
@@ -171,9 +175,9 @@ def render_tasks(snap, cursor, width=78, color=True):
     """第 2 页：任务列表，按角色分组，核心角色置顶。返回 (行列表, 下标序, 光标行号)。"""
     out = []
     cursor_row = 0
-    _title(out, f"{_clip_left(snap['label'], 40)} · 任务看板", width)
+    _title(out, clip(f"{_clip_left(snap['label'], 40)} · 任务看板", max(0, width - 5)), width)
     line = (f"骨架 schema {snap['schema'] or '未声明'} · 目标 "
-            f"{_clip(snap['goal'], 40) or '（装机时没填，AGENTS.md 里还是占位符）'}")
+            f"{clip(snap['goal'], 40) or '（装机时没填，AGENTS.md 里还是占位符）'}")
     out.append(DIM + "  " + line + RESET if color else "  " + line)
     t = snap["telemetry"]
     last = t["last"] or {}
@@ -188,14 +192,14 @@ def render_tasks(snap, cursor, width=78, color=True):
         out.append(RED + f"  {len(snap['card_errors'])} 张卡格式不合法（check.py 拒绝解析）：" + RESET
                    if color else f"  {len(snap['card_errors'])} 张卡格式不合法：")
         for e in snap["card_errors"][:3]:
-            out.append("    " + _clip(e, width - 4))
+            out.append("    " + clip(e, width - 4))
     index_of = {id(c): i for i, c in enumerate(snap["cards"])}
     order, pos = [], 0
     for role, cards in grouped_by_role(snap["cards"]):
         core = any(k in role.lower() for k in CORE)
         head = f"{role}  ·  {len(cards)} 张"
         out.append("")
-        out.append((BOLD + CYAN if core and color else "") + _clip(head, width)
+        out.append((BOLD + CYAN if core and color else "") + clip(head, width)
                    + (RESET if core and color else ""))
         for c in cards:
             if pos == cursor:

@@ -601,6 +601,18 @@ def check_diff(cards, tasks_rel=""):
     return ok
 
 
+def _parse_updated(text):
+    """updated_date 整串按候选格式解析，容忍秒与 ISO 的 T 分隔——旧实现按格式串长度切输入，
+    空格分隔碰巧切得对，T 分隔会静默退化成"只按日期算"（stale 判断最多差 24 小时）。"""
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M",
+                "%Y-%m-%d"):
+        try:
+            return datetime.strptime(str(text).strip(), fmt)
+        except ValueError:
+            continue
+    return None
+
+
 def check_stale(cards):
     """advisory：只提示，不影响退出码（不拦截提交）。"""
     now = datetime.now()
@@ -612,13 +624,7 @@ def check_stale(cards):
         if not updated:
             stale.append((c["name"], "缺 updated_date"))
             continue
-        ts = None
-        for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d"):
-            try:
-                ts = datetime.strptime(updated[:len(fmt) + 2].strip(), fmt)
-                break
-            except ValueError:
-                continue
+        ts = _parse_updated(updated)
         if ts is None:
             stale.append((c["name"], f"updated_date 无法解析: {updated}"))
             continue
@@ -672,6 +678,9 @@ def _harness_id():
     return name.strip() if ok and name.strip() else "unknown"
 
 
+TELEMETRY_MAX_LINES = 2000   # 记账上限：stats/面板每次都读全量，无界增长会拖慢展示面
+
+
 def record_run(checks, rc, my_card, started):
     """把本次执行追加进项目内 .agent/telemetry.jsonl：本地、零上传、可关。
 
@@ -689,7 +698,12 @@ def record_run(checks, rc, my_card, started):
         f.parent.mkdir(parents=True, exist_ok=True)
         with open(f, "a", encoding="utf-8", newline="\n") as fh:
             fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
-    except OSError as e:
+        # 记账要有界：超过上限就截到最近一半，最新那行必须留下（它是"最近一次 check"的数据源）
+        lines = f.read_text(encoding="utf-8").splitlines()
+        if len(lines) > TELEMETRY_MAX_LINES:
+            f.write_text("\n".join(lines[-(TELEMETRY_MAX_LINES // 2):]) + "\n",
+                         encoding="utf-8", newline="\n")
+    except (OSError, UnicodeDecodeError) as e:
         print(f"[遥测] 写入 {f} 失败（不影响检查结论）: {e}", file=sys.stderr)
 
 

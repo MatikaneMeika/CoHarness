@@ -6,9 +6,11 @@
 3. **报警要有凭据**——"提交了没勾""跨工作树分叉"这些旗子必须由真 git 状态触发，
    不能是渲染层的装饰。角色一律从 AGENTS.md 所有权表推，推不到就明说推不到。
 """
+import os
 import shutil
 import subprocess
 import sys
+import time
 import types
 import unittest
 import unittest.mock
@@ -101,6 +103,15 @@ class BoardData(unittest.TestCase):
         make_card(self.proj, "T-013", allowed=("  - code/frontend/",))
         snap = board.project_snapshot(self.proj, deep=False)
         self.assertIn("coder", snap["cards"][0]["role"])
+
+    def test_load_check_reuses_the_module_until_the_file_changes(self):
+        """watch 每 5 秒快照一次：check.py 一个字没改就别重复编译（指纹缓存只挡快照重算，
+        挡不住模块装载——多项目 watch 时每轮都在重编同一份执法脚本）。文件真变了必须重载。"""
+        first = board.load_check(self.proj)
+        self.assertIs(board.load_check(self.proj), first, "check.py 没变却重新装载了一遍")
+        f = self.proj / "scripts" / "check.py"
+        os.utime(f, (time.time() + 10, time.time() + 10))
+        self.assertIsNot(board.load_check(self.proj), first, "check.py 变了必须重新装载")
 
     def test_flag_submit_without_tick(self):
         make_card(self.proj, "T-014", items=("- [ ] 一条",))
@@ -332,6 +343,19 @@ class ScrollFilterKeys(unittest.TestCase):
                 [self.snap], self.tasks_state(), w, False)
             bad = [l for l in lines if board.dw(board.clip(l, w)) > w]
             self.assertFalse(bad, f"宽度 {w} 下有行超出显示宽度：{bad[:2]}")
+
+    def test_clip_helpers_measure_display_width_not_char_count(self):
+        """中文占两列，渲染层的截断必须按显示宽度算：`_clip_left`/`_clip`/`_title` 曾用 len()，
+        含中文的标题与路径能到预算宽度的两倍——`--plain` 直接打印这些行，越界就在终端里折行错位。"""
+        self.assertLessEqual(board.dw(board._clip_left("项目/很长的中文路径/卡-001.md", 12)), 12,
+                             "从左边截的路径也要按显示宽度")
+        self.assertLessEqual(board.dw(board.clip("中文字符很长的清单项", 10)), 10)
+        lines = []
+        board._title(lines, "中文字符标题啊", 20)
+        self.assertLessEqual(board.dw(lines[0]), 20, f"标题条超出宽度：{lines[0]!r}")
+        snap = dict(self.snap, label="中文项目名很长很长很长很长很长")
+        head = board.render_tasks(snap, 0, 20, False)[0][0]
+        self.assertLessEqual(board.dw(head), 20, f"任务页标题条超出宽度：{head!r}")
 
     def test_term_width_falls_back_when_no_terminal(self):
         with unittest.mock.patch.object(board.os, "get_terminal_size",

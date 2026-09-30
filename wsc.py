@@ -445,7 +445,7 @@ def cmd_init(args):
     if status == "installed":
         print(f"  pre-commit 钩子已装进 {note}（所有 harness 的提交都过 check.py）")
     elif status == "exists":
-        print(f"  {note}\\pre-commit 已存在，未覆盖")
+        print(f"  {os.path.join(note, 'pre-commit')} 已存在，未覆盖")
     elif status == "not-a-repo":
         print("  [未装钩子] 目标目录还不是 git 仓库，check.py 不会被自动触发：")
         print("            先 `git init` 再重跑 wsc init，或手动 "
@@ -460,7 +460,7 @@ def cmd_init(args):
     if pstatus == "installed":
         print(f"  pre-push 钩子已装进 {pnote}（merge 不跑 pre-commit，推送前再查一次看板——I-004）")
     elif pstatus == "exists":
-        print(f"  {pnote}\\pre-push 已存在，未覆盖")
+        print(f"  {os.path.join(pnote, 'pre-push')} 已存在，未覆盖")
 
     if args.adapter:
         made = write_adapters(dst, args.adapter)

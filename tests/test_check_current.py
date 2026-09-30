@@ -122,6 +122,21 @@ class TestCardFormat(TempProjectCase):
         H.write_card(self.proj, "T-014", updated=datetime.now().strftime("%Y-%m-%d %H:%M"))
         self.assertCheck(["--stale"], 0, "[stale] 无僵死卡")
 
+    def test_updated_date_with_t_separator_is_not_read_as_date_only(self):
+        """同一时刻写成 `2020-01-01 12:00` 与 `2020-01-01T12:00:00` 必须报同样的僵死小时数。
+
+        旧实现按格式串长度切输入再解析（`updated[:len(fmt) + 2]`），遇到 ISO 的 T 分隔就
+        解析失败、静默退化成"只按日期算"——stale 判断最多差 24 小时，而且没有任何提示。
+        """
+        import re
+        H.write_card(self.proj, "T-030", updated="2020-01-01 12:00")
+        H.write_card(self.proj, "T-031", updated="2020-01-01T12:00:00")
+        out = self.assertCheck(["--stale"], 0)
+        hours = {cid: int(re.search(rf"{cid}\.md: 已约 (\d+)h", out).group(1))
+                 for cid in ("T-030", "T-031")}
+        self.assertLessEqual(abs(hours["T-030"] - hours["T-031"]), 1,
+                             f"T 分隔的时间戳被读成了按天：{hours}")
+
     def test_real_backlog_card_parses(self):
         """真 Backlog.md 1.53.0 写出的 frontmatter 必须落在我们的子集内（2026-09-28 实测原文）。"""
         d = self.proj / "backlog" / "tasks"

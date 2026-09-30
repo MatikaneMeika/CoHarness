@@ -19,7 +19,8 @@ except ImportError:                    # curl/源码树直跑
 
 # 名字表只写一份：两个分支导入的是同一个 board，重复两遍迟早漂（而且白占四十行）。
 # 逐个绑成模块全局而不是就地 import，是为了 `panel_mod.project_snapshot` 这类测试注入点照旧可用。
-for _name in ("_bar", "_clip", "_git", "_hours_since", "_norm_prefix", "_table_rows", "_title",
+for _name in ("_bar", "_clip_left", "_git", "_hours_since", "_norm_prefix", "_table_rows",
+              "_title",
               "WATCH_SECONDS", "board_fingerprint", "checklist", "clip", "collect_projects",
               "commits_touching", "current_page_lines", "grouped_by_role", "load_check",
               "navigate", "project_card_facts", "project_snapshot", "render_card",
