@@ -7,7 +7,7 @@
 
 | 项 | 状态 | 证据 |
 |---|---|---|
-| 包定义 `pyproject.toml` | 已就绪 | `tests/test_packaging.py`（7 条：运行期零依赖、三个入口脚本、wheel 清单覆盖骨架、不夹带开发面文件、指纹可移植、README 双语互链真存在、`init` 复制文件数与文档一致） |
+| 包定义 `pyproject.toml` | 已就绪 | `tests/test_packaging.py`（8 条：运行期零依赖、四个门面各有入口且面板有短别名、wheel 清单覆盖骨架、不夹带开发面文件、指纹可移植、README 双语互链真存在、`init` 复制文件数与文档一致） |
 | 本地安装可用 | 已实测两种 | ① `uv build --wheel` + 干净 venv 里 `pip install --no-build-isolation ./`；② `uv tool install --from <wheel> coharness` 的隔离工具环境（pipx 等价，工具目录指 D 盘）。两条都验到 `wsc list` 列出四套骨架、`wsc init 03 <空目录>` 复制出 28 个文件、`wsc check` 全绿；wheel 含四个门面的模块与入口，装出来的 `coharness-panel` 在仓库外目录跑通（rc=0） |
 | 单文件模式的真实边界 | 已改真 | `README.md` / `README.en.md` / `SECURITY.md` 不再承诺"curl 一个 wsc.py 就能装骨架"；`wsc.py init` 在无骨架目录时给出可执行的两条替代路径（`tests/test_packaging.py::test_single_file_mode_says_what_it_cannot_do`） |
 | 双语 README | 已就绪 | `README.md` ↔ `README.en.md` 互链 |
@@ -20,7 +20,7 @@
 ```markdown
 ## CoHarness v1.1.0
 
-把 README 的承诺变成可验证的事实：自测从 0 条（v1.0 没有一套可跑测试）长到 266 条零依赖、执法面纯标准库、分发面分层。
+把 README 的承诺变成可验证的事实：自测从 0 条（v1.0 没有一套可跑测试）长到 267 条零依赖、执法面纯标准库、分发面分层。
 
 ### 新增
 - `wsc claim <项目> <卡号> <标识>`：认领原子化。同步→校验→写卡→过项目自己的 check.py→提交→推 main

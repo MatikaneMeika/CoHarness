@@ -90,20 +90,23 @@ python maintain.py audit   <项目>   # 只读体检：钩子在否/被没被改
 python evolve.py  <项目> --out 记录.json   # 晋升审核：机器取客观证据，人填有效性与必要性
 ```
 
-看板上"谁在做什么、做到哪一步"是第四个入口（只读，一个字都不写）：
+看板上"谁在做什么、做到哪一步"是第四个入口（只读，一个字都不写）。`pipx install coharness` 之后直接敲 `coh-panel`（`coharness-panel` 是同一个入口的长名字）：
 
 ```bash
-python panel.py --plain                    # 一次性纯文本：本机装出来的项目 + 在做/待办/报警数
-python panel.py --plain --project <项目>    # 直接看某个项目的任务列表（按角色分组，核心角色置顶）
-python panel.py                            # 全屏三页：项目 → 任务 → 卡详情（↑↓/Enter/Backspace/q）
+coh-panel --plain                            # 一次性纯文本：本机装出来的项目 + 在做/待办/报警数
+coh-panel --plain --project <项目>            # 直接看某个项目的任务列表（按角色分组，核心角色置顶）
+coh-panel                                    # 全屏三页：项目 → 任务 → 卡详情（↑↓/Enter/Backspace/q）
+python panel.py                              # 在克隆里跑同一个入口，不必装机
 ```
 
 完成度读卡片里本来就有的 `## 验收清单` 勾选项，佐证读 git 与本地运行记账；两边对不上会直接标出来：
 `提交了没勾`、`勾了没提交`、`done 但清单未满`、`跨工作树分叉`（同一张卡在不同工作树里状态不一致，
 `.coh-p2` 演练真出现过）。角色是从 `AGENTS.md` 的单写者所有权表推的，推不到就写"边界没落进所有权表"，不猜。
-终端默认全屏，本机 conhost 花屏就用 `--plain`。设计与否决记录在 `docs/rfcs/RFC-0002-面板展示面.md`。
+终端默认全屏，本机 conhost 花屏就用 `--plain`；要全屏就换给得了 TTY 的终端——Git 自带的 mintty
+两条都真机验过：`mintty -e coh-panel`，没装机的克隆里 `mintty -e python <库>\panel.py`。
+设计与否决记录在 `docs/rfcs/RFC-0002-面板展示面.md`。
 
-仓库自带 266 条自测，跑起来不需要装任何东西：
+仓库自带 267 条自测，跑起来不需要装任何东西：
 
 ```bash
 python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows × py3.11/3.13 上跑同样的命令

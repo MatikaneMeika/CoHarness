@@ -108,6 +108,35 @@ class Packaging(unittest.TestCase):
                 self.assertEqual(int(m), n,
                                  f"{rel} 写着复制 {m} 个文件，实跑复制 {n} 个")
 
+    def test_panel_quick_entry_is_a_console_script_and_is_documented(self):
+        """面板是四个门面里唯一天天敲的那个：入口要有能敲的名字，文档也得印出来。
+
+        `pipx install coharness` 之后手上没有 `panel.py` 这个路径可敲，README 却只给了
+        `python panel.py ...`（那只在 clone 里成立）。短入口与文档口径由同一条钉子对齐，
+        不许一个改了另一个不跟。
+        """
+        scripts = PYPROJECT["project"]["scripts"]
+        self.assertEqual(scripts["coh-panel"], "coharness.panel:main",
+                         "展示面缺可敲的短入口")
+        self.assertEqual(scripts["coharness-panel"], "coharness.panel:main",
+                         "短入口是不加的别名，四门面口径的名字不许动")
+        for rel in ("README.md", "README.en.md"):
+            text = (H.REPO / rel).read_text(encoding="utf-8")
+            self.assertIn("coh-panel", text, f"{rel} 装了机也找不到短入口")
+            for block in re.findall(r"```bash\n(.*?)```", text, re.S):
+                if "panel" not in block:
+                    continue
+                for line in block.splitlines():
+                    tok = line.split("#")[0].split()
+                    if not tok:
+                        continue
+                    if tok[0] == "python":
+                        self.assertTrue((H.REPO / tok[1]).is_file(),
+                                        f"{rel} 印了不存在的文件：{tok[1]}")
+                    else:
+                        self.assertIn(tok[0], scripts,
+                                      f"{rel} 印了装不出来的命令：{tok[0]}")
+
     def test_version_and_license_are_real(self):
         self.assertRegex(PYPROJECT["project"]["version"], r"^\d+\.\d+\.\d+$")
         self.assertTrue((H.REPO / PYPROJECT["project"]["license"]["file"]).exists())

@@ -86,14 +86,21 @@ Maintenance and review live in two other entry points, which deliberately do **n
 project: `maintain.py` (install fingerprint, schema migration, read-only audit) and `evolve.py`
 (promotion review). The split follows ADR-10: the distribution surface stays small and auditable.
 
-## Self-tests
+## The board
 
-A read-only board is the fourth entry point: `python panel.py --plain` lists projects on this
-machine, then task lists grouped by role and per-card detail. Progress comes from the
+The read-only board is the fourth entry point. After `pipx install coharness` type `coh-panel`
+(`coharness-panel` is the same entry under its long name); inside a clone `python panel.py` is the
+same command with nothing installed. `coh-panel --plain` lists projects on this machine, then task
+lists grouped by role and per-card detail. Progress comes from the
 card's own `- [ ]` acceptance checklist, cross-checked against git and local run records;
 mismatches are flagged (`committed but unticked`, `diverged across worktrees`).
+Full screen is the default. On Windows the legacy console garbles it: use `--plain`, or start the
+panel in a terminal that hands out a real TTY — Git's own mintty, verified both ways:
+`mintty -e coh-panel`, or `mintty -e python panel.py` inside a clone.
 
-266 tests, no install required:
+## Self-tests
+
+267 tests, no install required:
 
 ```bash
 python -m unittest discover -s tests

@@ -15,7 +15,7 @@ description: CoHarness 一句话调度与自我迭代入口。当用户说「coh
 - 触发词：「coharness X」（也接受 `coharness：X`）；X 为任务描述，可带 `@<路径>`，缺省 = 当前目录
 - 项目内日常操作命令：`python <LIB>/wsc.py {sync|check|improve|doctor} [项目路径]`
 - 想知道全局状态（谁在做哪张卡、做到哪一步、哪里不一致）：`python <LIB>/panel.py --plain [项目路径]`
-  —— 只读看板，按角色分组并把"提交了没勾 / 勾了没提交 / 跨工作树分叉"标出来，不写任何文件
+  （库装过机就敲 `coh-panel`，同一个入口）—— 只读看板，按角色分组并把"提交了没勾 / 勾了没提交 / 跨工作树分叉"标出来，不写任何文件
 - **已经装好骨架的项目**：不必告诉它库在哪。`wsc init` 会把库的绝对路径代进项目自己的
   `AGENTS.md`（含 ROUTER.md 那一行）与 `.agent/` 里的命令，换一个 harness 打开项目读到的就是可执行命令
 - 本 skill 不含任何规则本体；一切项目规则以目标项目内 `AGENTS.md` 与 `.agent/` 为准

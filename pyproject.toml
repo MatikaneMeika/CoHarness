@@ -37,6 +37,9 @@ wsc = "coharness.wsc:main"
 coharness-maintain = "coharness.maintain:main"
 coharness-evolve = "coharness.evolve:main"
 coharness-panel = "coharness.panel:main"
+# 面板是四个门面里唯一天天敲的，给它一个短别名（coharness- 前缀在 Windows 上也省 6 键）；
+# 长名字照旧保留——四门面的口径不变，短入口只是别名。
+coh-panel = "coharness.panel:main"
 
 # 开发期工具（差分预言机）。没装它们，`python -m unittest discover -s tests` 照样全绿，
 # 只是那 4 条对照用例自动 skip。
