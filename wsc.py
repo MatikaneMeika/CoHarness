@@ -1124,9 +1124,8 @@ def _remember_claim(project: Path, card_file: str):
 def cmd_claim(args):
     """原子认领：先同步，再校验，写卡过钩子，推 main；被抢就放弃并回到远端状态。
 
-    冲突判定不另写一套：写卡后交给项目自己的 check.py --tasks（一 harness 一张 doing 卡、
-    边界交集不得并行都在那里）。认领被拒时 reset --hard origin/main 是安全的，
-    因为开头已经确认过工作区干净。
+    冲突判定不另写一套：写卡后交给项目自己的 check.py --tasks（一 harness 一张 doing 卡、边界交集
+    不得并行都在那里）。认领被拒时 reset --hard origin/main 是安全的，因为开头已确认工作区干净。
     """
     project = Path(args.project).resolve()
     if not (project / "scripts" / "check.py").exists():
@@ -1143,10 +1142,11 @@ def cmd_claim(args):
         print(f"  此刻可认领：{', '.join(free) if free else '（无）'}")
         return
 
+    # 写回卡片只动 mtime 不动内容时 git status 会误报脏（2026-09-30 实测挡下过占卡）：先显式刷新索引
+    _run(["git", "update-index", "--refresh"], project)
     dirty = _run(["git", "status", "--porcelain"], project)
     if (dirty.stdout or "").strip():
-        sys.exit("[claim] 工作区有未提交改动：先提交或撤销再认领，"
-                 "免得把别人的改动卷进这次提交")
+        sys.exit("[claim] 工作区有未提交改动：先提交或撤销再认领，免得把别人的改动卷进这次提交")
 
     has_remote = "origin" in (_run(["git", "remote"], project).stdout or "")
     if has_remote:
@@ -1171,8 +1171,7 @@ def cmd_claim(args):
             free = ", ".join(_claimable(project)) or "（无，等看板更新）"
             if attempt == 1:
                 sys.exit(f"[claim] {args.card} {why}。此刻可认领：{free}")
-            sys.exit(f"[claim] 抢输了：{args.card} {why}，已回到远端状态。"
-                     f"此刻可认领：{free}\n{out}")
+            sys.exit(f"[claim] 抢输了：{args.card} {why}，已回到远端状态。此刻可认领：{free}\n{out}")
         if _run(["git", "add", rel], project).returncode != 0:
             sys.exit("[claim] git add 失败")
         commit = _run(["git", "commit", "-q", "-m", f"claim {args.card} -> {args.who}"], project)

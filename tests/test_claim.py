@@ -4,7 +4,9 @@
 四步绑在一条命令里；任何一步不成就还原，不留半截状态。
 最后一条是真双进程并发（不是模拟）：同一张卡两个身份同时认领，必须恰好一个成功。
 """
+import os
 import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -114,6 +116,17 @@ class ClaimGround(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("未提交改动", H.out(r))
         self.assertEqual(self.card(self.a, "T-001"), before, "脏工作区阶段就该退出，不碰卡")
+
+    def test_touched_but_unchanged_card_does_not_block_the_claim(self):
+        """只动 mtime、内容没变的卡片不算脏。上一次 claim 写回卡片会留下这种 stat 脏，
+        而 `git status` 在索引缓存没被刷新的环境里会把它报成"有未提交改动"——2026-09-30
+        实测把占卡挡在门外（同一份文件 diff 为空、blob 哈希相同）。前置检查先显式刷新索引。
+        注：本机 git 会自愈，所以这条是口径钉（钉住"刷新后再判"这一步不许被删）。"""
+        card = self.a / "backlog" / "tasks" / "T-001.md"
+        os.utime(card, (time.time() + 120, time.time() + 120))
+        r = H.wsc("claim", str(self.a), "T-001", "harness-a")
+        self.assertEqual(r.returncode, 0, msg=H.out(r))
+        self.assertNotIn("未提交改动", H.out(r))
 
     def test_overlap_with_an_active_card_is_refused_and_reverted(self):
         """认领判定复用项目自己的执法：与在做的卡边界相交，认领当场被拒并把卡还原。"""

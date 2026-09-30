@@ -7,6 +7,7 @@ navigate() 是纯状态机，git 查询与缓存也在这里。按键、清屏�
 不写第二套口径（与 wsc claim 同一条原则）。
 """
 
+import hashlib
 import importlib.util
 import os
 import re
@@ -241,8 +242,10 @@ def load_check(project):
     不变。正确的 __file__ 让 check.py 的 ROOT 指向该项目，于是
     load_cards/parse_frontmatter 与 pre-commit 判的完全同一套。
 
-    装载结果按 (路径, mtime) 缓存：watch 每 5 秒快照一次，指纹缓存只挡住快照重算、
+    装载结果按**内容哈希**缓存：watch 每 5 秒快照一次，指纹缓存只挡住快照重算、
     挡不住模块装载——不缓存的话多项目 watch 每轮都在重编同一份执法脚本。
+    戳必须是内容而不是 mtime：文件被换掉但 mtime 回填（或文件系统时间戳粒度内相同）时，
+    按 mtime 判会一直用旧模块，执法脚本的改动静默失效。
     """
     f = Path(project) / "scripts" / "check.py"
     if not f.is_file():
@@ -250,10 +253,10 @@ def load_check(project):
                          f"或装机不完整（补救：python -m coharness.wsc init <骨架> <路径>）")
     bucket = _pcache(project)
     try:
-        stamp = f.stat().st_mtime_ns
+        stamp = hashlib.sha256(f.read_bytes()).hexdigest()
     except OSError:
         stamp = None
-    if stamp is not None and bucket.get("check_stamp") == (str(f), stamp):
+    if stamp is not None and bucket.get("check_stamp") == stamp:
         return bucket["check_mod"]
     spec = importlib.util.spec_from_file_location("coh_panel_check", f)
     mod = importlib.util.module_from_spec(spec)
@@ -264,7 +267,7 @@ def load_check(project):
     finally:
         sys.dont_write_bytecode = prev
     if stamp is not None:
-        bucket["check_stamp"], bucket["check_mod"] = (str(f), stamp), mod
+        bucket["check_stamp"], bucket["check_mod"] = stamp, mod
     return mod
 
 

@@ -105,13 +105,27 @@ class BoardData(unittest.TestCase):
         self.assertIn("coder", snap["cards"][0]["role"])
 
     def test_load_check_reuses_the_module_until_the_file_changes(self):
-        """watch 每 5 秒快照一次：check.py 一个字没改就别重复编译（指纹缓存只挡快照重算，
-        挡不住模块装载——多项目 watch 时每轮都在重编同一份执法脚本）。文件真变了必须重载。"""
+        """watch 每 5 秒快照一次：check.py 内容没变就别重复编译（指纹缓存只挡快照重算，
+        挡不住模块装载——多项目 watch 时每轮都在重编同一份执法脚本）。"""
         first = board.load_check(self.proj)
         self.assertIs(board.load_check(self.proj), first, "check.py 没变却重新装载了一遍")
         f = self.proj / "scripts" / "check.py"
         os.utime(f, (time.time() + 10, time.time() + 10))
-        self.assertIsNot(board.load_check(self.proj), first, "check.py 变了必须重新装载")
+        self.assertIs(board.load_check(self.proj), first, "只动了 mtime、内容没变，不必重编")
+        f.write_text(f.read_text(encoding="utf-8") + "\n# 真改了\n", encoding="utf-8", newline="\n")
+        self.assertIsNot(board.load_check(self.proj), first, "内容变了必须重新装载")
+
+    def test_load_check_cache_keys_on_content_not_mtime(self):
+        """缓存戳要认内容：文件被换掉但 mtime 落回原值（或文件系统时间戳粒度内）时，
+        按 mtime 判会一直用旧模块——执法脚本的改动静默失效，比多编译一次危险得多。"""
+        first = board.load_check(self.proj)
+        f = self.proj / "scripts" / "check.py"
+        stamp = f.stat().st_mtime_ns
+        f.write_text(f.read_text(encoding="utf-8") + "\n# 改了但 mtime 回填\n",
+                     encoding="utf-8", newline="\n")
+        os.utime(f, ns=(stamp, stamp))
+        self.assertIsNot(board.load_check(self.proj), first,
+                         "内容变了（mtime 相同）却拿到了旧模块")
 
     def test_flag_submit_without_tick(self):
         make_card(self.proj, "T-014", items=("- [ ] 一条",))
