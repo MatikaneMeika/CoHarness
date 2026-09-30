@@ -167,5 +167,68 @@ class TestCardFormat(TempProjectCase):
         self.assertCheck(["--tasks"], 0, "[任务卡] 无任务卡")
 
 
+class TestAdvisoryHints(TempProjectCase):
+    """advisory 面（借鉴 orca 的显式 outcome）：交接说明 `结果:` 首行与验收清单可观察证据。
+
+    只提示、不拦提交、不影响退出码——对老卡零破坏；格式执法（响亮失败）留给
+    卡格式的声明子集，不在这里。
+    """
+
+    def write_done_card(self, handoff, checklist_line="- [ ] `python scripts/check.py` 全绿"):
+        H.write_card(self.proj, "T-900", status="done")
+        p = self.proj / "backlog" / "tasks" / "T-900.md"
+        t = p.read_text(encoding="utf-8")
+        t = t.replace("（收工时填，≤5 行）", handoff).replace("- [ ] check.py 全绿", checklist_line)
+        p.write_text(t, encoding="utf-8")
+        return p
+
+    def test_handoff_without_result_line_gets_a_hint(self):
+        self.write_done_card("做了 X\n注意 Y")
+        text = self.assertCheck(["--stale"], 0)
+        self.assertIn("交接说明缺首行", text)
+        self.assertIn("结果: 成功|失败|部分", text)
+
+    def test_handoff_with_result_line_is_silent(self):
+        self.write_done_card("结果: 成功\n做了 X")
+        self.assertNotIn("交接说明缺首行", self.assertCheck(["--stale"], 0))
+
+    def test_unverifiable_checklist_item_gets_a_hint(self):
+        self.write_done_card("结果: 成功", checklist_line="- [ ] 做好优化")
+        text = self.assertCheck(["--stale"], 0)
+        self.assertIn("不含可观察证据", text)
+
+    def test_verifiable_checklist_item_is_silent(self):
+        self.write_done_card("结果: 成功", checklist_line="- [ ] `wsc check` 全绿")
+        self.assertNotIn("不含可观察证据", self.assertCheck(["--stale"], 0))
+
+
+class TestReviewNotesFormat(TempProjectCase):
+    """F1 审阅意见的格式执法：节内条目必须 File: 开头，续行只允许 Lines:/Comment:。"""
+
+    def append(self, p, entries):
+        p.write_text(p.read_text(encoding="utf-8") + "\n## 审阅意见\n" + entries,
+                     encoding="utf-8")
+
+    def test_malformed_entry_is_blocked(self):
+        H.write_card(self.proj, "T-910")
+        self.append(self.proj / "backlog" / "tasks" / "T-910.md",
+                    "- 看看这个文件\n  Comment: \"没有 File: 开头\"\n")
+        text = self.assertCheck(["--tasks"], 1)
+        self.assertIn("审阅意见", text)
+
+    def test_wellformed_section_passes(self):
+        H.write_card(self.proj, "T-911")
+        self.append(self.proj / "backlog" / "tasks" / "T-911.md",
+                    '- [ ] File: docs/ARCHITECTURE.md\n  Lines: 12-18\n  Comment: "改这里"\n')
+        self.assertCheck(["--tasks"], 0)
+
+    def test_stray_prose_in_section_is_blocked(self):
+        H.write_card(self.proj, "T-912")
+        self.append(self.proj / "backlog" / "tasks" / "T-912.md",
+                    "- [ ] File: docs/ARCHITECTURE.md\n  Lines: all\n  Comment: \"x\"\n随手一句\n")
+        text = self.assertCheck(["--tasks"], 1)
+        self.assertIn("Lines:", text)
+
+
 if __name__ == "__main__":
     unittest.main()

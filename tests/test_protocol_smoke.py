@@ -129,6 +129,22 @@ class ProtocolSmoke(unittest.TestCase):
         self.assertIn('"AGENTS.md"', check_src, "check.py 应该读所有权表做机械核对")
         self.assertIn("单写者所有权表", check_src, "执法面认不得表名，判不了行")
 
+    def test_j_stale_is_a_hint_never_an_authorization(self):
+        """stale ≠ 改派授权（借鉴 orca 的 liveness 宪法："缺席不授权任何动作"）。
+
+        三个说 stale 的文件必须同一口径：stale 是提示、改派要正面证据；
+        交接说明首行 `结果: 成功|失败|部分` 的约定也要写进卡片约定。
+        哪天改口径，三处必须一起改——这里钉死。
+        """
+        proto = (H.SKELETON / ".agent" / "workflows" / "parallel-protocol.md").read_text(encoding="utf-8")
+        self.assertIn("不是改派授权", proto, "parallel-protocol 的 stale 节缺宪法句")
+        self.assertIn("正面证据", proto, "parallel-protocol 没写改派的正面证据要求")
+        integrator = (H.SKELETON / ".agent" / "roles" / "integrator.md").read_text(encoding="utf-8")
+        self.assertIn("正面证据", integrator, "integrator 角色页没同步")
+        conv = (H.SKELETON / ".agent" / "tasks" / "CARD-CONVENTION.md").read_text(encoding="utf-8")
+        self.assertIn("正面证据", conv, "卡片约定没同步")
+        self.assertIn("结果: 成功|失败|部分", conv, "交接说明缺 `结果:` 首行约定")
+
     def test_h_no_resident_card_in_skeleton(self):
         """死锁的根因是"唯一授权来源是一张必须长持的卡"，路修通后它不该再出现。"""
         self.assertFalse((H.SKELETON / BOARD).exists())

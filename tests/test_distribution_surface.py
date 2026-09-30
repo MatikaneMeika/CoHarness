@@ -30,8 +30,11 @@ FIRST_PARTY = {"wsc", "maintain", "board"}         # 同目录自带模块（pan
 # 分发是单文件契约，拆不出去；维持它的教学性注释优先于压缩）。这是为 check.py 的第一次上调。
 # 2026-09-29 展示面上调（board 580→650、panel 220→300）：滚动/翻页/状态筛选与长转义键
 # 是展示面承诺内的功能生长；panel 的增量是读键/视口 IO，渲染逻辑仍在 board（可测的那边）。
-LINE_BUDGET = {H.WSC: 1250, H.CHECK_SRC: 700, H.REPO / "evolve.py": 400,
-               H.REPO / "maintain.py": 700, H.REPO / "board.py": 650, H.REPO / "panel.py": 300}
+# 2026-09-30 再调（check 700→760、board 650→700）：v1.2.0 五机制（stale 宪法 advisory、
+# 可观察验收、审阅意见契约、分支绑定）全部长在执法面与展示面本体——check.py 单文件随骨架
+# 分发的契约没变，拆不出去；wsc.py 1234/1250 逼近上限，下一条新命令仍按 ADR-10 归位 maintain.py。
+LINE_BUDGET = {H.WSC: 1250, H.CHECK_SRC: 760, H.REPO / "evolve.py": 400,
+               H.REPO / "maintain.py": 700, H.REPO / "board.py": 700, H.REPO / "panel.py": 300}
 NETWORK_TOKENS = ("urllib.request", "http.client", "socket", "ftplib", "smtplib",
                   "poplib", "imaplib", "telnetlib", "requests", "urllib3", "httpx", "aiohttp")
 

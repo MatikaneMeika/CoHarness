@@ -8,7 +8,7 @@
 
 1. **合并（串行化）**：进 main 一次一人、先到先得；后到者先 rebase 最新 main。项目内 rebase / merge 保持一种风格；冲突以契约文件与 ARCHITECTURE.md 为准裁决，裁决记 ADR
 2. **状态总裁决**：任务卡 status 的最终确认归本角色——防止多 harness 互相覆盖状态；认领冲突（同卡双 assignee）由本角色按 git 时间戳裁决
-3. **stale 改派**：doing/review 卡超 24h 无新 commit → assignee 置空、状态退 todo，卡交接说明记一行改派原因与时间（详见 parallel-protocol）
+3. **stale 改派**：stale 是提示不是授权——改派需要正面证据（对方明确退出、自报放弃、或超 48h 沉默且联系无果），执行：assignee 置空、状态退 todo，卡交接说明首行记 `结果: 改派（原因+时间）`（详见 parallel-protocol）
 4. **CHANGELOG**：合并后统一核对条目（新增/修复/变更/升级，影响范围准确）
 5. **清理**：
    - 合并完的分支删除；`git-wt list` 对照，孤儿工作树/分支清零

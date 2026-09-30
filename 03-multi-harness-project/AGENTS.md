@@ -121,3 +121,18 @@ AGENTS.md / .agent/ 规则文件 > spec-kit 产物 > 任务卡内容 > 会话中
 
 组件版本按实测钉住：Backlog.md 1.53.0（`statuses` 键、默认英文三列需手改、卡文件名 `t-<n> - <标题>.md`、
 `--agent-instructions` 会往 AGENTS.md 注入 24 行——本骨架要求填 `none`）。
+
+## 深读指引（遇到什么读什么）
+
+本文件只保留高频规则；下表这些文档**在对应情境下必须先读再动**（指向不存在的文档是缺陷，由 test_skeleton_integrity 钉住）：
+
+| 遇到什么 | 读哪份 | 为什么 |
+|---|---|---|
+| 写卡、改卡、填交接说明 | `.agent/tasks/CARD-CONVENTION.md` | 卡是唯一协调面，格式错会被 check.py 响亮拒绝 |
+| 认领、并行、stale 改派 | `.agent/workflows/parallel-protocol.md` | 先到先得与合并纪律的权威版本 |
+| 担任某个角色 | `.agent/roles/`（pm / architect / integrator / reviewer / tester / doc-writer / coder-） | 角色职责与动作清单 |
+| 谁能写哪个路径 | 本文件「单写者所有权表」 | 授权总裁决，扩权先改表（check.py 机械核对 role: 标签） |
+| 依赖没装、命令失败 | 本文件「降级行为」 | 每个依赖的降级路径与 probe |
+| 改架构、动接口 | `docs/ARCHITECTURE.md` | 架构唯一事实源，变更走 ADR |
+| 为什么这么做 | `docs/DECISIONS.md` | ADR 只增不改 |
+| 查交付历史 | `docs/CHANGELOG.md` | 合并收尾核对条目 |

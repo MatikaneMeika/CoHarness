@@ -1091,6 +1091,20 @@ def _stage_claim(project, card_id, who, now):
     return rel, None
 
 
+def _remember_claim(project: Path, card_file: str):
+    """F4：认领写进 git 本体——`branch.<当前分支>.coharness-card = <卡文件名>`。
+
+    面板的跨工作树绑定/分叉判定据此知道"哪个树在做哪张卡"，不必逐树读卡去猜。
+    写失败只提示，不影响认领结果（绑定是加速与展示，不是授权来源）。
+    """
+    st, branch = _git_field(["git", "rev-parse", "--abbrev-ref", "HEAD"], project)
+    if st != "ok" or not branch or branch == "HEAD":
+        return
+    r = _run(["git", "config", f"branch.{branch}.coharness-card", card_file], project)
+    if r.returncode != 0:
+        print("[claim] 认领已生效，但写分支绑定失败（不影响使用）")
+
+
 def cmd_claim(args):
     """原子认领：先同步，再校验，写卡过钩子，推 main；被抢就放弃并回到远端状态。
 
@@ -1152,10 +1166,12 @@ def cmd_claim(args):
             _run(["git", "reset", "-q", "--hard", "HEAD"], project)
             sys.exit(f"[claim] 提交被钩子拦下（已还原）：\n{out}")
         if not has_remote:
+            _remember_claim(project, Path(rel).name)
             print(f"[claim] 已本地认领 {args.card} → {args.who}（无 origin 远端，跳过 push：{rel}）")
             return
         push = _run(["git", "push", "-q", "origin", "HEAD:main"], project)
         if push.returncode == 0:
+            _remember_claim(project, Path(rel).name)
             print(f"[claim] {args.card} → {args.who}（第 {attempt} 次尝试，已进 main）")
             return
         out += (push.stdout or "") + (push.stderr or "")

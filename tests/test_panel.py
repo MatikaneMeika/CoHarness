@@ -339,6 +339,100 @@ class ScrollFilterKeys(unittest.TestCase):
             self.assertEqual(board.term_width(default=99), 99)
 
 
+class ReviewNotes(unittest.TestCase):
+    """F1 审阅意见协议：卡体可选节，条目三行结构（File:/Lines:/Comment:，借鉴 orca 的
+    diff 批注契约），勾选 = 已传达给 agent；未勾的就是未读队列。"""
+
+    ENTRIES = (
+        "- [ ] File: docs/ARCHITECTURE.md\n"
+        "  Lines: 12-18\n"
+        '  Comment: "接口这里要写清幂等性"\n'
+        "- [x] File: code/api/\n"
+        "  Lines: all\n"
+        '  Comment: "命名已经改好"\n'
+    )
+
+    def setUp(self):
+        self.tmp = H.tmp_dir()
+        self.addCleanup(H.rmtree, self.tmp)
+        self.proj = self.tmp / "proj"
+        r = H.wsc("init", "03", str(self.proj))
+        self.assertEqual(r.returncode, 0, msg=H.out(r))
+        git(self.proj, "init", "-q", "--initial-branch=main")
+
+    def append_reviews(self, p, entries=ENTRIES):
+        p.write_text(p.read_text(encoding="utf-8") + "\n## 审阅意见\n" + entries,
+                     encoding="utf-8", newline="\n")
+
+    def test_review_notes_parse(self):
+        p = make_card(self.proj, "T-050")
+        self.append_reviews(p)
+        notes = board.review_notes(p.read_text(encoding="utf-8"))
+        self.assertEqual(len(notes), 2)
+        self.assertTrue(notes[0]["unread"])
+        self.assertFalse(notes[1]["unread"])
+        self.assertEqual(notes[0]["lines"], "12-18")
+        self.assertEqual(notes[0]["file"], "docs/ARCHITECTURE.md")
+
+    def test_snapshot_counts_unread_reviews(self):
+        p = make_card(self.proj, "T-051")
+        self.append_reviews(p)
+        snap = board.project_snapshot(self.proj, deep=False)
+        self.assertEqual(snap["cards"][0]["reviews_unread"], 1)
+
+    def test_card_without_the_section_is_unaffected(self):
+        make_card(self.proj, "T-052")
+        snap = board.project_snapshot(self.proj, deep=False)
+        self.assertEqual(snap["cards"][0]["reviews_unread"], 0)
+
+    def test_worktree_bound_to_another_card_is_not_a_copy_of_this_one(self):
+        """F4：带 `branch.<名>.coharness-card` 绑定的工作树只算绑定卡的工作树——
+        别的卡的工作树里躺着这张卡的陈旧副本，不该报成"跨工作树分叉"；未绑定的按文件在场算。"""
+        p = make_card(self.proj, "T-070")
+        git(self.proj, "add", "-A")
+        git(self.proj, "commit", "-q", "-m", "建卡")
+        git(self.proj, "worktree", "add", "-q", str(self.tmp / "wt-b"), "-b", "wt-b")
+        rel = "backlog/tasks/T-070.md"
+        board._CACHE.update(worktrees=None, binds={})
+        self.assertEqual(len(board.worktree_copies(self.proj, rel)), 2,
+                         "未绑定：两个树都有这份卡文件，都算副本")
+        git(self.proj, "config", "branch.wt-b.coharness-card", "T-999.md")
+        board._CACHE.update(worktrees=None, binds={})
+        rows = board.worktree_copies(self.proj, rel)
+        self.assertEqual([r for r in rows if "wt-b" in str(r["path"])], [],
+                         "绑定到别的卡的工作树不许算这张卡的副本")
+        self.assertEqual(len(rows), 1, "主工作树仍在")
+
+    def test_tasks_badge_marks_unread_reviews(self):
+        card = dict(self.badge_card(), reviews_unread=2)
+        text = "\n".join(board.render_tasks(dict(self.badge_snap(), cards=[card]), 0, 78, False)[0])
+        self.assertIn("2条未读", text)
+
+    def test_card_page_renders_review_notes(self):
+        notes = [{"unread": True, "file": "docs/ARCHITECTURE.md", "lines": "12-18",
+                  "comment": "接口这里要写清幂等性"}]
+        card = dict(self.badge_card(), reviews=notes)
+        text = "\n".join(board.render_card(self.badge_snap(), card, 78, False))
+        self.assertIn("审阅意见", text)
+        self.assertIn("未读", text)
+        self.assertIn("接口这里要写清幂等性", text)
+
+    def badge_card(self):
+        return {"id": "T-060", "title": "甲", "status": "doing", "assignees": ["codex-a"],
+                "role": "coder", "allowed": ["docs/"], "rel": "backlog/tasks/T-060.md",
+                "done": 1, "total": 2, "items": [(True, "一"), (False, "二")], "commits": 3,
+                "recent": [], "authors": [], "copies": [], "flags": [],
+                "updated": "2026-09-28 09:00", "stale": False}
+
+    def badge_snap(self):
+        return {"path": Path("P"), "name": "示例项目", "label": "示例项目", "goal": "把事做成",
+                "run": "", "schema": "3", "columns": ["todo", "doing", "review", "done"],
+                "minimal": False, "card_errors": [], "owners": [], "heads": [], "diverged": 0,
+                "cards": [self.badge_card()],
+                "telemetry": {"runs": 0, "bad": 0, "file": Path("t"), "last": None,
+                              "harnesses": []}}
+
+
 class PosixLongEscapes(unittest.TestCase):
     """POSIX 读键要吃满整个转义序列：旧实现固定读 2 字符，Home/End/PgUp/PgDn 全都失灵。"""
 

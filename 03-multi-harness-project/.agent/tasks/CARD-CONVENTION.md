@@ -32,7 +32,7 @@
   提交被 pre-commit 拦下。留空和写错是两回事——`title:` 留空报"title 为空"，
   `title: 值: 值` 这种歧义写法直接报错，而不是猜一个值。
 
-## 卡体：固定五节（check.py 按"边界"节执法，缺节 = 违规）
+## 卡体：固定五节 + 可选审阅节（check.py 按"边界"节执法，缺节 = 违规）
 
 ```markdown
 ## 需求
@@ -50,19 +50,38 @@ forbidden_paths:
   - backlog/
 
 ## 验收清单
-- [ ] 可验证条目（禁止"做好"这类不可验证项）
+- [ ] `命令` 或 `路径` 或 `测试名`——每项必须指向可观察的证据（禁止"做好"这类不可验证项）
 
 ## 交接说明
-收工时填，≤5 行：做了什么 / 怎么验证的 / 注意什么。
+收工时填，≤5 行：**首行 `结果: 成功|失败|部分`**，然后做了什么 / 怎么验证的 / 注意什么。
 下一个接手的是另一个 harness，它没有你的会话记忆。
 ```
+
+### 可选节：`## 审阅意见`（人给 agent 提意见的队列）
+
+审阅者（人或另一 harness）把意见挂在卡上，agent 逐条消化后勾掉——勾选 = 已传达并处理。
+三行结构是**渲染契约**（借鉴 orca 的 diff 批注格式）：确定性、可机器定位，面板会数未读条目。
+
+```markdown
+## 审阅意见
+- [ ] File: docs/ARCHITECTURE.md
+  Lines: 12-18
+  Comment: "接口这里要写清幂等性"
+- [x] File: code/api/
+  Lines: all
+  Comment: "整卡意见写 all；这条已传达并改掉"
+```
+
+格式由 `check.py` 响亮执法：条目必须 `File: ` 开头，续行只允许 `Lines:`（行号或 `all`）与
+`Comment:`（引号包住的原文，`\` 与 `"` 要转义）。没有这一节的卡完全不受影响。
 
 ## 规则
 
 1. `allowed_paths` 是**代码与文档改动**的唯一授权：进入本次提交的改动超出即越权，pre-commit 拦截（判暂存集，没 `git add` 的不算；仓库的首个提交不执法）
    - **两个授权来源冲突时，以 `AGENTS.md` 的单写者所有权表为准**：卡可以把你自己的路径收窄，不能把表里标"只读"的路径扩成可写；要扩权先改表（走规则卡 + ADR）。
-     当前 `check.py` 只按卡片判越权，**没有**读所有权表做自动拦截——这条仍是纪律层约束，缺口记在 `.agent/improvements.md`（I-005）
+     这条已有机械核对（2026-09-29 起）：`check.py` 在提交时对表里"具体路径 + 具体角色"的行核对在做卡的 `role:<角色>` 标签，扩权当场拦；表里判不了的模板/散文行留给审核人
 2. **卡片文件（`backlog/tasks/*.md`）与 `.agent/improvements.md` 属自授权改动**：认领、状态流转、改进登记直接 commit + push main，不再要求被某张卡覆盖；`forbidden_paths` 默认含 `AGENTS.md` 与 `.agent/`（规则文件不许随实现卡改），看板目录不在其列
 3. 两卡的 `allowed_paths` 有交集 → 不能并行，回 pm 切分边界（`check.py` 当场拦：两张 doing/review 卡交集 = `[任务卡] 边界交集不得并行`）
 4. 状态流转优先走 `backlog task edit`（要先把 `backlog/config.yml` 的 `statuses` 改成上面四列，真工具默认是 `To Do/In Progress/Done`）；没装 CLI 时手改卡片文件同样合法
-5. stale 规则：doing/review 超 24h 无新 commit，integrator 可改派（改派也走 `backlog task edit`）
+5. stale 规则：doing/review 超 24h 无新 commit 会打 stale 标记——**stale 是提示，不是改派授权**；integrator 改派需要正面证据（对方明确退出、自报放弃、或超 48h 沉默且联系无果），并在交接说明首行记 `结果: 改派（原因+时间）`（改派也走 `backlog task edit`）
+6. 验收清单每项必须指向**可观察的证据**（反引号包住的命令、文件路径或测试名）；不含证据的项会被 `check.py` 提示（advisory，不拦截提交）

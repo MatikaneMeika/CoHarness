@@ -62,6 +62,16 @@ class ClaimGround(unittest.TestCase):
         self.assertIn("claim T-001 -> harness-a", H.git(self.a, "log", "--oneline", "-1").stdout)
         self.assertNotIn("status: doing", self.card(self.a, "T-002"), "只动被认领的那张卡")
 
+    def test_claim_binds_the_card_into_git_config(self):
+        """F4：认领把 `branch.<分支>.coharness-card` 写进 git config——状态存 git 本体，
+        面板的跨工作树绑定不用逐树读卡去猜。协议里 harness 就在 main 上提交，
+        所以绑定落在 main 分支名下是正确形状。"""
+        r = H.wsc("claim", str(self.a), "T-001", "harness-a")
+        self.assertEqual(r.returncode, 0, msg=H.out(r))
+        branch = H.git(self.a, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+        bound = H.git(self.a, "config", "--get", f"branch.{branch}.coharness-card").stdout.strip()
+        self.assertEqual(bound, "T-001.md", f"分支 {branch} 应绑定 T-001.md，实际: {bound!r}")
+
     def test_dry_run_touches_nothing(self):
         before = self.card(self.a, "T-001")
         head = H.git(self.a, "rev-parse", "HEAD").stdout

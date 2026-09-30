@@ -106,7 +106,7 @@ python panel.py                              # 在克隆里跑同一个入口，
 两条都真机验过：`mintty -e coh-panel`，没装机的克隆里 `mintty -e python <库>\panel.py`。
 设计与否决记录在 `docs/rfcs/RFC-0002-面板展示面.md`。
 
-仓库自带 267 条自测，跑起来不需要装任何东西：
+仓库自带 283 条自测，跑起来不需要装任何东西：
 
 ```bash
 python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows × py3.11/3.13 上跑同样的命令

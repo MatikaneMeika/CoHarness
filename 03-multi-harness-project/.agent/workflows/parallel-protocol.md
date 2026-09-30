@@ -58,8 +58,10 @@
 
 ## stale（僵死卡）处理
 
-- doing/review 卡超过 **24 小时**无新 commit（对照卡 `updated_date` 与 `git log`），即视为 stale
-- integrator 有改派权：把 assignee 置空、状态退回 todo，并在卡交接说明记一行改派原因与时间
+- doing/review 卡超过 **24 小时**无新 commit（对照卡 `updated_date` 与 `git log`），即打上 stale 标记
+- **stale 是提示，不是改派授权**：无更新、联系不上本身不构成改派依据——缺席 ≠ 死亡，卡可能只是慢
+- 改派需要**正面证据**：对方明确退出、自己报告放弃、或超过两倍阈值（48h）的沉默且联系无果；
+  由 integrator 执行——assignee 置空、状态退回 todo，并在卡交接说明**首行**记 `结果: 改派（原因+时间）`
 - 原 owner 回来时以看板现状为准，不恢复现场
 
 ## 合并纪律

@@ -134,6 +134,24 @@ class SkeletonIntegrity(unittest.TestCase):
                     if p.name == "__pycache__" or p.suffix == ".pyc"]
             self.assertEqual(junk, [], f"{sk} 带运行残留: {junk}")
 
+    def test_deep_read_index_conditions_reference_real_files(self):
+        """深读指引（03 骨架 AGENTS.md）里的"读哪份"必须是真文件——
+        指引指向不存在的文档比没有指引更糟：harness 按表去找，第一次就撞空。"""
+        agents = (H.REPO / "03-multi-harness-project" / "AGENTS.md").read_text(encoding="utf-8")
+        m = re.search(r"## 深读指引.*?\n(.*?)(?:\n## |\Z)", agents, re.S)
+        self.assertIsNotNone(m, "03 骨架缺「深读指引」节")
+        table = m.group(1)
+        refs = re.findall(r"`([^`\s]+?\.md)`", table)
+        self.assertGreaterEqual(len(refs), 5, f"深读指引条目太少: {refs}")
+        self.assertIn("`.agent/roles/`", table, "深读指引缺角色目录这一行")
+        for rel in refs:
+            if "<" in rel:            # roles/<角色>.md 这类模式行：查父目录即可
+                self.assertTrue((H.REPO / "03-multi-harness-project" / rel.split("<")[0]).is_dir(),
+                                f"深读指引的模式目录不存在: {rel}")
+                continue
+            self.assertTrue((H.REPO / "03-multi-harness-project" / rel).is_file(),
+                            f"深读指引指向不存在的文件: {rel}")
+
 
 if __name__ == "__main__":
     unittest.main()

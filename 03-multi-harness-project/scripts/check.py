@@ -299,6 +299,7 @@ def load_cards(tasks_dir: Path):
             "allowed": allowed,
             "forbidden": forbidden,
             "has_boundary": has_boundary,
+            "body": body,
         })
     return cards, errors
 
@@ -372,6 +373,21 @@ def check_tasks(cards, columns, card_errors=()):
                     problems.append(f"边界路径不存在: {rel}")
         if c["status"] == "doing" and len(c["assignees"]) == 1:
             doing_by.setdefault(c["assignees"][0], []).append(c["name"])
+        body = c.get("body") or ""
+        if "## 审阅意见" in body:
+            # 三行契约（借鉴 orca 的 diff 批注格式）：条目 File: 开头，续行只允许 Lines:/Comment:
+            seen_entry = False
+            for raw in body.split("## 审阅意见", 1)[1].split("\n## ", 1)[0].splitlines():
+                s = raw.strip()
+                if not s:
+                    continue
+                m = re.match(r"^[-*]\s*\[([ xX])\]\s*(.*)$", s)
+                if m:
+                    seen_entry = True
+                    if not m.group(2).startswith("File:"):
+                        problems.append(f"审阅意见条目必须以 `File: <路径>` 开头: {s[:40]}")
+                elif not seen_entry or not (s.startswith("Lines:") or s.startswith("Comment:")):
+                    problems.append(f"审阅意见续行只允许 `Lines:` / `Comment:`: {s[:40]}")
         if problems:
             ok = False
             print(f"[任务卡] {c['name']}:")
@@ -603,13 +619,43 @@ def check_stale(cards):
             continue
         hours = (now - ts).total_seconds() / 3600
         if hours > STALE_HOURS:
-            stale.append((c["name"], f"已约 {hours:.0f}h 无更新（> {STALE_HOURS}h，integrator 可改派）"))
+            stale.append((c["name"], f"已约 {hours:.0f}h 无更新（> {STALE_HOURS}h；stale 是提示不是改派授权）"))
     if stale:
         print(f"[stale] 提示（不拦截提交）: {len(stale)} 张卡疑似僵死")
         for name, why in stale:
             print(f"  - {name}: {why}")
     else:
         print("[stale] 无僵死卡")
+
+
+def check_hints(cards):
+    """advisory 提示（不拦截提交，不影响退出码；借鉴 orca 的显式 outcome 契约）：
+    ① done/review 卡的交接说明缺 `结果:` 首行——接手方没有会话记忆，结果行是机器可扫的收工口径；
+    ② 验收清单项不含反引号命令/路径/测试名——可能不可验证。格式执法仍在卡格式声明子集层，这里只提示。"""
+    hints = []
+    for c in cards:
+        body = c.get("body") or ""
+        if c["status"] in ("done", "review") and "## 交接说明" in body:
+            sec = body.split("## 交接说明", 1)[1].split("\n## ", 1)[0]
+            lines = [l.strip() for l in sec.splitlines() if l.strip()]
+            if lines and not lines[0].startswith("结果:"):
+                hints.append(f"{c['name']}: 交接说明缺首行 `结果: 成功|失败|部分`")
+        if "## 验收清单" in body:
+            sec = body.split("## 验收清单", 1)[1].split("\n## ", 1)[0]
+            n = 0
+            for line in sec.splitlines():
+                m = re.match(r"^\s*[-*]\s*\[([ xX])\]\s*(.*)$", line)
+                if not m:
+                    continue
+                n += 1
+                if "`" not in m.group(2):
+                    hints.append(f"{c['name']}: 验收清单第 {n} 项不含可观察证据（反引号命令/路径/测试名）")
+    if hints:
+        print(f"[提示] advisory（不拦截提交）: {len(hints)} 条")
+        for h in hints:
+            print(f"  - {h}")
+    else:
+        print("[提示] 无")
 
 
 def _harness_id():
@@ -675,6 +721,7 @@ def main():
         ok &= ran["diff"]
     if run_all or args.stale:
         check_stale(cards)  # advisory
+        check_hints(cards)  # advisory（结果行 / 可观察验收）
         ran["stale"] = True
     if run_all:
         print("\n结论:", "全部通过 ✓" if ok else "存在违规 ✗（见上）")

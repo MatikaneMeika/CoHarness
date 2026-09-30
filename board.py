@@ -142,6 +142,30 @@ def checklist(body):
     return sum(1 for d, _ in items if d), len(items), items
 
 
+def review_notes(body):
+    """卡体「## 审阅意见」节的条目：返回 [{"unread", "file", "lines", "comment"}]。
+
+    三行结构是人给 agent 提意见的渲染契约（借鉴 orca 的 diff 批注格式）：
+    checkbox 勾选 = 已传达并处理，未勾的就是未读队列。没有这节就是 []。"""
+    if "## 审阅意见" not in body:
+        return []
+    section = body.split("## 审阅意见", 1)[1].split("\n## ", 1)[0]
+    notes, cur = [], None
+    for line in section.splitlines():
+        m = re.match(r"^\s*[-*]\s*\[([ xX])\]\s*File:\s*(.*)$", line)
+        if m:
+            cur = {"unread": m.group(1).lower() != "x", "file": m.group(2).strip(),
+                   "lines": "", "comment": ""}
+            notes.append(cur)
+        elif cur is not None:
+            s = line.strip()
+            if s.startswith("Lines:"):
+                cur["lines"] = s[6:].strip()
+            elif s.startswith("Comment:"):
+                cur["comment"] = s[8:].strip().strip('"')
+    return notes
+
+
 def collect_projects(args):
     """顶层数据源：命令行给的项目优先，其余来自本机登记表（活着的）。"""
     paths = [Path(p).resolve() for p in args.projects if Path(p).is_dir()]
@@ -230,7 +254,7 @@ def grouped_by_role(cards):
 
 # --watch 每 5 秒重画一次；不缓存的话每张卡每轮都要起一个 git 进程，卡片一多就是白烧 CPU。
 # 键是 HEAD：提交一变（有人收工/合并了）缓存就整体作废，卡体内容本来每次都重读，不会读到旧的。
-_CACHE = {"head": None, "commits": {}, "worktrees": None}
+_CACHE = {"head": None, "commits": {}, "worktrees": None, "binds": {}}
 
 
 def _cache_commit(key, value):
@@ -380,13 +404,14 @@ def project_snapshot(project, deep=True):
     if deep:
         head = head_sha(project)
         if _CACHE["head"] != head:
-            _CACHE.update(head=head, commits={}, worktrees=None)
+            _CACHE.update(head=head, commits={}, worktrees=None, binds={})
     for c in cards_raw:
         try:
             body = c["path"].read_text(encoding="utf-8").split("---", 2)[-1]
         except (OSError, UnicodeDecodeError):
             body = ""
         done, total, items = checklist(body)
+        notes = review_notes(body)
         raw_role = role_of([_norm_prefix(p) for p in c["allowed"]], facts["owners"])
         role = UNKNOWN_ROLE if raw_role == UNKNOWN_ROLE else role_label(raw_role, facts["roles"])
         rel = str(c["path"].relative_to(project)).replace(os.sep, "/")
@@ -422,6 +447,7 @@ def project_snapshot(project, deep=True):
             "done": done, "total": total, "items": items, "commits": n_commits,
             "recent": recent, "authors": sorted(authors), "copies": copies,
             "flags": flags, "updated": updated,
+            "reviews": notes, "reviews_unread": sum(1 for r in notes if r["unread"]),
             "stale": active and _hours_since(updated) > INACTIVE_HOURS})
     order = {col: i for i, col in enumerate(columns)}
     snap["cards"].sort(key=lambda k: (order.get(k["status"], 9), k["id"]))
@@ -442,6 +468,17 @@ def render_card(snap, card, width=78, color=True):
                    else f"    [{mark}] {_clip(text, width - 10)}")
     if not card["items"]:
         out.append("    （这张卡没有验收清单节——勾选项即完成度的前提是写了清单）")
+    reviews = card.get("reviews") or []
+    if reviews:
+        out.append(f"  审阅意见 {sum(1 for r in reviews if not r['unread'])}/{len(reviews)} 已传达")
+        for r in reviews:
+            head = f"    [{'未读' if r['unread'] else '已传达'}] {r['file']}" \
+                   + (f":{r['lines']}" if r["lines"] and r["lines"] != "all" else "")
+            out.append((RED + head + RESET) if (r["unread"] and color) else head)
+            if r["comment"]:
+                col = "" if r["unread"] else DIM
+                out.append((col + f"      {_clip(r['comment'], width - 8)}" + RESET)
+                           if col and color else f"      {_clip(r['comment'], width - 8)}")
     out.append("")
     out.append(f"  边界内提交：{card['commits']} 次"
                + (f"，作者 {', '.join(card['authors'])}" if card["authors"] else ""))
@@ -531,6 +568,9 @@ def render_tasks(snap, cursor, width=78, color=True):
             order.append(index_of[id(c)])
             who = ",".join(c["assignees"]) or "—"
             badge = " ".join("!" + f for f in c["flags"]) or "  "
+            unread = c.get("reviews_unread") or 0
+            if unread:
+                badge += f" !{unread}条未读"
             stale = " ~stale" if c["stale"] else ""
             row = (mark + "  " + pad(clip(c["id"], 8), 8) + pad(clip(c["status"], 7), 7)
                    + pad(clip(who, 12), 12) + pad(_bar(c["done"], c["total"], 6), 13)
@@ -601,17 +641,34 @@ def unfilled(value):
 
 
 def worktree_copies(project, rel_card):
-    """同一张卡在各工作树的副本状态——I-007 点名的分叉症状在这里变成可见。"""
+    """同一张卡在各工作树的副本状态——I-007 点名的分叉症状在这里变成可见。
+
+    F4 起，带 `branch.<名>.coharness-card` 绑定的工作树（wsc claim 写入）只在该绑定
+    指向这张卡时才计入副本集——别的卡的工作树里躺着这张卡的陈旧副本，不该报成分叉；
+    没绑定的分支按文件在场算（向后兼容：绑定是加速与降噪，不是授权来源）。
+    """
     trees = _CACHE["worktrees"]
     if trees is None:
         ok, out = _git(project, ["worktree", "list", "--porcelain"])
         if not ok:
             return []
-        trees = [Path(line.split(" ", 1)[1]) for line in out.splitlines()
-                 if line.startswith("worktree ")]
+        trees = []
+        for line in out.splitlines():
+            if line.startswith("worktree "):
+                trees.append([Path(line.split(" ", 1)[1]), ""])
+            elif line.startswith("branch ") and trees:
+                trees[-1][1] = line.split(" ", 1)[1].replace("refs/heads/", "")
         _CACHE["worktrees"] = trees
+    name = Path(rel_card).name
     rows = []
-    for wt in trees:
+    for wt, branch in trees:
+        bound = _CACHE["binds"].get(branch)
+        if bound is None:
+            ok, out = _git(project, ["config", "--get", f"branch.{branch}.coharness-card"])
+            bound = out.strip() if ok and out.strip() else ""
+            _CACHE["binds"][branch] = bound
+        if bound and bound != name:
+            continue
         f = wt / rel_card
         if not f.is_file():
             continue
