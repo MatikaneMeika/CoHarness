@@ -17,8 +17,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        python-version: ["3.11", "3.13"]
+        # 3.12 腿专门验 rmtree(onexc) 分支（3.11 走 onerror）；macOS 补 POSIX 第三形态，
+        # 路径分隔符/终端行为类问题不许等用户撞上才发现。
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

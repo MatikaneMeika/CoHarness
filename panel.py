@@ -228,49 +228,54 @@ def main(argv=None):
     # 顶层也吃 deep：浅快照算不出报警，画 0 等于把"没查"报成"没有报警"（实测卡上挂着
     # "跨工作树分叉"时顶层仍是 0）。代价由 board 的 HEAD 缓存与上面的指纹缓存兜住。
     snaps = build(deep=True)
-    while True:
-        lines, ids, cursor_row = current_page_lines(snaps, state, width, color)
-        try:
-            height = max(5, os.get_terminal_size().lines - 2)
-        except (OSError, ValueError):
-            height = 20
-        state["top"] = viewport(len(lines), cursor_row, state.get("top", 0), height)
-        shown = lines[state["top"]:state["top"] + height]
-        overflow = f"  -*- {len(lines)} 行，PgUp/PgDn 翻页 · s 筛选" if len(lines) > height else ""
-        sys.stdout.write("\033[2J\033[H\033[?25l")
-        sys.stdout.write("\n".join(clip(l, width) for l in shown)
-                         + ("\n" + overflow if overflow else "") + "\n")
-        sys.stdout.flush()
-        key = read_key(args.watch or 60)
-        if key == "tick":
-            if args.watch:
+    try:
+        while True:
+            lines, ids, cursor_row = current_page_lines(snaps, state, width, color)
+            try:
+                height = max(5, os.get_terminal_size().lines - 2)
+            except (OSError, ValueError):
+                height = 20
+            state["top"] = viewport(len(lines), cursor_row, state.get("top", 0), height)
+            shown = lines[state["top"]:state["top"] + height]
+            overflow = f"  -*- {len(lines)} 行，PgUp/PgDn 翻页 · s 筛选" if len(lines) > height else ""
+            sys.stdout.write("\033[2J\033[H\033[?25l")
+            sys.stdout.write("\n".join(clip(l, width) for l in shown)
+                             + ("\n" + overflow if overflow else "") + "\n")
+            sys.stdout.flush()
+            key = read_key(args.watch or 60)
+            if key == "tick":
+                if args.watch:
+                    snaps = build(deep=True)
+                continue
+            if key == "r":
                 snaps = build(deep=True)
-            continue
-        if key == "r":
-            snaps = build(deep=True)
-            continue
-        if key == "s" and state["page"] == "tasks":
-            cyc = FILTER_CYCLE.index(state.get("filter", "all"))
-            state["filter"] = FILTER_CYCLE[(cyc + 1) % len(FILTER_CYCLE)]
-            state["cursor"], state["top"] = 0, 0
-            continue
-        if key == "ESC":
-            key = "back" if state["page"] != "projects" else "q"
-        prev_page, prev_cursor, ids_before = state["page"], state["cursor"], ids
-        state = navigate(state, KEYMAP.get(key, key), max(len(ids), 1))
-        if state.get("quit"):
-            break
-        if DEPTH[state["page"]] != DEPTH[prev_page]:
-            state["top"] = 0                      # 换页：视口回到页顶
-        if DEPTH[state["page"]] > DEPTH[prev_page]:
-            # 下钻：光标所在位置就是被选中的对象，ids 是这一页的真实下标顺序
-            state[FIELD[state["page"]]] = ids_before[min(prev_cursor, len(ids_before) - 1)] \
-                if ids_before else 0
-            state["cursor"] = 0
-            snaps = build(deep=True)
-        elif DEPTH[state["page"]] < DEPTH[prev_page] and state["page"] == "projects":
-            state["cursor"] = min(state["sel"], max(len(snaps) - 1, 0))
-    sys.stdout.write("\033[?25h\n")
+                continue
+            if key == "s" and state["page"] == "tasks":
+                cyc = FILTER_CYCLE.index(state.get("filter", "all"))
+                state["filter"] = FILTER_CYCLE[(cyc + 1) % len(FILTER_CYCLE)]
+                state["cursor"], state["top"] = 0, 0
+                continue
+            if key == "ESC":
+                key = "back" if state["page"] != "projects" else "q"
+            prev_page, prev_cursor, ids_before = state["page"], state["cursor"], ids
+            state = navigate(state, KEYMAP.get(key, key), max(len(ids), 1))
+            if state.get("quit"):
+                break
+            if DEPTH[state["page"]] != DEPTH[prev_page]:
+                state["top"] = 0                  # 换页：视口回到页顶
+            if DEPTH[state["page"]] > DEPTH[prev_page]:
+                # 下钻：光标所在位置就是被选中的对象，ids 是这一页的真实下标顺序
+                state[FIELD[state["page"]]] = ids_before[min(prev_cursor, len(ids_before) - 1)] \
+                    if ids_before else 0
+                state["cursor"] = 0
+                snaps = build(deep=True)
+            elif DEPTH[state["page"]] < DEPTH[prev_page] and state["page"] == "projects":
+                state["cursor"] = min(state["sel"], max(len(snaps) - 1, 0))
+    except KeyboardInterrupt:
+        pass                                      # Ctrl+C 也算退出方式，不该甩一屏栈
+    finally:
+        # 光标是全屏绘制时藏掉的：q、Ctrl+C、哪条路径退出都得还回去，否则终端留个隐形光标
+        sys.stdout.write("\033[?25h\n")
     return 0
 
 

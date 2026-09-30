@@ -91,11 +91,13 @@ def tmp_dir():
 
 
 def rmtree(path):
+    """onexc 是 3.12 起的正参数；onerror 已弃用，CI 的 3.11/3.12/3.13 腿各验一个分支。"""
     def _clear(func, p, exc):
         Path(p).chmod(0o700)
         func(p)
 
-    shutil.rmtree(str(path), onerror=_clear)
+    kwargs = {"onexc" if sys.version_info >= (3, 12) else "onerror": _clear}
+    shutil.rmtree(str(path), **kwargs)
 
 
 def make_project(parent, skeleton=None):

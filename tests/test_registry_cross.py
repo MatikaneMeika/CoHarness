@@ -55,6 +55,35 @@ class CrossGround(unittest.TestCase):
         self.assertRegex(data[0]["skeleton_commit"], r"^[0-9a-f]{7,}$")
         self.assertRegex(data[0]["instantiated_at"], r"^\d{4}-\d{2}-\d{2}")
 
+    def test_failed_registry_swap_leaves_the_old_file_intact(self):
+        """登记表写盘走 tmp + os.replace 原子换入：换入失败要报错返回，旧表原样保留。
+        直接 write_text 的旧写法在并行 init 撞写、或写一半崩掉时会把整份 JSON 报废。"""
+        proj = self.instantiate("p-atomic")
+        old = self.reg.read_text(encoding="utf-8")
+        import importlib.util
+        import os
+        spec = importlib.util.spec_from_file_location("coh_wsc_atomic", H.WSC)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        real = os.replace
+
+        def boom(src, dst):
+            raise OSError("simulated crash between tmp write and swap")
+
+        prev_env = os.environ.get("COHARNESS_HOME")
+        os.environ["COHARNESS_HOME"] = str(self.tmp / "coh")
+        os.replace = boom
+        try:
+            _, err = mod.register_project(Path(proj), "03-multi-harness-project")
+        finally:
+            os.replace = real
+            if prev_env is None:
+                os.environ.pop("COHARNESS_HOME", None)
+            else:
+                os.environ["COHARNESS_HOME"] = prev_env
+        self.assertTrue(err, "换入失败必须报错，不许当没事")
+        self.assertEqual(self.reg.read_text(encoding="utf-8"), old, "旧表一个字节都不许动")
+
     def test_short_and_long_paths_register_as_the_same_project(self):
         """Windows 专供：用 8.3 短名当参数装机，登记表里不许因此多出第二条记录。"""
         short = H.short_path(self.tmp)

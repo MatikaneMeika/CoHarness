@@ -144,6 +144,15 @@ class TestCardFieldParsing(TempCase):
         self.assertEqual(self.fields("status: doing\nassignee: [zcode-0926a]"),
                          ("doing", ["zcode-0926a"]))
 
+    def test_body_lines_do_not_leak_into_fields(self):
+        """frontmatter 没写的字段不许从卡体散文里漏读：正文里行首写着
+        `assignee: codex-x` / `status: doing` 的示例行，不许被当成认领事实——
+        旧实现正则扫全文，没写 assignee 的 todo 卡会被假认领拒掉。"""
+        text = ("---\nid: T-900\ntitle: 没写字段的卡\n---\n"
+                "可复制的字段示例：\nassignee: codex-x\nstatus: doing\n")
+        self.assertEqual(self.fields(text), ("", []),
+                         "卡体里的同名字段不许混进认领判定")
+
 
 if __name__ == "__main__":
     unittest.main()

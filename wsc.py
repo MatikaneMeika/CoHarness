@@ -417,8 +417,11 @@ def register_project(dst, skeleton):
     f = registry_path()
     try:
         f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(json.dumps(rows, ensure_ascii=False, indent=1) + "\n",
-                     encoding="utf-8", newline="\n")
+        # 先写伴生文件再原子换入：并行 init 撞写、或写一半崩掉时旧表原样保留
+        tmp = f.with_name(f.name + ".tmp")
+        tmp.write_text(json.dumps(rows, ensure_ascii=False, indent=1) + "\n",
+                       encoding="utf-8", newline="\n")
+        os.replace(tmp, f)
     except OSError as e:
         return None, f"（未写入本机登记表 {f}: {e}）"
     return f, None
@@ -587,7 +590,9 @@ def incoming_report(project: Path):
     hits = 0
     for f, cs in sorted(touched.items()):
         for prefix, where, whom in contracts:
-            if f == prefix or f.startswith(prefix.rstrip("*") + "/") or prefix in f:
+            # 前缀带尾斜杠（code/api/）：先剥掉再拼 "/"，否则拼成 "code/api//" 永远配不上
+            base = prefix.rstrip("*/")
+            if f == prefix or (base and f.startswith(base + "/")):
                 print(f"    [契约] {f} → 定义在 {where}；变更要通知：{whom}（来自 {', '.join(cs)}）")
                 hits += 1
                 break
@@ -1022,13 +1027,24 @@ def _find_card(project: Path, card_id: str):
             text = p.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        if re.search(rf"^id:\s*{re.escape(card_id)}\s*$", text, re.M) and text.startswith("---"):
+        if re.search(rf"^id:\s*{re.escape(card_id)}\s*$", _frontmatter(text), re.M) \
+                and text.startswith("---"):
             return p
     return None
 
 
+def _frontmatter(text: str) -> str:
+    """键区：卡取 frontmatter 区（首行 --- 到下一个 --- 行），裸键行文本取全文；散文里的同名字段不许混入。"""
+    if not text.startswith("---"):
+        return text
+    head = text.splitlines()[1:]
+    close = next((i for i, l in enumerate(head) if l.strip() == "---"), len(head))
+    return "\n".join(head[:close])
+
+
 def _card_fields(text: str):
-    get = lambda k: (re.search(rf"^{k}:[ \t]*(.*)$", text, re.M) or [None, ""])[1].strip()
+    fm = _frontmatter(text)
+    get = lambda k: (re.search(rf"^{k}:[ \t]*(.*)$", fm, re.M) or [None, ""])[1].strip()
     assignee = get("assignee")
     who = [w for w in re.split(r"[,\s]+", assignee.strip("[]\"'")) if w]
     return get("status").strip("\"'").lower(), who
@@ -1046,7 +1062,7 @@ def _claimable(project: Path, limit=6):
             if not text.startswith("---"):
                 continue
             status, who = _card_fields(text)
-            cid = re.search(r"^id:\s*(\S+)", text, re.M)
+            cid = re.search(r"^id:\s*(\S+)", _frontmatter(text), re.M)
             if status == "todo" and not who and cid:
                 out.append(cid.group(1))
     return out

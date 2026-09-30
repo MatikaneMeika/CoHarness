@@ -73,6 +73,18 @@ class HookCase(unittest.TestCase):
         self.assertEqual(installed, H.HOOK_SRC.read_text(encoding="utf-8"),
                          "装机后的钩子必须与仓库里被审计的那份逐字相同")
 
+    def test_every_shipped_hook_is_pinned_lf_in_gitattributes(self):
+        """每个随骨架分发的钩子都必须在 .gitattributes 里有 eol=lf 钉子。
+        Windows 用户 core.autocrlf=true clone 后，wsc init 逐字节复制的是工作区文件——
+        没钉子的钩子会变 CRLF，sh 跑到第一行就报 `\r: command not found`，
+        推送门静默失效。pre-commit 有钉，v1.2.0 新增的 pre-push 曾漏钉。"""
+        ga = (H.SKELETON / ".gitattributes").read_text(encoding="utf-8")
+        hooks = sorted(p.name for p in (H.SKELETON / "scripts" / "hooks").iterdir())
+        self.assertTrue(hooks, "骨架得先真有钩子，这条钉子才有意义")
+        for h in hooks:
+            self.assertIn(f"scripts/hooks/{h} text eol=lf", ga,
+                          f"钩子 {h} 缺 eol=lf 钉子：最常见 Windows 配置下推送门会静默失效")
+
 
 if __name__ == "__main__":
     unittest.main()

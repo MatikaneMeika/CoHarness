@@ -144,6 +144,21 @@ class LoudFailureReachesExitCode(unittest.TestCase):
         self.assertEqual(res.returncode, 1, msg=H.out(res))
         self.assertIn("BOM", H.out(res))
 
+    def test_closing_marker_with_trailing_whitespace_does_not_crash(self):
+        """tokenizer 按 strip 后相等放行 `--- `，load_cards 定位卡体却用 lines.index
+        要求逐字节相等——ValueError 把整个 check 崩成 traceback。两处必须同一口径：
+        tokenizer 放行的写法，定位也放行。"""
+        src = (FIX / "good" / "basic.md").read_text(encoding="utf-8")
+        head, _, body = src.rpartition("\n---\n")
+        d = self.proj / "backlog" / "tasks"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "ws-close.md").write_text(head + "\n--- \n" + body,
+                                       encoding="utf-8", newline="\n")
+        res = H.check(self.proj, "--tasks")
+        self.assertNotIn("Traceback", H.out(res), "闭合行带空白不该把整个 check 崩掉")
+        self.assertNotIn("[卡格式]", H.out(res))
+        self.assertEqual(res.returncode, 0, msg=H.out(res))
+
     def test_boundary_nesting_is_not_disguised_as_empty_allowed(self):
         # 原解析器把嵌套结构读成空列表，报的是"allowed_paths 为空"，真因被掩盖
         self.put("nested-item.md", "boundary")

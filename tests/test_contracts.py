@@ -106,6 +106,19 @@ class Contracts(unittest.TestCase):
         out = H.out(H.wsc("sync", str(w), "--dry-run"))
         self.assertIn("没有触及契约表或在做卡边界内", out)
 
+    def test_contract_match_is_a_path_prefix_not_a_substring(self):
+        """契约前缀按路径边界匹配：`notes/code/api/legacy.md` 不在契约 `code/api/` 之下。
+        旧实现多了一条 `prefix in f` 子串兜底，路径里碰巧含这段字样的文件全被误报，
+        狼来了几次之后没人再看这张报告。"""
+        w = self.clone("me6")
+        H.git(w, "fetch", "-q", "origin")
+        self.push_change_from("other6", "notes/code/api/legacy.md")
+        H.git(w, "fetch", "-q", "origin")
+        out = H.out(H.wsc("sync", str(w), "--dry-run"))
+        self.assertNotIn("[契约] notes/code/api/legacy.md", out,
+                         "子串撞上的路径不许报成契约文件")
+        self.assertIn("没有触及契约表或在做卡边界内", out)
+
     def test_dry_run_without_a_remote_ref_tells_you_why(self):
         fresh = H.make_project(self.tmp / "no-remote")
         H.git_repo(fresh)

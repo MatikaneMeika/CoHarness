@@ -281,7 +281,12 @@ def load_cards(tasks_dir: Path):
             if not meta or "id" not in meta:
                 continue
             lines = text.splitlines()
-            body_first_line = lines.index("---", 1) + 2  # 卡体首行的 1-based 行号
+            # 闭合行按 tokenizer 的口径找（strip 后相等）：lines.index 要求逐字节相等，
+            # " --- " 会被上面放行、在这里炸成 ValueError 把整个 check 崩掉
+            close = next((i for i, l in enumerate(lines) if i and l.strip() == "---"), None)
+            if close is None:
+                raise CardFormatError(f"{_origin(p)}:1 frontmatter 没有结束的 '---'")
+            body_first_line = close + 2  # 卡体首行的 1-based 行号
             allowed, forbidden, has_boundary = parse_boundary(
                 body, _origin(p), body_first_line=body_first_line)
         except CardFormatError as e:
