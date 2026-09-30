@@ -9,3 +9,7 @@ dist/
 .mimosa/
 .zcode/
 workspace/
+
+# 本地凭据目录（发布 token 之类）绝不入库：发布时只经环境变量读入，
+# 命令文本、源码与测试里都不出现凭据字面量。
+apikey*/
