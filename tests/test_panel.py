@@ -393,11 +393,11 @@ class ReviewNotes(unittest.TestCase):
         git(self.proj, "commit", "-q", "-m", "建卡")
         git(self.proj, "worktree", "add", "-q", str(self.tmp / "wt-b"), "-b", "wt-b")
         rel = "backlog/tasks/T-070.md"
-        board._CACHE.update(worktrees=None, binds={})
+        board.cache_reset(self.proj)
         self.assertEqual(len(board.worktree_copies(self.proj, rel)), 2,
                          "未绑定：两个树都有这份卡文件，都算副本")
         git(self.proj, "config", "branch.wt-b.coharness-card", "T-999.md")
-        board._CACHE.update(worktrees=None, binds={})
+        board.cache_reset(self.proj)
         rows = board.worktree_copies(self.proj, rel)
         self.assertEqual([r for r in rows if "wt-b" in str(r["path"])], [],
                          "绑定到别的卡的工作树不许算这张卡的副本")
@@ -609,8 +609,8 @@ class RefreshCost(unittest.TestCase):
         (self.proj / "docs" / "a.md").write_text("x\n", encoding="utf-8", newline="\n")
         git(self.proj, "add", "-A")
         self.assertEqual(git(self.proj, "commit", "-q", "-m", "基线").returncode, 0)
-        board._CACHE.update(head=None, commits={}, worktrees=None)
-        self.addCleanup(lambda: board._CACHE.update(head=None, commits={}, worktrees=None))
+        board.cache_reset(self.proj)
+        self.addCleanup(board.cache_reset, self.proj)
         self.real_git = board._git
         self.calls = []
         board._git = lambda pr, av, timeout=15: (self.calls.append(av), self.real_git(pr, av, timeout))[1]
@@ -637,6 +637,43 @@ class RefreshCost(unittest.TestCase):
         after = [c["commits"] for c in board.project_snapshot(self.proj)["cards"]]
         self.assertEqual(after, [b + 1 for b in before],
                          "HEAD 一变必须重取提交数——面板不许拿旧账当现状")
+
+    def test_commit_count_is_not_capped_at_the_recent_three(self):
+        """"边界内提交 N 次"要按全量明细数，recent 只是展示面截取——
+        以前 n_commits 被最近 3 条整体覆盖，提交 5 次也显示 3，"提交了没勾"的判定跟着失真。"""
+        for i in range(4):
+            (self.proj / "docs" / f"b{i}.md").write_text(f"{i}\n", encoding="utf-8", newline="\n")
+            git(self.proj, "add", "-A")
+            self.assertEqual(git(self.proj, "commit", "-q", "-m", f"第{i}次").returncode, 0)
+        snap = board.project_snapshot(self.proj)
+        self.assertEqual([c["commits"] for c in snap["cards"]], [5, 5, 5],
+                         "5 次边界内提交就得显示 5，不许被 recent 的 3 条封顶")
+        self.assertEqual(len(snap["cards"][0]["recent"]), 3, "recent 是展示面截取，最多 3 条")
+
+    def test_git_cache_is_per_project(self):
+        """同前缀的两个项目轮流出快照：各报各的数，且回访命中缓存（≤1 次 git）。
+        HEAD 单值缓存会让两个项目互相当对方的失效器——watch 多项目时命中率归零。"""
+        proj_b = self.tmp / "proj-b"
+        self.assertEqual(H.wsc("init", "03", str(proj_b)).returncode, 0)
+        git(proj_b, "init", "-q", "--initial-branch=main")
+        (proj_b / "docs").mkdir(exist_ok=True)
+        make_card(proj_b, "T-033", allowed=("  - docs/",), items=("- [ ] 一条",))
+        (proj_b / "docs" / "x.md").write_text("x\n", encoding="utf-8", newline="\n")
+        git(proj_b, "add", "-A")
+        self.assertEqual(git(proj_b, "commit", "-q", "-m", "B 一次").returncode, 0)
+        (proj_b / "docs" / "y.md").write_text("y\n", encoding="utf-8", newline="\n")
+        git(proj_b, "add", "-A")
+        self.assertEqual(git(proj_b, "commit", "-q", "-m", "B 两次").returncode, 0)
+        board.cache_reset(self.proj)
+        board.cache_reset(proj_b)
+        commits_of = lambda s, cid: next(c["commits"] for c in s["cards"] if c["id"] == cid)
+        self.assertEqual(commits_of(board.project_snapshot(self.proj), "T-030"), 1)
+        self.assertEqual(commits_of(board.project_snapshot(proj_b), "T-033"), 2)
+        self.calls.clear()
+        again = board.project_snapshot(self.proj)
+        self.assertEqual(commits_of(again, "T-030"), 1, "B 的数字不许串到 A 上")
+        self.assertLessEqual(len(self.calls), 1,
+                             f"回访 A 还是重打了 {len(self.calls)} 次 git：缓存被 B 清掉了")
 
 
 if __name__ == "__main__":

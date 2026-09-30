@@ -34,7 +34,6 @@ RESET, BOLD, DIM, RED, GREEN, YELLOW, CYAN, MAGENTA = (
 MARKS = {"ok": "✓", "bad": "✗", "warn": "!", "idle": "·", "cursor": ">", "bar": "#"}
 
 
-
 def _bar(done, total, width=10):
     if not total:
         return "—"
@@ -178,28 +177,30 @@ def collect_projects(args):
     return paths
 
 
-def commits_touching(project, prefixes, limit=3):
-    """卡边界内的提交：返回 (总次数, 最近几条, 作者集合)。git 不可用时给 (0, [], set())。"""
+def commits_touching(project, prefixes):
+    """卡边界内的提交：返回 (总次数, 提交明细, 作者集合)，明细每条带 files 集。
+    git 不可用时给 (0, [], set())。上限 50 条：面板是"最近活动"视图，不是考古工具。"""
     paths = sorted({_norm_prefix(p) for p in prefixes if _norm_prefix(p)})
     if not paths:
         return 0, [], set()
+    bucket = _pcache(project)
     key = tuple(paths)
-    if key in _CACHE["commits"]:
-        return _CACHE["commits"][key]
+    if key in bucket["commits"]:
+        return bucket["commits"][key]
     ok, out = _git(project, ["log", "-n", "50", "--name-only", "--pretty=format:@@%h|%an|%ar",
                              "--", *paths])
-    if not ok:
-        return _cache_commit(key, (0, [], set()))
     commits, cur = [], None
-    for line in out.splitlines():
-        if line.startswith("@@"):
-            sha, author, ago = line[2:].split("|")
-            cur = {"sha": sha, "author": author, "ago": ago}
-            commits.append(cur)
-        elif line.strip() and cur is not None:
-            cur.setdefault("files", set()).add(line.strip())
-    authors = {c["author"] for c in commits}
-    return _cache_commit(key, (len(commits), commits[:limit], authors))
+    if ok:
+        for line in out.splitlines():
+            if line.startswith("@@"):
+                sha, author, ago = line[2:].split("|")
+                cur = {"sha": sha, "author": author, "ago": ago}
+                commits.append(cur)
+            elif line.strip() and cur is not None:
+                cur.setdefault("files", set()).add(line.strip())
+    value = (len(commits), commits, {c["author"] for c in commits})
+    bucket["commits"][key] = value
+    return value
 
 
 def current_page_lines(snapshots, state, width, color):
@@ -212,12 +213,12 @@ def current_page_lines(snapshots, state, width, color):
         rows = []
         for s in snapshots:
             active = [c for c in s["cards"] if c["status"] in ("doing", "review")]
+            deep = s.get("deep")
             rows.append({"name": s["label"], "skeleton": s.get("skeleton", ""),
-                         "doing": len(active),
+                         "doing": len(active), "errors": len(s["card_errors"]),
                          "todo": sum(1 for c in s["cards"] if c["status"] == "todo"),
-                         # 浅快照算不出报警：那是"没查"，不是"没有"——报 None，由渲染层画成 - 而不是 0
-            "flags": (sum(1 for c in s["cards"] if c["flags"]) if s.get("deep") else None),
-                         "errors": len(s["card_errors"])})
+                         # 浅快照算不出报警：那是"没查"，不是"没有"——报 None，渲染层画成 -
+                         "flags": sum(1 for c in s["cards"] if c["flags"]) if deep else None})
         lines, cursor_row = render_projects(rows, state["cursor"], width, color)
         return lines, list(range(len(rows))), cursor_row
     snap = snapshots[state["sel"]]
@@ -234,7 +235,9 @@ def current_page_lines(snapshots, state, width, color):
         return lines, [keep[j] for j in order], cursor_row
     if not snap["cards"]:
         return ["  这个项目还没有任务卡。"], [], 0
-    return render_card(snap, snap["cards"][state["card"]], width, color), [state["card"]], 0
+    # watch 轮间卡可能被外部删掉：下标钳进现存范围，宁可看错卡也不整屏崩
+    idx = min(max(state["card"] or 0, 0), len(snap["cards"]) - 1)
+    return render_card(snap, snap["cards"][idx], width, color), [idx], 0
 
 
 def grouped_by_role(cards):
@@ -253,13 +256,25 @@ def grouped_by_role(cards):
 
 
 # --watch 每 5 秒重画一次；不缓存的话每张卡每轮都要起一个 git 进程，卡片一多就是白烧 CPU。
-# 键是 HEAD：提交一变（有人收工/合并了）缓存就整体作废，卡体内容本来每次都重读，不会读到旧的。
-_CACHE = {"head": None, "commits": {}, "worktrees": None, "binds": {}}
+# 桶必须按项目分：HEAD 全局单值会让多项目 watch 互相当对方的失效器（A 存 B 清，命中率归零）。
+_CACHE = {}
 
 
-def _cache_commit(key, value):
-    _CACHE["commits"][key] = value
-    return value
+def _pkey(project):
+    return str(Path(project).resolve())
+
+
+def _pcache(project):
+    return _CACHE.setdefault(_pkey(project),
+                             {"head": None, "commits": {}, "worktrees": None, "binds": {}})
+
+
+def cache_reset(project=None):
+    """清 git 缓存：给定项目只清它的桶，不给就全清（测试与强制刷新口）。"""
+    if project is None:
+        _CACHE.clear()
+    else:
+        _CACHE.pop(_pkey(project), None)
 
 
 def head_sha(project):
@@ -402,9 +417,10 @@ def project_snapshot(project, deep=True):
     all_paths = sorted({p for c in cards_raw
                         for p in (_norm_prefix(x) for x in c["allowed"]) if p})
     if deep:
+        bucket = _pcache(project)
         head = head_sha(project)
-        if _CACHE["head"] != head:
-            _CACHE.update(head=head, commits={}, worktrees=None, binds={})
+        if bucket["head"] != head:
+            bucket.update(head=head, commits={}, worktrees=None, binds={})
     for c in cards_raw:
         try:
             body = c["path"].read_text(encoding="utf-8").split("---", 2)[-1]
@@ -418,15 +434,14 @@ def project_snapshot(project, deep=True):
         n_commits, recent, authors, copies = 0, [], set(), []
         if deep:
             # 逐卡一次 git 太贵，改成整库一次：所有边界前缀合起来取提交，按文件归属回每张卡。
-            # worktree 清单本来就已缓存，逐卡只剩读几个文件。
-            n_commits, recent, authors = commits_touching(project, all_paths)
+            # 计数按全量明细，recent 只截 3 条给展示面——以前 n_commits 被它覆盖，永远封顶 3。
+            n_commits, commits, authors = commits_touching(project, all_paths)
             if total:
                 copies = worktree_copies(project, rel)
-            mine = {f for c2 in recent for f in c2.get("files", ())}
             paths = [_norm_prefix(p) for p in c["allowed"] if _norm_prefix(p)]
-            touched = {f for f in mine if any(f == p or f.startswith(p + "/") for p in paths)}
-            n_commits = sum(1 for c2 in recent
-                            if {f for f in c2.get("files", ())} & touched)
+            n_commits = sum(1 for c2 in commits if any(f == p or f.startswith(p + "/")
+                            for f in c2.get("files", ()) for p in paths))
+            recent = commits[:3]
         flags = []
         active = c["status"] in ("doing", "review")
         if active and total and done == 0 and n_commits:
@@ -647,7 +662,8 @@ def worktree_copies(project, rel_card):
     指向这张卡时才计入副本集——别的卡的工作树里躺着这张卡的陈旧副本，不该报成分叉；
     没绑定的分支按文件在场算（向后兼容：绑定是加速与降噪，不是授权来源）。
     """
-    trees = _CACHE["worktrees"]
+    bucket = _pcache(project)
+    trees = bucket["worktrees"]
     if trees is None:
         ok, out = _git(project, ["worktree", "list", "--porcelain"])
         if not ok:
@@ -658,23 +674,20 @@ def worktree_copies(project, rel_card):
                 trees.append([Path(line.split(" ", 1)[1]), ""])
             elif line.startswith("branch ") and trees:
                 trees[-1][1] = line.split(" ", 1)[1].replace("refs/heads/", "")
-        _CACHE["worktrees"] = trees
+        bucket["worktrees"] = trees
     name = Path(rel_card).name
     rows = []
     for wt, branch in trees:
-        bound = _CACHE["binds"].get(branch)
+        bound = bucket["binds"].get(branch)
         if bound is None:
             ok, out = _git(project, ["config", "--get", f"branch.{branch}.coharness-card"])
             bound = out.strip() if ok and out.strip() else ""
-            _CACHE["binds"][branch] = bound
+            bucket["binds"][branch] = bound
         if bound and bound != name:
             continue
-        f = wt / rel_card
-        if not f.is_file():
-            continue
         try:
-            text = f.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
+            text = (wt / rel_card).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):   # 不在/读不了 = 这棵树没有这份卡
             continue
         status, who = wsc._card_fields(text)
         body = text.split("---", 2)[-1] if text.startswith("---") else text
