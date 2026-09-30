@@ -9,69 +9,24 @@ import sys
 import time
 from pathlib import Path
 
-try:
+try:                                   # 装成包时按包内模块导入
     from . import wsc
-    from .board import WATCH_SECONDS
-    from .board import (
-        _bar,
-        _clip,
-        _git,
-        _hours_since,
-        _norm_prefix,
-        _table_rows,
-        _title,
-        board_fingerprint,
-        clip,
-        checklist,
-        collect_projects,
-        commits_touching,
-        current_page_lines,
-        grouped_by_role,
-        load_check,
-        navigate,
-        project_card_facts,
-        project_snapshot,
-        render_card,
-        render_projects,
-        render_tasks,
-        role_label,
-        role_of,
-        term_width,
-        unfilled,
-        viewport,
-        worktree_copies)
-except ImportError:
+    from . import board
+except ImportError:                    # curl/源码树直跑
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import wsc
-    from board import WATCH_SECONDS
-    from board import (
-        _bar,
-        _clip,
-        _git,
-        _hours_since,
-        _norm_prefix,
-        _table_rows,
-        _title,
-        board_fingerprint,
-        clip,
-        checklist,
-        collect_projects,
-        commits_touching,
-        current_page_lines,
-        grouped_by_role,
-        load_check,
-        navigate,
-        project_card_facts,
-        project_snapshot,
-        render_card,
-        render_projects,
-        render_tasks,
-        role_label,
-        role_of,
-        term_width,
-        unfilled,
-        viewport,
-        worktree_copies)
+    import board
+
+# 名字表只写一份：两个分支导入的是同一个 board，重复两遍迟早漂（而且白占四十行）。
+# 逐个绑成模块全局而不是就地 import，是为了 `panel_mod.project_snapshot` 这类测试注入点照旧可用。
+for _name in ("_bar", "_clip", "_git", "_hours_since", "_norm_prefix", "_table_rows", "_title",
+              "WATCH_SECONDS", "board_fingerprint", "checklist", "clip", "collect_projects",
+              "commits_touching", "current_page_lines", "grouped_by_role", "load_check",
+              "navigate", "project_card_facts", "project_snapshot", "render_card",
+              "render_projects", "render_tasks", "role_label", "role_of", "term_width",
+              "unfilled", "viewport", "worktree_copies"):
+    globals()[_name] = getattr(board, _name)
+del _name
 
 
 def _utf8_streams():

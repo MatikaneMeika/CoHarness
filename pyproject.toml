@@ -1,7 +1,7 @@
 # CoHarness — 骨架库与工具链
 #
 # 打包原则（ADR-10：依赖面按分发面分层）：
-#   * 运行期零第三方依赖——四个门面（wsc.py / maintain.py / evolve.py / board.py+panel.py）与 scripts/check.py
+#   * 运行期零第三方依赖——四个门面（wsc.py / maintain.py / evolve.py / board.py+board_render.py+panel.py）与 scripts/check.py
 #   全用标准库；
 #     python-frontmatter 只作为**开发期差分预言机**放在 dev extra，绝不进运行时路径。
 #   * 单文件模式必须继续可用：`curl -O .../wsc.py` 后 `python wsc.py init ...` 照旧工作，

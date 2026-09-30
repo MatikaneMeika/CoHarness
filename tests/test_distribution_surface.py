@@ -18,9 +18,10 @@ import helpers as H
 SHIPPED = (H.WSC, H.CHECK_SRC)                  # 分发面：随骨架进每个下游项目，可 curl 单文件
 DEV = (H.REPO / "evolve.py",)                    # 开发面：审骨架本体
 MAINT = (H.REPO / "maintain.py",)                # 维护面：管已实例化项目的指纹/迁移/体检
-VIEW = (H.REPO / "board.py", H.REPO / "panel.py")  # 展示面：只读看板（装配/渲染与终端分开）
+VIEW = (H.REPO / "board.py", H.REPO / "board_render.py",
+        H.REPO / "panel.py")                     # 展示面：装配 / 渲染 / 终端，三层分开
 ALL = SHIPPED + DEV + MAINT + VIEW
-FIRST_PARTY = {"wsc", "maintain", "board"}         # 同目录自带模块（panel 复用 board，evolve 读指纹 import maintain）
+FIRST_PARTY = {"wsc", "maintain", "board", "board_render"}   # 同目录自带模块
 # 行数上限：只防"无人再读得动"，不防正常生长；超了先删冗余或按面分层拆出去，别抬数字。
 # wsc.py 比 check.py 宽是因为 README 承诺"curl 一个文件就能装机"，下游命令不许散到多文件；
 # check.py 才是复制进每个项目的那一份，最严。新增能力一律进 maintain.py / evolve.py。
@@ -33,8 +34,16 @@ FIRST_PARTY = {"wsc", "maintain", "board"}         # 同目录自带模块（pan
 # 2026-09-30 再调（check 700→760、board 650→700）：v1.2.0 五机制（stale 宪法 advisory、
 # 可观察验收、审阅意见契约、分支绑定）全部长在执法面与展示面本体——check.py 单文件随骨架
 # 分发的契约没变，拆不出去；wsc.py 1234/1250 逼近上限，下一条新命令仍按 ADR-10 归位 maintain.py。
+# 2026-09-30 展示面按面拆开（board 700→装配 500 / 渲染 board_render 226）：board.py 顶到
+# 700/700 那轮就是"再挤一行"的信号，而它不随骨架分发、没有单文件承诺——所以拆，而不是抬。
+# 同时加函数级棘轮（FUNC_BUDGET/NEST_BUDGET）：文件行数挡不住"为凑行数一行三语句"。
 LINE_BUDGET = {H.WSC: 1250, H.CHECK_SRC: 760, H.REPO / "evolve.py": 400,
-               H.REPO / "maintain.py": 700, H.REPO / "board.py": 700, H.REPO / "panel.py": 300}
+               H.REPO / "maintain.py": 700, H.REPO / "board.py": 700,
+               H.REPO / "board_render.py": 300, H.REPO / "panel.py": 300}
+# 函数级棘轮：今天最长 panel.main 117 行、嵌套最深 5（wsc.cmd_init / check.check_tasks）。
+# 上限贴着现状定，挡的是"再长一截"：要长就先拆函数或拆面，别抬这个数——与 LINE_BUDGET 同一条纪律。
+FUNC_BUDGET = 120
+NEST_BUDGET = 5
 NETWORK_TOKENS = ("urllib.request", "http.client", "socket", "ftplib", "smtplib",
                   "poplib", "imaplib", "telnetlib", "requests", "urllib3", "httpx", "aiohttp")
 
@@ -47,6 +56,29 @@ def imports_of(path):
         elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
             top.add(node.module)
     return top
+
+
+def nesting_depth(fn):
+    """控制流的最深嵌套层数：if/elif 链算**一层**。
+
+    `elif` 在 AST 里是 orelse 里的单个 If，朴素递归会把"多一个分支"读成"深一层"——
+    那不是可读性问题（五分支的导航状态机是平铺的）。循环/with/try/match 每进一层算一层。
+    """
+    deep = (ast.For, ast.AsyncFor, ast.While, ast.With, ast.AsyncWith, ast.Try, ast.Match)
+
+    def scan(nodes, depth):
+        best = depth
+        for node in nodes:
+            if isinstance(node, ast.If):
+                best = max(best, scan(node.body, depth + 1))
+                flat = len(node.orelse) == 1 and isinstance(node.orelse[0], ast.If)
+                best = max(best, scan(node.orelse, depth if flat else depth + 1))
+            elif isinstance(node, deep):
+                best = max(best, scan(ast.iter_child_nodes(node), depth + 1))
+            else:
+                best = max(best, scan(ast.iter_child_nodes(node), depth))
+        return best
+    return scan(fn.body, 0)
 
 
 def discovered_module_names():
@@ -120,6 +152,26 @@ class DistributionSurface(unittest.TestCase):
             self.assertLessEqual(lines, LINE_BUDGET[p],
                                  f"{p.name} 已 {lines} 行，超过 {LINE_BUDGET[p]} 行上限："
                                  f"先删冗余或按分发面分层拆出去，别抬上限")
+
+    def test_no_function_outgrows_the_readability_ratchet(self):
+        """函数级棘轮：文件行数管"这个文件还读不读得动"，这条管"单个函数还读不读得动"。
+
+        只有文件上限时，逼近上限的写法是"三句话挤一行"（board.py 顶到 700/700 那轮就长这样）；
+        函数长度与嵌套深度才是可读性的直接度量，所以两条一起挂：要长就先拆函数/拆面。
+        """
+        for p in ALL:
+            tree = ast.parse(p.read_text(encoding="utf-8"))
+            for fn in ast.walk(tree):
+                if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                length = fn.end_lineno - fn.lineno + 1
+                self.assertLessEqual(length, FUNC_BUDGET,
+                                     f"{p.name}:{fn.lineno} 的 {fn.name}() 已 {length} 行，"
+                                     f"超过 {FUNC_BUDGET}：先拆函数或按面拆文件，别抬这个数")
+                deep = nesting_depth(fn)
+                self.assertLessEqual(deep, NEST_BUDGET,
+                                     f"{p.name}:{fn.lineno} 的 {fn.name}() 嵌套 {deep} 层，"
+                                     f"超过 {NEST_BUDGET}：把内层提成函数")
 
     def test_evolve_is_not_wired_into_the_distribution_face(self):
         """晋升审核只活在库侧：curl 到的单文件里不该带着 evolve 的接线。"""
