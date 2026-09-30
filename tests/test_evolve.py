@@ -217,8 +217,12 @@ class EvolveTool(unittest.TestCase):
                                    "## 状态机", "## 状态机（试装补丁用的标记）")
         self.addCleanup(H.rmtree, tmpdir)
         r = self.run_evo("--apply-check", str(patch), timeout=1500)
-        self.assertEqual(r.returncode, 0, msg=H.out(r)[-800:])
         out = H.out(r)
+        # CI 把 unittest 输出重定向进临时文件、只回显摘要行，内层失败名在别处永远看不到——
+        # 所以把它提进断言消息（2026-09-30：macOS 腿红过一次，只能靠猜内层是谁）
+        inner = [l for l in out.splitlines() if l.startswith(("FAIL:", "ERROR:"))]
+        self.assertEqual(r.returncode, 0,
+                         msg="内层失败 " + "; ".join(inner[:5]) + "\n" + out[-600:])
         self.assertIn("全套自测：rc=0", out)
         self.assertIn("三证填法", out)
         self.assertIn("run=trial-", out)

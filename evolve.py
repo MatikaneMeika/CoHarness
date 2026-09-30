@@ -197,10 +197,14 @@ def _print_findings(rec):
 
 
 def _rmtree(path):
-    """git 对象是只读的，Windows 上直接删会失败——先改权限再删；onexc 是 3.12 起的正参数。"""
+    """git 对象是只读的，Windows 上直接删会失败——先改权限再删；onexc 是 3.12 起的正参数。
+    目标在重试前被别的进程删掉（git 后台维护动 .git/objects/*.lock）就当删成功。"""
     def _clear(func, p, exc):
-        Path(p).chmod(0o700)
-        func(p)
+        try:
+            Path(p).chmod(0o700)
+            func(p)
+        except FileNotFoundError:
+            pass
 
     kwargs = {"onexc" if sys.version_info >= (3, 12) else "onerror": _clear}
     shutil.rmtree(str(path), **kwargs)

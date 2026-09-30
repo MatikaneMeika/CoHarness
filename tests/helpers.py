@@ -90,13 +90,22 @@ def tmp_dir():
     return Path(tempfile.mkdtemp(prefix="coh-test-"))
 
 
+def _force_remove(func, path, exc):
+    """rmtree 的重试回调：先改权限再删（Windows 上 git 对象是只读的）。
+
+    目标在重试前被别的进程删掉就当已经删成功——git 的后台维护（gc --auto / maintenance）
+    会在测试 teardown 时动 `.git/objects/*.lock`，macOS 腿上真把整条 CI 腿染红过一次。
+    """
+    try:
+        Path(path).chmod(0o700)
+        func(path)
+    except FileNotFoundError:
+        pass
+
+
 def rmtree(path):
     """onexc 是 3.12 起的正参数；onerror 已弃用，CI 的 3.11/3.12/3.13 腿各验一个分支。"""
-    def _clear(func, p, exc):
-        Path(p).chmod(0o700)
-        func(p)
-
-    kwargs = {"onexc" if sys.version_info >= (3, 12) else "onerror": _clear}
+    kwargs = {"onexc" if sys.version_info >= (3, 12) else "onerror": _force_remove}
     shutil.rmtree(str(path), **kwargs)
 
 
@@ -109,9 +118,15 @@ def make_project(parent, skeleton=None):
 
 
 def git_repo(dst, bootstrap=True):
-    """在 dst 建仓库（目录不存在就建）；bootstrap=True 时把现有内容提交进 main。"""
+    """在 dst 建仓库（目录不存在就建）；bootstrap=True 时把现有内容提交进 main。
+
+    关掉 git 的后台维护（gc.auto / maintenance.auto）：测试临时仓库活几分钟就删，
+    维护进程只会在 teardown 时跟 rmtree 抢 `.git/objects/*.lock`（CI 上红过）。
+    """
     Path(dst).mkdir(parents=True, exist_ok=True)
     git(dst, "init", "-q", "--initial-branch=main")
+    git(dst, "config", "gc.auto", "0")
+    git(dst, "config", "maintenance.auto", "false")
     if bootstrap:
         git(dst, "add", "-A")
         git(dst, "commit", "-q", "-m", "bootstrap")
