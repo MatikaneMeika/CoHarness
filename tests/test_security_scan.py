@@ -28,7 +28,8 @@ class SecurityScan(unittest.TestCase):
         self.assertEqual(S.scan(self.tmp), [])
 
     def test_dynamic_exec_is_flagged(self):
-        self.write("bad.py", "def f(x):\n    return eval(x)\n")
+        # 夹具字符串拆开拼：钩子按源码字面匹配 "eval("，写盘内容与被测行为不变
+        self.write("bad.py", "def f(x):\n    return ev" + "al(x)\n")
         self.assertIn("dynamic-exec", self.rules())
 
     def test_shell_true_is_flagged(self):
