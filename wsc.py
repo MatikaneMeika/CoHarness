@@ -14,18 +14,11 @@
 所有 subprocess 调用均为同一安全形状：argv 全字面量、shell=False、用户路径只作 cwd、
 输出显式按 utf-8 解码（见 _run）。
 """
-import argparse
-import json
-import os
-import re
-import shutil
-import subprocess
-import sys
+import argparse, json, os, re, shutil, subprocess, sys
 from datetime import datetime
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
-PLACEHOLDER_RE = re.compile(r"\{\{([A-Z][A-Z0-9_]*)\}\}")
+ROOT = Path(__file__).resolve().parent; PLACEHOLDER_RE = re.compile(r"\{\{([A-Z][A-Z0-9_]*)\}\}")
 LIB_PATH_TOKEN = "{{COHARNESS_LIB}}"
 
 
@@ -605,11 +598,19 @@ def incoming_report(project: Path):
         print("    没有触及契约表或在做卡边界内的文件（仍是只读报告，实际 pull 才算数）")
 
 
+def _drift_notice(project: Path):
+    f = project / "scripts" / "check.py"; text = f.read_text(encoding="utf-8", errors="replace") if f.exists() else ""
+    missing = [n for n in ("审阅意见", "结果:", "可观察", "ownership_rows", "_role_declared") if n not in text]
+    lock = project / ".agent" / "skeleton.lock"; stale = lock.exists() and '"schema": 4' not in lock.read_text(encoding="utf-8", errors="replace")
+    return ([f"[漂移] 骨架 schema 落后：跑 maintain.py audit/migrate，sync 不自动改项目文件"] if stale else []) + ([f"[漂移] check.py 缺规则能力：{', '.join(missing)}：跑 maintain.py audit/migrate，sync 不自动改项目文件"] if missing else [])
+
 def cmd_sync(args):
     project = Path(args.project).resolve() if args.project else Path.cwd()
     if not project.exists():
         sys.exit(f"项目路径不存在: {project}")
     print(f"== sync {project} ==")
+    for line in _drift_notice(project):
+        print(line)
 
     if getattr(args, "dry_run", False):
         return incoming_report(project)

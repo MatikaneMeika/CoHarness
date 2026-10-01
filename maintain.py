@@ -16,6 +16,8 @@ import argparse
 import hashlib
 import json
 import re
+import shutil
+import tempfile
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -28,7 +30,8 @@ except ImportError:       # curl 单文件 / clone 后直接跑脚本时的形�
 
 ROOT = wsc.ROOT
 _run = wsc._run
-SCHEMA = 3
+SCHEMA = 4
+CHECK_CAPABILITIES = ("审阅意见", "结果:", "可观察", "ownership_rows", "_role_declared")
 LOCK_NAME = ".agent/skeleton.lock"
 TELEMETRY_IGNORE = ".agent/telemetry.jsonl"
 
@@ -68,9 +71,15 @@ def cmd_lock(args):
 
 
 def _sha(path: Path):
+    """文本先归一行尾再哈希；二进制保持原始字节。"""
     if not path.exists():
         return ""
-    return hashlib.sha256(path.read_bytes()).hexdigest()[:12]
+    raw = path.read_bytes()
+    try:
+        raw = raw.decode("utf-8").replace("\r\n", "\n").encode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    return hashlib.sha256(raw).hexdigest()[:12]
 
 
 def _guess_skeleton(project: Path):
@@ -126,8 +135,7 @@ def up_library_paths(project: Path, apply_changes):
             continue
         hits.append(p.relative_to(project).as_posix())
         if apply_changes:
-            new = text.replace("<骨架库>/wsc.py", f"{ROOT}/wsc.py")
-            new = new.replace("<CoHarness>/wsc.py", f"{ROOT}/wsc.py")
+            new = text.replace("<骨架库>", str(ROOT)).replace("<CoHarness>", str(ROOT))
             p.write_text(new, encoding="utf-8", newline="\n")
     if not hits:
         return ["已到位：文档里的库路径都已代入本机绝对路径"]
@@ -256,10 +264,82 @@ def up_refresh_check_py(project: Path, apply_changes):
     if "SELF_AUTHORIZED" in text:
         return ["已到位：check.py 含卡与登记自授权（I-001 晋升产物）"]
     if apply_changes:
-        import shutil
         shutil.copyfile(str(src), str(dst))
     return [f"{'已刷新' if apply_changes else '待刷新'}：scripts/check.py 是 I-001 之前的旧版，"
             "缺自授权（会锁死认领与登记）；其余差异不自动覆盖，由 audit 报漂移"]
+
+
+def _missing_capabilities(path: Path):
+    if not path.exists():
+        return list(CHECK_CAPABILITIES)
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return list(CHECK_CAPABILITIES)
+    return [name for name in CHECK_CAPABILITIES if name not in text]
+
+
+def drift_notice(project: Path):
+    """sync 的一行漂移提示：只读 lock/AGENTS.md 与 check.py，不改项目文件。"""
+    lock = read_lock(project) or {}
+    schema = lock.get("schema") or declared_schema(project)
+    notes = []
+    if isinstance(schema, int) and schema < SCHEMA:
+        notes.append(f"[漂移] 骨架 schema {schema} < {SCHEMA}：跑 maintain.py audit/migrate，"
+                     "sync 不自动改项目文件")
+    check = project / "scripts" / "check.py"
+    missing = _missing_capabilities(check) if check.exists() else []
+    if missing:
+        notes.append(f"[漂移] check.py 缺规则能力：{', '.join(missing)}："
+                     "跑 maintain.py audit/migrate，sync 不自动改项目文件")
+    return notes
+
+
+def _three_way_merge(ours: str, base: str, theirs: str):
+    """用 git merge-file 做三方合并；冲突时返回 None 和带标记的补丁正文。"""
+    with tempfile.TemporaryDirectory(prefix="coh-merge-") as td:
+        d = Path(td)
+        (d / "ours").write_text(ours, encoding="utf-8", newline="\n")
+        (d / "base").write_text(base, encoding="utf-8", newline="\n")
+        (d / "theirs").write_text(theirs, encoding="utf-8", newline="\n")
+        r = _run(["git", "merge-file", "-p", "ours", "base", "theirs"], d)
+    if r.returncode == 0:
+        return r.stdout or "", None
+    if r.returncode == 1:
+        return None, r.stdout or "（git merge-file 没有输出补丁）"
+    return None, (r.stderr or r.stdout or "git merge-file 执行失败").strip()
+
+
+def up_merge_check_py(project: Path, apply_changes):
+    """v3→v4：把项目 check.py 与当前骨架做三方合并，保留本地改动、冲突不落盘。"""
+    skeleton = _guess_skeleton(project)
+    dst = project / "scripts" / "check.py"
+    if skeleton is None or not dst.exists():
+        return ["跳过：项目不带 scripts/check.py（这一档骨架没有卡片层执法）"]
+    src = skeleton / "scripts" / "check.py"
+    if not src.exists():
+        return ["跳过：当前骨架没有 scripts/check.py"]
+    lock = read_lock(project) or {}
+    commit = lock.get("skeleton_commit")
+    rel = f"{skeleton.name}/scripts/check.py"
+    ours = dst.read_text(encoding="utf-8")
+    theirs = src.read_text(encoding="utf-8")
+    if ours == theirs:
+        return ["已到位：scripts/check.py 已是当前骨架版本"]
+    if not commit:
+        return ["冲突：指纹里没有 skeleton_commit，无法取三方合并基线；check.py 未改，请先补指纹或人工同步"]
+    base_run = _run(["git", "show", f"{commit}:{rel}"], ROOT)
+    if base_run.returncode != 0:
+        return [f"冲突：取不到基线 {commit}:{rel}，check.py 未改，请人工同步"]
+    merged, conflict = _three_way_merge(ours, base_run.stdout or "", theirs)
+    if conflict is not None:
+        return ["冲突：scripts/check.py 三方合并失败，未覆盖；请人工处理以下补丁", conflict]
+    missing = [name for name in CHECK_CAPABILITIES if name not in merged]
+    if missing:
+        return [f"冲突：合并结果仍缺执法能力 {', '.join(missing)}，未覆盖 check.py"]
+    if apply_changes:
+        dst.write_text(merged, encoding="utf-8", newline="\n")
+    return [f"{'已合并' if apply_changes else '待合并'}：scripts/check.py 按基线 {commit} 做三方合并"]
 
 
 UPGRADES = {
@@ -269,11 +349,49 @@ UPGRADES = {
          up_drop_resident_card, up_backlog_statuses, up_refresh_check_py)),
     2: ("适配指针升级为各工具原生目录格式（.cursor/rules、.windsurf/rules），清掉旧单文件",
         (up_native_adapters,)),
+    3: ("scripts/check.py 三方合并到当前骨架（审阅意见 / 结果行 / 可观察验收 / 所有权执法），"
+        "冲突拒绝覆盖",
+        (up_merge_check_py,)),
 }
 
 
 def _pending_steps(schema):
     return [v for v in sorted(UPGRADES) if v >= schema]
+
+
+_PENDING_PREFIX = (("已追加", "待追加"), ("已改写", "待改写"), ("已改为", "待改"),
+                  ("已补", "待补"), ("已迁移", "待迁移"), ("已删除", "待删除"),
+                  ("已刷新", "待刷新"), ("已合并", "待合并"))
+
+
+def _pending_line(line):
+    for done, pending in _PENDING_PREFIX:
+        if line.startswith(done):
+            return pending + line[len(done):]
+    return line
+
+
+def _run_migration_steps(project, steps, apply_changes, pending=False):
+    conflicts = []
+    for v in steps:
+        title, funcs = UPGRADES[v]
+        print(f"\nv{v} -> v{v + 1}: {title}")
+        for fn in funcs:
+            for raw in fn(project, apply_changes):
+                print(f"  - {_pending_line(raw) if pending else raw}")
+                if raw.startswith("冲突："):
+                    conflicts.append(raw)
+    return conflicts
+
+
+def _preflight_migration(project, steps):
+    """在临时副本上顺序执行全部步骤，验证多步依赖且不碰真实项目。"""
+    with tempfile.TemporaryDirectory(prefix="coh-migrate-") as td:
+        shadow = Path(td) / "project"
+        shutil.copytree(project, shadow, ignore=shutil.ignore_patterns(".git"))
+        return _run_migration_steps(shadow, steps, True, pending=True)
+
+
 
 
 def cmd_migrate(args):
@@ -290,23 +408,18 @@ def cmd_migrate(args):
     if not steps and schema >= SCHEMA:
         print("已是最新 schema，无升级步骤。")
         return
-    backup = None
+    conflicts = _preflight_migration(project, steps)
+    if conflicts:
+        sys.exit("[migrate] 预检发现未解决冲突，未建备份分支也未落盘；请人工处理后重跑")
     if args.yes:
-        if (project / ".git").exists():
-            backup = f"coh-backup-{now_stamp()}"
-            r = _run(["git", "branch", backup], project)
-            if r.returncode != 0:
-                sys.exit(f"[migrate] 备份分支建不起来，不落盘：{(r.stdout or '') + (r.stderr or '')}")
-            print(f"[migrate] 已建备份分支 {backup}（回到旧状态：git reset --hard {backup}）")
-        else:
-            sys.exit("[migrate] 项目不是 git 仓库，建不了备份分支——先 git init 再 --yes")
-    for v in steps:
-        title, funcs = UPGRADES[v]
-        print(f"\nv{v} -> v{v + 1}: {title}")
-        for fn in funcs:
-            for line in fn(project, args.yes):
-                print(f"  - {line}")
-    if args.yes:
+        backup = f"coh-backup-{now_stamp()}"
+        r = _run(["git", "branch", backup], project)
+        if r.returncode != 0:
+            sys.exit(f"[migrate] 备份分支建不起来，不落盘：{(r.stdout or '') + (r.stderr or '')}")
+        print(f"[migrate] 已建备份分支 {backup}（回到旧状态：git reset --hard {backup}）")
+        conflicts = _run_migration_steps(project, steps, True)
+        if conflicts:
+            sys.exit("[migrate] 落盘时出现冲突，schema 未推进；请人工处理后重跑")
         cmd_lock(argparse.Namespace(project=str(project)))
         print(f"\n[migrate] 已落盘并把 schema 记到 {SCHEMA}；改动都在备份分支 {backup} 的对照下，"
               f"回滚：git reset --hard {backup}")
@@ -315,23 +428,30 @@ def cmd_migrate(args):
 
 
 def cmd_audit(args):
-    """只读体检：钩子在不在、被没被改、装机指纹漂了没、main 上的合成态合不合法。"""
+    """只读体检：钩子在不在、被没被改、指纹漂了没、合成态合不合法。"""
     project = Path(args.project).resolve()
-    issues = []
-    print(f"== audit {project}（只读）==")
+    quick = bool(getattr(args, "quick", False))
+    as_json = bool(getattr(args, "json", False))
+    issues, lines = [], []
 
+    def say(line=""):
+        lines.append(line)
+        if not as_json:
+            print(line)
+
+    say(f"== audit {project}（只读）==")
     lock = read_lock(project)
     if lock is None:
-        print("[指纹] 未记录：跑 `python maintain.py lock <项目>` 补一份（audit 仍可继续）")
+        say("[指纹] 未记录：跑 `python maintain.py lock <项目>` 补一份（audit 仍可继续）")
         issues.append("缺装机指纹")
     elif "_坏掉" in lock:
-        print(f"[指纹] {lock['_坏掉']}")
+        say(f"[指纹] {lock['_坏掉']}")
         issues.append("指纹读不懂")
     else:
-        print(f"[指纹] 骨架={lock.get('skeleton')} commit={lock.get('skeleton_commit')} "
-              f"schema={lock.get('schema')} adapters={lock.get('adapters') or '无'}")
+        say(f"[指纹] 骨架={lock.get('skeleton')} commit={lock.get('skeleton_commit')} "
+            f"schema={lock.get('schema')} adapters={lock.get('adapters') or '无'}")
         if lock.get("schema", 1) < SCHEMA:
-            print(f"  [警告] schema 落后（{lock.get('schema')} < {SCHEMA}）：跑 maintain.py migrate")
+            say(f"  [警告] schema 落后（{lock.get('schema')} < {SCHEMA}）：跑 maintain.py migrate")
             issues.append("schema 落后")
 
     hook_src = None
@@ -342,32 +462,37 @@ def cmd_audit(args):
     if state != "ok":
         why = {"git-missing": "找不到 git 命令", "not-a-repo": "项目不是 git 仓库",
                "outer-repo": f"项目在外层仓库 {extra} 里"}[state]
-        print(f"[钩子] 无法安装：{why}——check.py 不会被任何提交自动触发")
+        say(f"[钩子] 无法安装：{why}——check.py 不会被任何提交自动触发")
         issues.append("钩子无处安放")
     else:
         installed = Path(target) / "pre-commit"
         if not installed.exists():
-            print(f"[钩子] 缺失：{installed} 没有 pre-commit（clone 不带钩子；跑 wsc sync 自愈或手动 cp）")
+            say(f"[钩子] 缺失：{installed} 没有 pre-commit（clone 不带钩子；跑 wsc sync 自愈或手动 cp）")
             issues.append("钩子缺失")
         elif hook_src and hook_src.exists():
-            want = hashlib.sha256(hook_src.read_bytes()).hexdigest()[:12]
-            got = hashlib.sha256(installed.read_bytes()).hexdigest()[:12]
-            print(f"[钩子] 在位；骨架版 {want} / 装的 {got}" + ("（一致）" if want == got else ""))
+            want, got = _sha(hook_src), _sha(installed)
+            say(f"[钩子] 在位；骨架版 {want} / 装的 {got}" + ("（一致）" if want == got else ""))
             if want != got:
-                print("  [违规] 钩子被改过：执法面与骨架不一致，要么还原要么走规则卡说明")
+                say("  [违规] 钩子被改过：执法面与骨架不一致，要么还原要么走规则卡说明")
                 issues.append("钩子被改")
         else:
-            print("[钩子] 在位（这一档骨架不带 scripts/hooks/pre-commit，无法比对）")
+            say("[钩子] 在位（这一档骨架不带 scripts/hooks/pre-commit，无法比对）")
 
-    cur = _sha(project / "scripts" / "check.py")
+    check_path = project / "scripts" / "check.py"
+    cur = _sha(check_path)
+    missing = _missing_capabilities(check_path) if check_path.exists() else []
+    if missing:
+        say(f"[执法面] 缺规则能力：{', '.join(missing)}（跑 maintain.py migrate 或人工同步）")
+        issues.append("执法能力缺失")
+    elif check_path.exists():
+        say("[执法面] 规则能力标记齐全")
     if lock and lock.get("check_sha256") and cur:
         if lock["check_sha256"] != cur:
-            print(f"[执法面] 项目里的 check.py 与指纹不符（{lock['check_sha256']} → {cur}）")
+            say(f"[执法面] 项目里的 check.py 与指纹不符（{lock['check_sha256']} → {cur}）")
             issues.append("check.py 漂移")
         else:
-            print(f"[执法面] check.py 与指纹一致（{cur}）")
+            say(f"[执法面] check.py 与指纹一致（{cur}）")
 
-    # 计划书 W12 点名的两个检测器：登记表写错地方的痕迹、以及 merge/rebase 这类不跑钩子的入口
     stray = []
     for p in sorted(project.rglob("*.md")):
         rel = p.relative_to(project).as_posix()
@@ -380,11 +505,11 @@ def cmd_audit(args):
         if re.search(r"(?m)^\|\s*I-\d+\s*\|", body):
             stray.append(rel)
     if stray:
-        print("[登记表] 有 improvements 形状的表格写在 .agent/ 之外：" + "、".join(stray))
-        print("  [违规] 登记条目只认 `.agent/improvements.md`——写在别处的条目 improve/evolve 读不到，等于没登记")
+        say("[登记表] 有 improvements 形状的表格写在 .agent/ 之外：" + "、".join(stray))
+        say("  [违规] 登记条目只认 `.agent/improvements.md`——写在别处的条目 improve/evolve 读不到，等于没登记")
         issues.append("登记表写错位置")
     else:
-        print("[登记表] 未在 .agent/ 外发现登记痕迹")
+        say("[登记表] 未在 .agent/ 外发现登记痕迹")
 
     merges = _run(["git", "log", "--merges", "--oneline", "-n", "10"], project)
     n_merges = len([l for l in (merges.stdout or "").splitlines() if l.strip()]) \
@@ -392,27 +517,33 @@ def cmd_audit(args):
     rebases = [l for l in (_run(["git", "reflog", "-n", "50"], project).stdout or "").splitlines()
                if "rebase" in l or "reset:" in l or "merge" in l]
     if n_merges or rebases:
-        print(f"[入口] 最近 {n_merges} 个 merge 提交、reflog 里 {len(rebases)} 条 rebase/reset/merge 记录"
-              "——这些路径都不跑 pre-commit")
+        say(f"[入口] 最近 {n_merges} 个 merge 提交、reflog 里 {len(rebases)} 条 rebase/reset/merge 记录"
+            "——这些路径都不跑 pre-commit")
         for line in merges.stdout.splitlines()[:3] if merges.returncode == 0 else []:
-            print(f"  {line}")
-        print("  合成态是否因此变非法，看下面一条；本轮不据此定罪，只点名待复查的入口")
+            say(f"  {line}")
+        say("  合成态是否因此变非法，看下面一条；本轮不据此定罪，只点名待复查的入口")
     else:
-        print("[入口] 最近没有 merge/rebase 痕迹（pre-commit 覆盖得到的提交都在钩子后面）")
+        say("[入口] 最近没有 merge/rebase 痕迹（pre-commit 覆盖得到的提交都在钩子后面）")
 
-    if (project / "scripts" / "check.py").exists():
-        r = _run([sys.executable, "scripts/check.py"], project, timeout=300)
+    if quick:
+        say("[合成态] quick：跳过全量 check")
+    elif check_path.exists():
+        r = _run([sys.executable, "scripts/check.py", "--no-track"], project, timeout=300)
         state = "合法" if r.returncode == 0 else "不合法"
-        print(f"[合成态] 全量 check：rc={r.returncode} → main 当前{state}")
+        say(f"[合成态] 全量 check：rc={r.returncode} → main 当前{state}")
         if r.returncode != 0:
-            print("  每个提交当时都合法不代表 main 合法（rebase/merge 不跑钩子）——这是 I-004 的形状")
+            say("  每个提交当时都合法不代表 main 合法（rebase/merge 不跑钩子）——这是 I-004 的形状")
             for line in (r.stdout or "").splitlines():
                 if line.startswith("[") and "通过" not in line:
-                    print(f"  {line}")
+                    say(f"  {line}")
             issues.append("main 合成态违规")
-    print("\n不覆盖的范围：harness 自身的网络与 IDE 遥测、模型 API、`--no-verify` 绕过当时的事后痕迹"
-          "（绕过会在 reflog 里留下没有钩子判决的提交，可人工核对，不自动定罪）")
-    print(f"结论：{'发现 %d 类问题：%s' % (len(issues), '、'.join(issues)) if issues else '干净'}")
+    say("\n不覆盖的范围：harness 自身的网络与 IDE 遥测、模型 API、`--no-verify` 绕过当时的事后痕迹"
+        "（绕过会在 reflog 里留下没有钩子判决的提交，可人工核对，不自动定罪）")
+    say(f"结论：{'发现 %d 类问题：%s' % (len(issues), '、'.join(issues)) if issues else '干净'}")
+    if as_json:
+        print(json.dumps({"project": str(project), "quick": quick, "ok": not issues,
+                          "issues": issues, "missing_capabilities": missing,
+                          "lines": lines}, ensure_ascii=False, sort_keys=True))
     sys.exit(1 if issues else 0)
 
 
@@ -427,6 +558,8 @@ def main():
     p_mig.add_argument("--yes", action="store_true", help="落盘（先自动建备份分支）")
     p_aud = sub.add_parser("audit", help="只读体检：钩子/指纹/合成态")
     p_aud.add_argument("project")
+    p_aud.add_argument("--quick", action="store_true", help="只读摘要，跳过全量 check")
+    p_aud.add_argument("--json", action="store_true", help="输出机器可读 JSON")
     sub.add_parser("schema", help="打印 schema 版本与升级步骤")
     args = ap.parse_args()
     if args.cmd == "lock":

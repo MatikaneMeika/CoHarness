@@ -10,6 +10,7 @@
 输出与 docs/DEMO-migrate.md 里贴的一致（那份是 2026-09-28 实跑记录）。
 """
 import argparse
+import re
 import shutil
 import subprocess
 import sys
@@ -46,7 +47,7 @@ def build_v1(root: Path) -> Path:
     text = agents.read_text(encoding="utf-8").split("\n## 降级行为")[0]
     text = text.replace("wsc.py claim", "task edit -s doing")
     text = text.replace("{{COHARNESS_LIB}}", "<骨架库>")          # v1 的写法：下游猜不出路径
-    text = text.replace("| 骨架 schema | 3 |\n", "")               # v1 的项目卡没有这行声明
+    text = re.sub(r"(?m)^\|\s*骨架 schema\s*\|\s*\d+\s*\|\n", "", text)  # v1 的项目卡没有这行声明
     agents.write_text(text + "\n## 工作方式\n\n（略）\n", encoding="utf-8", newline="\n")
     proto = proj / ".agent" / "workflows" / "parallel-protocol.md"
     proto.write_text(proto.read_text(encoding="utf-8").replace("{{COHARNESS_LIB}}", "<骨架库>"),
@@ -87,7 +88,7 @@ def main():
         sh(["git", *ident, "add", ".agent/skeleton.lock"], proj)
         sh(["git", *ident, "commit", "-q", "-m", "记装机指纹"], proj)
         lock = proj / ".agent" / "skeleton.lock"
-        lock.write_text(lock.read_text(encoding="utf-8").replace('"schema": 3', '"schema": 1'),
+        lock.write_text(re.sub(r'"schema":\s*\d+', '"schema": 1', lock.read_text(encoding="utf-8")),
                         encoding="utf-8", newline="\n")
         print("### 第 2 步：把指纹改回 schema=1，模拟「这个项目还停在老版本」\n")
         before = sh(["git", "status", "--porcelain"], proj).stdout.strip()
@@ -108,7 +109,7 @@ def main():
             "AGENTS.md 已有降级行为节": "## 降级行为" in (proj / "AGENTS.md").read_text(encoding="utf-8"),
             "文档里的库路径已代入绝对路径": "<骨架库>" not in (proj / "AGENTS.md").read_text(encoding="utf-8"),
             "认领句已升级为 wsc claim": "wsc.py claim" in (proj / "AGENTS.md").read_text(encoding="utf-8"),
-            "指纹记到当前 schema": '"schema": 3' in lock.read_text(encoding="utf-8"),
+            "指纹记到当前 schema": '"schema": 4' in lock.read_text(encoding="utf-8"),
             "常驻规则卡已清掉": not (proj / "backlog" / "tasks" / "T-000-board.md").exists(),
             "看板列已改成本骨架四列": "statuses: [todo, doing, review, done]"
                                  in (proj / "backlog" / "config.yml").read_text(encoding="utf-8"),
@@ -123,7 +124,7 @@ def main():
         print(f"  回滚办法：git reset --hard {branches.split()[-1] if branches else '(没建上)'}")
         status = sh(["git", "status", "--short"], proj).stdout
         print(f"\n升级带来的未提交改动：\n{status}")
-        print("下一步就是常规提交：git add -A && git commit -m 'migrate v1 -> v3'")
+        print("下一步就是常规提交：git add -A && git commit -m 'migrate v1 -> v4'")
     finally:
         if args.keep:
             print(f"\n（已保留演示项目：{root}）")

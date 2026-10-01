@@ -19,7 +19,7 @@ python docs/demo/migrate_demo.py --keep   # 保留临时项目目录，自己进
 - `scripts/check.py` 是 I-001 之前那版，不认识自授权（认领与登记会被自己锁死）
 - 项目卡里没有 `| 骨架 schema | N |` 声明行
 
-## 实跑输出（2026-09-28，骨架库 commit 见输出内的 skeleton_commit；临时目录与时间戳已隐去）
+## 实跑输出（2026-10-01，骨架库 commit 见输出内的 skeleton_commit；临时目录与时间戳已隐去）
 
 ```text
 === v1 演示项目：C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project
@@ -29,13 +29,13 @@ python docs/demo/migrate_demo.py --keep   # 保留临时项目目录，自己进
 $ python maintain.py lock C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project
 [lock] 已写 C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project\.agent\skeleton.lock（这份指纹可以提交进项目仓库：不含本机路径）
   skeleton = 03-multi-harness-project
-  skeleton_commit = 5f85a02
-  schema = 3
-  check_sha256 = ea91e416249b
+  skeleton_commit = 1617d1c
+  schema = 4
+  check_sha256 = 28f5c1a36e2b
 ### 第 2 步：把指纹改回 schema=1，模拟「这个项目还停在老版本」
 
 $ python maintain.py migrate C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project
-== migrate C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project（当前 schema=1←指纹，本体 schema=3）==
+== migrate C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project（当前 schema=1←指纹，本体 schema=4）==
 
 v1 -> v2: 本地记账进 .gitignore + 库路径代入绝对值 + 认领首选 wsc claim + 补降级行为节 + 删常驻卡 + 看板列改四列 statuses + 刷新缺自授权的旧 check.py
   - 待追加：.gitignore 里补 '.agent/telemetry.jsonl'
@@ -49,13 +49,16 @@ v1 -> v2: 本地记账进 .gitignore + 库路径代入绝对值 + 认领首选 w
 v2 -> v3: 适配指针升级为各工具原生目录格式（.cursor/rules、.windsurf/rules），清掉旧单文件
   - 待迁移 .cursorrules → .cursor/rules/coharness.mdc
 
+
+v3 -> v4: scripts/check.py 三方合并到当前骨架（审阅意见 / 结果行 / 可观察验收 / 所有权执法），冲突拒绝覆盖
+  - 已到位：scripts/check.py 已是当前骨架版本
 （dry-run：什么都没写。确认无误再加 --yes，落盘前会自动建备份分支）
 （已核对：dry-run 前后 git status 一致，指纹未动）
 
 ### 第 3 步：确认后落盘——先自动建备份分支
 
 $ python maintain.py migrate C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project --yes
-== migrate C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project（当前 schema=1←指纹，本体 schema=3）==
+== migrate C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project（当前 schema=1←指纹，本体 schema=4）==
 [migrate] 已建备份分支 coh-backup-<时间戳>（回到旧状态：git reset --hard coh-backup-<时间戳>）
 
 v1 -> v2: 本地记账进 .gitignore + 库路径代入绝对值 + 认领首选 wsc claim + 补降级行为节 + 删常驻卡 + 看板列改四列 statuses + 刷新缺自授权的旧 check.py
@@ -69,13 +72,16 @@ v1 -> v2: 本地记账进 .gitignore + 库路径代入绝对值 + 认领首选 w
 
 v2 -> v3: 适配指针升级为各工具原生目录格式（.cursor/rules、.windsurf/rules），清掉旧单文件
   - 已迁移 .cursorrules → .cursor/rules/coharness.mdc
+
+v3 -> v4: scripts/check.py 三方合并到当前骨架（审阅意见 / 结果行 / 可观察验收 / 所有权执法），冲突拒绝覆盖
+  - 已到位：scripts/check.py 已是当前骨架版本
 [lock] 已写 C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project\.agent\skeleton.lock（这份指纹可以提交进项目仓库：不含本机路径）
   skeleton = 03-multi-harness-project
-  skeleton_commit = 5f85a02
-  schema = 3
-  check_sha256 = 0206fabaccad
+  skeleton_commit = 1617d1c
+  schema = 4
+  check_sha256 = e1aec874ca6d
 
-[migrate] 已落盘并把 schema 记到 3；改动都在备份分支 coh-backup-<时间戳> 的对照下，回滚：git reset --hard coh-backup-<时间戳>
+[migrate] 已落盘并把 schema 记到 4；改动都在备份分支 coh-backup-<时间戳> 的对照下，回滚：git reset --hard coh-backup-<时间戳>
 
 ### 第 4 步：核对结果
 
@@ -103,7 +109,7 @@ v2 -> v3: 适配指针升级为各工具原生目录格式（.cursor/rules、.wi
  M scripts/check.py
 ?? .cursor/
 
-下一步就是常规提交：git add -A && git commit -m 'migrate v1 -> v3'
+下一步就是常规提交：git add -A && git commit -m 'migrate v1 -> v4'
 ```
 
 ## 这几条设计是要害
@@ -116,7 +122,7 @@ v2 -> v3: 适配指针升级为各工具原生目录格式（.cursor/rules、.wi
 - **只补真需要的**：没装过适配指针的项目不会被塞进五个新文件；`check.py` 只在"缺自授权"这一条明确旧版特征时刷新，
   其它差异交给 `audit` 报漂移，不静默覆盖
 - **幂等**：升到当前 schema 后再跑一次，答案是"已是最新 schema，无升级步骤"
-- **步骤是本轮真实改动**：v1→v2 七步与 v2→v3 一步都对应 CHANGELOG 里已有的行，不是为演示编的
+- **步骤是本轮真实改动**：v1→v2 七步、v2→v3 一步与 v3→v4 的 `check.py` 三方合并都对应 CHANGELOG 里已有的行，不是为演示编的
 
-对应的自动化证据：`tests/test_maintain.py` 20 条（含 dry-run 不写盘、备份分支、幂等、拒绝无仓库落盘、
+对应的自动化证据：`tests/test_maintain.py` 27 条（含 dry-run 不写盘、备份分支、幂等、拒绝无仓库落盘、
 v2→v3 不凭空生成、指纹不含本机路径、七项 v1 遗留各自被处理、schema 可从项目卡读回）。

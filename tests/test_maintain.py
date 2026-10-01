@@ -5,6 +5,7 @@ audit 必须一个字都不写，因为它要在"项目可能已经漂了"的场
 v1→v2 的升级步骤就是本轮真实做过的四件事，不是编的演示。
 """
 import hashlib
+import json
 import re
 import sys
 import unittest
@@ -51,7 +52,7 @@ class Maintain(unittest.TestCase):
     def downgrade_schema(self, lock, to):
         """把指纹里的 schema 调低，模拟"这个项目还停在老版本"。"""
         text = lock.read_text(encoding="utf-8")
-        lock.write_text(text.replace('"schema": 3', f'"schema": {to}'),
+        lock.write_text(text.replace('"schema": 4', f'"schema": {to}'),
                         encoding="utf-8", newline="")
 
     def make_v1(self, proj):
@@ -88,14 +89,29 @@ class Maintain(unittest.TestCase):
         self.assertTrue(lock.is_file())
         text = lock.read_text(encoding="utf-8")
         self.assertIn("03-multi-harness-project", text)
-        self.assertIn('"schema": 3', text)
+        self.assertIn('"schema": 4', text)
         self.assertRegex(text, r'"check_sha256": "[0-9a-f]{12}"')
 
     def test_schema_lists_upgrade_steps(self):
         out = H.out(maintain("schema"))
-        self.assertIn("骨架 schema 版本：3", out)
+        self.assertIn("骨架 schema 版本：4", out)
         self.assertIn("v1 -> v2", out)
         self.assertIn("v2 -> v3", out)
+        self.assertIn("v3 -> v4", out)
+
+    def test_sha_normalizes_line_endings_and_keeps_binary(self):
+        import maintain
+        lf = self.tmp / "lf.txt"
+        crlf = self.tmp / "crlf.txt"
+        lf.write_bytes(b"a\nb\n")
+        crlf.write_bytes(b"a\r\nb\r\n")
+        self.assertEqual(maintain._sha(lf), maintain._sha(crlf),
+                         "文本哈希必须先归一行尾，否则 CRLF 检出会漂")
+        raw = b"\xff\r\n\x00\x01"
+        binary = self.tmp / "binary.dat"
+        binary.write_bytes(raw)
+        self.assertEqual(maintain._sha(binary), hashlib.sha256(raw).hexdigest()[:12],
+                         "二进制必须按原始字节哈希，不能被行尾归一误伤")
 
     def test_migrate_dry_run_writes_nothing(self):
         proj = self.fresh("03", downgrade=True)
@@ -120,10 +136,11 @@ class Maintain(unittest.TestCase):
         self.assertIn("## 降级行为", agents)
         self.assertIn("wsc.py claim", agents)
         self.assertNotIn("<CoHarness>", agents)
+        self.assertNotIn("<骨架库>", agents, "AGENTS.md 里指向 ROUTER 的占位符也要代入绝对路径")
         self.assertIn(".agent/telemetry.jsonl", (proj / ".gitignore").read_text(encoding="utf-8"))
         self.assertNotIn("<骨架库>", (proj / ".agent" / "workflows" /
                                     "parallel-protocol.md").read_text(encoding="utf-8"))
-        self.assertIn('"schema": 3', (proj / ".agent" / "skeleton.lock").read_text(encoding="utf-8"))
+        self.assertIn('"schema": 4', (proj / ".agent" / "skeleton.lock").read_text(encoding="utf-8"))
 
     def fresh_with_legacy(self, name):
         """带旧单文件适配的项目：旧文件必须进 bootstrap 提交，否则"改动未挂卡"当场拦下。"""
@@ -142,7 +159,7 @@ class Maintain(unittest.TestCase):
         proj = self.fresh_with_legacy("v23")
         self.assertEqual(maintain("lock", str(proj)).returncode, 0)
         lock = self.proj_lock(proj)
-        self.assertIn('"schema": 3', lock.read_text(encoding="utf-8"))
+        self.assertIn('"schema": 4', lock.read_text(encoding="utf-8"))
         self.downgrade_schema(lock, 2)
         dry = maintain("migrate", str(proj))
         self.assertIn("待迁移 .cursorrules", H.out(dry))
@@ -151,7 +168,7 @@ class Maintain(unittest.TestCase):
         self.assertEqual(yes.returncode, 0, msg=H.out(yes))
         self.assertFalse((proj / ".cursorrules").exists())
         self.assertTrue((proj / ".cursor" / "rules" / "coharness.mdc").exists())
-        self.assertIn('"schema": 3', lock.read_text(encoding="utf-8"))
+        self.assertIn('"schema": 4', lock.read_text(encoding="utf-8"))
 
     def test_migrate_v2_to_v3_does_not_invent_adapters(self):
         proj = self.fresh("03")
@@ -166,6 +183,60 @@ class Maintain(unittest.TestCase):
         self.assertEqual(maintain("migrate", str(proj), "--yes").returncode, 0)
         second = maintain("migrate", str(proj))
         self.assertIn("已是最新 schema", H.out(second))
+
+    def _write_v3_check(self, proj):
+        old = H.out(H.git(H.REPO, "show", "1617d1c:03-multi-harness-project/scripts/check.py"))
+        (proj / "scripts" / "check.py").write_text(old, encoding="utf-8", newline="\n")
+        self.assertEqual(maintain("lock", str(proj)).returncode, 0)
+        lock = json.loads(self.proj_lock(proj).read_text(encoding="utf-8"))
+        lock["schema"] = 3
+        self.proj_lock(proj).write_text(json.dumps(lock, ensure_ascii=False, indent=1) + "\n",
+                                       encoding="utf-8", newline="\n")
+        return lock
+
+    def test_migrate_v3_to_v4_merges_check_py_and_is_idempotent(self):
+        proj = self.fresh("03")
+        self._write_v3_check(proj)
+        check = proj / "scripts" / "check.py"
+        r = maintain("migrate", str(proj), "--yes")
+        self.assertEqual(r.returncode, 0, msg=H.out(r))
+        self.assertIn("v3 -> v4", H.out(r))
+        self.assertIn("ownership_rows", check.read_text(encoding="utf-8"))
+        self.assertEqual(json.loads(self.proj_lock(proj).read_text(encoding="utf-8"))["schema"], 4)
+        again = maintain("migrate", str(proj))
+        self.assertIn("已是最新 schema", H.out(again))
+
+    def test_migrate_v3_to_v4_conflict_does_not_overwrite(self):
+        proj = self.fresh("03")
+        self._write_v3_check(proj)
+        check = proj / "scripts" / "check.py"
+        local = check.read_text(encoding="utf-8").replace("仍为 todo", "仍为 本地状态")
+        check.write_text(local, encoding="utf-8", newline="\n")
+        self.assertEqual(maintain("lock", str(proj)).returncode, 0)
+        lock = json.loads(self.proj_lock(proj).read_text(encoding="utf-8"))
+        lock["schema"] = 3
+        self.proj_lock(proj).write_text(json.dumps(lock, ensure_ascii=False, indent=1) + "\n",
+                                       encoding="utf-8", newline="\n")
+        r = maintain("migrate", str(proj), "--yes")
+        self.assertNotEqual(r.returncode, 0, msg=H.out(r))
+        self.assertIn("三方合并失败", H.out(r))
+        self.assertEqual(check.read_text(encoding="utf-8"), local, "冲突时不得覆盖本地 check.py")
+        self.assertEqual(json.loads(self.proj_lock(proj).read_text(encoding="utf-8"))["schema"], 3)
+        branches = H.git(proj, "branch", "--list", "coh-backup-*").stdout
+        self.assertNotIn("coh-backup-", branches, "预检失败不得留下备份分支")
+
+    def test_sync_prints_drift_hint_without_rewriting_check(self):
+        proj = self.fresh("03")
+        self.assertEqual(maintain("lock", str(proj)).returncode, 0)
+        lock = json.loads(self.proj_lock(proj).read_text(encoding="utf-8"))
+        lock["schema"] = 3
+        self.proj_lock(proj).write_text(json.dumps(lock, ensure_ascii=False, indent=1) + "\n",
+                                       encoding="utf-8", newline="\n")
+        check = proj / "scripts" / "check.py"
+        before = check.read_text(encoding="utf-8")
+        out = H.out(H.wsc("sync", str(proj)))
+        self.assertIn("[漂移]", out)
+        self.assertEqual(check.read_text(encoding="utf-8"), before, "sync 不自动改项目文件")
 
     def test_migrate_refuses_yes_without_a_repo(self):
         proj = H.make_project(self.tmp)
@@ -212,6 +283,44 @@ class Maintain(unittest.TestCase):
         r = maintain("audit", str(proj))
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("check.py 漂移", H.out(r))
+
+    def test_audit_quick_json_is_read_only_and_stable(self):
+        proj = self.fresh("03")
+        self.assertEqual(maintain("lock", str(proj)).returncode, 0)
+        before = tree_hash(proj)
+        first = maintain("audit", str(proj), "--quick", "--json")
+        self.assertEqual(first.returncode, 0, msg=H.out(first))
+        data = json.loads(first.stdout)
+        self.assertTrue(data["quick"])
+        self.assertIn("issues", data)
+        second = maintain("audit", str(proj), "--quick", "--json")
+        self.assertEqual(first.stdout, second.stdout, "--json 输出必须可稳定比对")
+        self.assertEqual(tree_hash(proj), before, "audit 不得写工作区")
+        self.assertFalse((proj / ".agent" / "telemetry.jsonl").exists())
+
+    def test_audit_full_check_never_tracks(self):
+        proj = self.fresh("03")
+        self.assertEqual(maintain("lock", str(proj)).returncode, 0)
+        before = tree_hash(proj)
+        r = maintain("audit", str(proj))
+        self.assertEqual(r.returncode, 0, msg=H.out(r))
+        self.assertEqual(tree_hash(proj), before)
+        self.assertFalse((proj / ".agent" / "telemetry.jsonl").exists(),
+                         "audit 内部跑 check.py 必须带 --no-track")
+
+    def test_audit_json_reports_missing_capabilities(self):
+        proj = self.fresh("03")
+        check = proj / "scripts" / "check.py"
+        check.write_text(check.read_text(encoding="utf-8").replace("ownership_rows", "ownership"),
+                         encoding="utf-8", newline="\n")
+        self.assertEqual(maintain("lock", str(proj)).returncode, 0)
+        lock = json.loads(self.proj_lock(proj).read_text(encoding="utf-8"))
+        lock["schema"] = 3
+        self.proj_lock(proj).write_text(json.dumps(lock, ensure_ascii=False, indent=1) + "\n",
+                                       encoding="utf-8", newline="\n")
+        r = maintain("audit", str(proj), "--quick", "--json")
+        self.assertEqual(r.returncode, 1, msg=H.out(r))
+        self.assertIn("ownership_rows", json.loads(r.stdout)["missing_capabilities"])
 
     def test_audit_flags_an_illegal_merged_board(self):
         """I-004 的真实形状：两条分支各自合法，合进 main 后是同人两张 doing 卡——merge 不跑钩子。"""
@@ -290,7 +399,7 @@ class Maintain(unittest.TestCase):
         proj = self.fresh("03")
         out = H.out(maintain("migrate", str(proj)))
         self.assertIn("AGENTS.md 声明", out)
-        self.assertIn("当前 schema=3", out)
+        self.assertIn("当前 schema=4", out)
 
     def test_audit_flags_a_ledger_written_outside_agent(self):
         proj = self.fresh("03")

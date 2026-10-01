@@ -191,7 +191,9 @@ class EvolveTool(unittest.TestCase):
         self.assertEqual(fp["schema"], maintain.SCHEMA)
         self.assertNotIn("漂移", fp)
         lock = proj / ".agent" / "skeleton.lock"
-        lock.write_text(lock.read_text(encoding="utf-8").replace('"schema": 3', '"schema": 1'),
+        data = json.loads(lock.read_text(encoding="utf-8"))
+        data["schema"] = 1
+        lock.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n",
                         encoding="utf-8", newline="")
         drifted = ev.fingerprint(proj)
         self.assertIn("漂移", drifted)
