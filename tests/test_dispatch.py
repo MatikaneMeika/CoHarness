@@ -6,6 +6,8 @@
    卡片经项目自己的 check.py 读，不自己写解析器；
 3. **不自主决定**——预选是写死的确定性规则；失败只上报，不改派。
 """
+import contextlib
+import io
 import os
 import sys
 import unittest
@@ -439,13 +441,15 @@ class Cli(Base):
         self.assertEqual(rc, 0)
         spy.assert_not_called()
 
-    @unittest.skipUnless(os.name == "nt", "cp1252 控制台是 Windows 场景")
     def test_cli_output_survives_a_cp1252_console(self):
         self.card("T-002", status="todo", assignee="[]", allowed=("  - project/src/models/",))
-        r = H.run([sys.executable, str(H.REPO / "dispatch.py"), str(self.proj)],
-                  cwd=self.proj, native_env=True, extra_env={"PYTHONIOENCODING": "cp1252"})
-        self.assertEqual(r.returncode, 0, H.out(r))
-        self.assertIn("[dispatch]", H.out(r))
+        raw = io.BytesIO()
+        stream = io.TextIOWrapper(raw, encoding="cp1252", errors="strict")
+        with contextlib.redirect_stdout(stream):
+            rc = D.main([str(self.proj)])
+            stream.flush()
+        self.assertEqual(rc, 0)
+        self.assertIn("[dispatch]", raw.getvalue().decode("utf-8"))
 
     def test_advance_executes_once(self):
         self.card("T-002", status="todo", assignee="[]", allowed=("  - project/src/models/",))
