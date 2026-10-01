@@ -30,6 +30,7 @@
 | `code/<组件>/` | 该组件的 coder | 只读 |
 | `docs/ARCHITECTURE.md` | architect | 只读 |
 | `docs/DECISIONS.md` | architect（ADR 只增不改） | 只读 |
+| `AGENTS.md`、`.agent/`、`scripts/` | architect（规则层，走规则卡 + ADR） | 只读 |
 | `backlog/` 状态流转 | 各 harness 认领后改自己的卡，总裁决归 integrator | 只读他人卡 |
 | 其余共享契约（接口定义等） | architect | 只读，变更走 ADR |
 
