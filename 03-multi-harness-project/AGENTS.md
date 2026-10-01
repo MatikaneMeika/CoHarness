@@ -105,6 +105,16 @@ AGENTS.md / .agent/ 规则文件 > spec-kit 产物 > 任务卡内容 > 会话中
 - **specify 初始化**：对每个在场工具各跑一次 `specify init --integration <名>`
 
 原则：`AGENTS.md` 是唯一权威，任何工具专属文件只放一行指针，**不写第二份规则**。
+## 共享解释器（venv）约定
+
+多 harness 共用同一个解释器（如 `code/.venv`）时：
+
+1. **重建前先探测**：先确认已有环境是否可用（跑一次最小自检脚本，或看 `pip list` 与上次的 `env_report.json`），不要凭"大概没装"就重建；
+2. **只用同一套安装器**：本项目统一用一个安装器（`uv` 或 `python -m venv`，二者混用会静默清空 site-packages）；
+3. **重建后必须复验并广播**：重跑自检脚本，把解释器路径与关键依赖版本写进当次交接说明；重建期间在场 harness 的测试结果一律视为无效。
+
+（I-003，2026-09-30 晋升：某项目 venv 两次被清空，CUDA torch 与 mediapipe 全丢，多路测试在"以为装好了"的环境上失败。）
+
 ## 降级行为（依赖没装时）
 
 装机顺序无所谓，缺一项就照这一节走回落路径；`python {{COHARNESS_LIB}}/wsc.py doctor --explain backlog,specify,worktrunk,node`
