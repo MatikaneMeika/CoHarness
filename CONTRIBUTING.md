@@ -9,7 +9,7 @@
 只需要 Python 3.11+（Windows/macOS/Linux 都行）与 git：
 
 ```bash
-python -m unittest discover -s tests    # 零依赖；当前 365 条
+python -m unittest discover -s tests    # 零依赖；当前 366 条
 ```
 
 想让差分测试也跑（拿 `python-frontmatter` 当预言机对照自写解析器）：

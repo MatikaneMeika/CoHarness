@@ -186,6 +186,17 @@ class Candidates(Base):
         self.assertEqual([c["id"] for c in D.candidates(self.proj)],
                          ["T-001", "T-002", "T-010"])
 
+    def test_candidates_accept_a_symlinked_project_root(self):
+        """macOS 的临时目录经 /var -> /private/var 符号链接；候选路径必须与 check.py 的 ROOT 同口径。"""
+        link = self.tmp / "linked-project"
+        try:
+            link.symlink_to(self.proj, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("当前平台不允许创建目录符号链接")
+        self.card("T-002", status="todo", assignee="[]",
+                  allowed=("  - project/src/models/",))
+        self.assertEqual([c["id"] for c in D.candidates(link)], ["T-002"])
+
 
 class Pick(Base):
     def test_pick_takes_the_lowest_card_number(self):

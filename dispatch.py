@@ -61,7 +61,8 @@ def _card_number(cid):
 
 def _scan(project):
     """候选与受阻一次算清：todo + 无人认领 + 依赖就绪 + 边界不与在做卡冲突。"""
-    project = Path(project)
+    # check.py 的 ROOT 会 resolve；先对齐它，macOS 的 /var 符号链接才不会炸 relative_to()。
+    project = Path(project).resolve()
     check = board.load_check(project)
     tasks_dir, _columns = (check.load_config() if hasattr(check, "load_config")
                            else (project / "backlog" / "tasks", []))

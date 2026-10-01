@@ -3,14 +3,14 @@
 - 工作树：`D:\c-move\.codex\worktrees\5702\CoHarness`
   （与 `C:\Users\666666\.codex\worktrees\5702\CoHarness` 是同一目录，已用 `dispatch.py` 的
   SHA256 逐字节比对确认；两个路径都可读写，不要当成两份工作树）
-- 分支：`codex/dispatch-console`，已按批准计划以 `main`（`6cafcfb`）为基线拆分提交；最终全量 365 条通过，本轮合入 `main` 但不发布
+- 分支：`codex/dispatch-console`，已按批准计划以 `main`（`6cafcfb`）为基线拆分提交；最终全量 366 条通过，本轮合入 `main` 但不发布
 - 日期：2026-10-01
 - 本报告的用途：给后续会话读取，用于（a）合并本分支，（b）决策并推进"总控"议题
 - 只读观测来源：`D:\job\ClassObserver`（按用户要求全程只读，未写入）
 
 ## 0. 一句话
 
-本轮把"唤醒"这一半补上了：`dispatch` 门面 + 面板派发页，全量 365 测试绿、真机链路冒烟通过；P1-P3 的 schema、执法漂移、安全与观测收口也已并入同一主线。
+本轮把"唤醒"这一半补上了：`dispatch` 门面 + 面板派发页，全量 366 测试绿、真机链路冒烟通过；P1-P3 的 schema、执法漂移、安全与观测收口也已并入同一主线。
 另有一个**未决的架构议题**：用户要求新项目自带"总控"（权限最高、负责推进的那个会话），
 现行 CoHarness 架构里**没有这个角色**。本报告记录证据、合法性判定与建议路径——
 **明确不在本工作树实施**。
@@ -39,7 +39,7 @@
 | 文件 | 规模 | 说明 |
 |---|---|---|
 | `dispatch.py` | 299 / 300 行 | 委托与唤醒门面，纯标准库 |
-| `tests/test_dispatch.py` | 36 条测试 | 候选/预选/角色/命令表/拉起/失败路径 |
+| `tests/test_dispatch.py` | 37 条测试 | 候选/预选/角色/命令表/拉起/失败路径 |
 | `03-multi-harness-project/.agent/dispatch.md` | 模板 | 项目侧"角色 → 启动命令"表 |
 | `docs/rfcs/RFC-0003-委托与唤醒.md` | RFC | 定位变更的论证与被否决方案 |
 
@@ -111,13 +111,13 @@ CoHarness 一律不知道。所以"失败"只覆盖**没能把进程拉起来**�
 
 | 项 | 结果 |
 |---|---|
-| 全量回归 | 最终主线 `Ran 365 tests` / 全绿（本轮合并后重跑为准） |
-| `test_dispatch.py` | 36 条，OK |
+| 全量回归 | 最终主线 `Ran 366 tests` / 全绿（本轮合并后重跑为准） |
+| `test_dispatch.py` | 37 条，OK |
 | `test_panel.py` | 60 条，OK |
 | `test_distribution_surface.py` | 14 条，OK |
 | `test_packaging.py` | 8 条，OK |
 | `test_skeleton_integrity.py` | 7 条，OK |
-| 行数守卫 | dispatch 299/300、panel 300/300、board 527/700、board_render 249/300 |
+| 行数守卫 | dispatch 300/300、panel 300/300、board 527/700、board_render 249/300 |
 
 **真机冒烟（不进 CI，临时项目，跑完即弃）**
 
@@ -255,7 +255,7 @@ ClassObserver 的 `.agent/improvements.md` 共 7 条：
 
 **为什么**：
 
-- dispatch 分支是独立的、已验证的（最终 365 测试 + 真机冒烟），没有理由等总控议题。
+- dispatch 分支是独立的、已验证的（最终 366 测试 + 真机冒烟），没有理由等总控议题。
 - 第 2 条尤其重要：**"不回滚"是一个反直觉的设计决定**，现在只有实现、没有钉子。
   后续任何一次"顺手把失败清理干净"的重构都会静默改掉它，而症状是"卡被莫名退回
   todo、worktree 被删"——这种 bug 很难从现象倒推回原因。钉住它的成本是十几行测试，
