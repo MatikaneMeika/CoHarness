@@ -275,8 +275,8 @@ def _report(project, p):
     print(f"[dispatch] 就绪。跑 `coh-dispatch {project} --advance` 才真拉起。")
     return 0
 
-
 def main(argv=None):
+    board.wsc._utf8_streams()
     ap = argparse.ArgumentParser(
         prog="coh-dispatch",
         description="CoHarness 委托与唤醒：列候选 / 一次性拉起（认领 + 工作树 + 新终端）")

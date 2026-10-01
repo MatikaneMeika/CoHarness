@@ -309,8 +309,10 @@ class Launch(Base):
     def test_launch_creates_a_worktree_outside_the_project(self):
         self.launch()
         trees = H.git(self.proj, "worktree", "list", "--porcelain").stdout
-        self.assertIn(str(self.proj).replace(os.sep, "/"), trees)   # git 打印正斜杠
-        self.assertGreaterEqual(trees.count("worktree "), 2)
+        paths = [Path(line[len("worktree "):]) for line in trees.splitlines()
+                 if line.startswith("worktree ")]
+        self.assertTrue(any(os.path.samefile(self.proj, p) for p in paths), trees)
+        self.assertGreaterEqual(len(paths), 2)
 
     def test_launch_refuses_a_plan_that_is_not_ready(self):
         p = D.plan(self.proj)
@@ -436,6 +438,13 @@ class Cli(Base):
             rc = D.main([str(self.proj)])
         self.assertEqual(rc, 0)
         spy.assert_not_called()
+
+    def test_cli_output_survives_a_cp1252_console(self):
+        self.card("T-002", status="todo", assignee="[]", allowed=("  - project/src/models/",))
+        r = H.run([sys.executable, str(H.REPO / "dispatch.py"), str(self.proj)],
+                  cwd=self.proj, native_env=True, extra_env={"PYTHONIOENCODING": "cp1252"})
+        self.assertEqual(r.returncode, 0, H.out(r))
+        self.assertIn("[dispatch]", H.out(r))
 
     def test_advance_executes_once(self):
         self.card("T-002", status="todo", assignee="[]", allowed=("  - project/src/models/",))
