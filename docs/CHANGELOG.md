@@ -2,6 +2,8 @@
 
 > 格式：`- YYYY-MM-DD [晋升 I-xxx@来源项目] 摘要`；非晋升的本体演进用 `[演进]` 标签，缺陷修复用 `[缺陷修复]` 并附复现方式。只增不改。
 
+- 2026-10-01 [未发布] **CI 浅克隆假红修复**。`actions/checkout` 默认只取一个提交，P1 的 v3→v4 迁移测试要读历史骨架 commit `1617d1c`，`evolve --apply-check` 又会连 `.git` 复制到临时副本，因此 stdlib/oracle 在 Ubuntu/Python 3.11–3.13 上各报 3 条失败。浅克隆复现为 `test_maintain` 28 条中 2 条迁移用例失败；同一副本 `git fetch --unshallow` 后 28/28 通过。修法是 stdlib/oracle 显式 `fetch-depth: 0`，不改迁移语义，也不把历史缺失误判成成功。
+
 - 2026-10-01 [未发布] **P0-P3 优化已合并且未发布**。上一条 dispatch 草稿里的 `260/300`、`301→344`、`test_dispatch.py 33 条`是拆分前快照，以本条为准：`dispatch.py` 最终 `299/300`，`tests/test_dispatch.py` 36 条，全量自测 `365` 条。P1 把骨架 schema 升到 4，`maintain.py audit` 增加 `--quick/--json` 与 `--no-track` 只读承诺，`migrate` 对 `check.py` 三方合并且冲突不落盘，文本指纹先归一 CRLF；P2 按 evolve 门禁吸收 I-006（禁止实现分支反向并 main、打印真实 status）、I-007（文本哈希行尾归一 + `.gitattributes` 钉 JSON/YAML LF）、future timestamp 守卫、`check.py --card` 遥测绑定和规则层写者行；P3 把派发失败处理、总控边界、观测 fingerprint 去重和确定性 AST/dev-CVE 扫描落成协议与 CI。**未改包版本号、未打 tag、未发 GitHub Release、未发 PyPI**；本轮只把可用改动合入 `main`。
 - 2026-10-01 [晋升 I-006@D:\job\ClassObserver] **禁止实现分支反向并 main**。三证：补丁提交 `bd133ac`；来源 `D:\job\ClassObserver`；apply-check `trial-20261001-185502`（Ran 302 tests，OK skipped=9；新实例 check rc=0）；用户 2026-10-01 批准计划。
 - 2026-10-01 [晋升 I-007@D:\job\ClassObserver] **文本哈希行尾归一 + JSON/YAML 钉 LF**。三证：补丁提交 `976fa25`；来源 `D:\job\ClassObserver`；apply-check `trial-20261001-184521`（Ran 301 tests，OK skipped=9；新实例 check rc=0）；用户 2026-10-01 批准计划。

@@ -23,6 +23,9 @@ jobs:
         python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
+        with:
+          # P1 迁移测试要取历史骨架 commit；apply-check 会连 .git 一起复制到临时副本。
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -60,6 +63,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 与 stdlib 同因：迁移基线与临时副本内全套测试都依赖完整历史。
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v4
       - name: 装开发期预言机（不进分发物）
         run: |
