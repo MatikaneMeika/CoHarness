@@ -1,0 +1,4 @@
+# Development-only dependencies. Never installed by the runtime distribution.
+# CI audits this file with pip-audit; it is not part of the zero-dependency runtime.
+python-frontmatter>=1.1.0
+PyYAML>=6.0

@@ -145,6 +145,18 @@ class ProtocolSmoke(unittest.TestCase):
         self.assertIn("正面证据", conv, "卡片约定没同步")
         self.assertIn("结果: 成功|失败|部分", conv, "交接说明缺 `结果:` 首行约定")
 
+    def test_k_dispatch_failure_and_control_boundaries_are_explicit(self):
+        """P3：失败只由发起会话重试一次，总控是协议帽子而不是库侧角色。"""
+        proto = (H.SKELETON / ".agent" / "workflows" / "parallel-protocol.md").read_text(encoding="utf-8")
+        self.assertIn("派发失败处理", proto)
+        self.assertIn("重试上限 1 次", proto)
+        self.assertIn("不静默改派", proto)
+        self.assertIn("总控边界", proto)
+        self.assertIn("库侧 `dispatch` 只管认领、工作树、拉起与执法", proto)
+        for name in ("dispatch.py", "wsc.py"):
+            text = (H.REPO / name).read_text(encoding="utf-8")
+            self.assertNotIn("总控", text, f"{name} 是库侧门面，不许认识总控概念")
+
     def test_h_no_resident_card_in_skeleton(self):
         """死锁的根因是"唯一授权来源是一张必须长持的卡"，路修通后它不该再出现。"""
         self.assertFalse((H.SKELETON / BOARD).exists())
