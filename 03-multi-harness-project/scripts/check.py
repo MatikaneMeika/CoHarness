@@ -583,6 +583,9 @@ def check_diff(cards, tasks_rel=""):
                 # 以前逢 todo 就报，会让重叠边界把已正确认领的一方一起诬告（并发演练 A3）
                 print(f"[改动挂卡] {rel} 只被未认领的卡覆盖（{covering[0]['name']} 仍为 todo，"
                       f"应先认领取 doing）")
+                if "/evidence/" in rel or rel.startswith("evidence/"):
+                    print(f"[改动挂卡]   ↑ 疑似跑测试被动改写的证据（I-002）：用 "
+                          f"`git restore --source=HEAD --staged --worktree {rel}` 还原")
                 continue
             governed += 1 if _owning_row(rel, rows) else 0
         elif not _role_declared(rel, rows, cards):
