@@ -156,5 +156,17 @@ class OwnershipGate(DiffBuild):
         self.assertIn("[所有权]", H.out(res))
 
 
+class StatusMessage(DiffBuild):
+    def test_unclaimed_card_error_prints_the_real_status(self):
+        proj = self.build(repo="full", cards=(("T-001", {"status": "done"}),))
+        f = proj / "docs" / "ARCHITECTURE.md"
+        f.write_text(f.read_text(encoding="utf-8") + "\n补一段。\n", encoding="utf-8")
+        H.git(proj, "add", "docs/ARCHITECTURE.md")
+        res = H.check(proj, "--diff")
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("仍为 done", H.out(res))
+        self.assertNotIn("仍为 todo", H.out(res))
+
+
 if __name__ == "__main__":
     unittest.main()

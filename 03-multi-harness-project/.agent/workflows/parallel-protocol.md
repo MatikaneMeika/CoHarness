@@ -69,6 +69,8 @@
 - 进 main **一次一人**：合并动作本身串行，先到先得
 - 后到者 rebase 到最新 main 再合并；冲突以契约文件与 ARCHITECTURE.md 为准裁决，裁决记 ADR
 - `python scripts/check.py` 全绿才允许合入（pre-commit 已强制，但合并前主动跑一次）
+- **禁止在实现分支上反向 `git merge main`**：收工统一回 main 工作树执行 `git merge <实现分支>`；分支侧反向合并会把 main 上 done 卡的历史改动重新挂到本次暂存集，既过不了钩子也会把历史责任混在一起
+- 若反向合并已经被拦住：不要 `--no-verify` 绕过，改用 main 侧合并并重放本卡产物；`check.py` 报错会打印卡片真实 status 供诊断
 
 ## 冲突裁决顺序
 
