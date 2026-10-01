@@ -439,6 +439,7 @@ class Cli(Base):
         self.assertEqual(rc, 0)
         spy.assert_not_called()
 
+    @unittest.skipUnless(os.name == "nt", "cp1252 控制台是 Windows 场景")
     def test_cli_output_survives_a_cp1252_console(self):
         self.card("T-002", status="todo", assignee="[]", allowed=("  - project/src/models/",))
         r = H.run([sys.executable, str(H.REPO / "dispatch.py"), str(self.proj)],

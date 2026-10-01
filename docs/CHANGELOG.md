@@ -3,7 +3,7 @@
 > 格式：`- YYYY-MM-DD [晋升 I-xxx@来源项目] 摘要`；非晋升的本体演进用 `[演进]` 标签，缺陷修复用 `[缺陷修复]` 并附复现方式。只增不改。
 
 - 2026-10-01 [未发布] **dispatch 候选在 macOS 符号链接根路径下崩溃**。macOS 临时目录经 `/var -> /private/var`，项目自己的 `check.py` 把 `ROOT` 解析成真实路径，而 `dispatch._scan()` 仍拿未解析的项目根做 `relative_to()`；候选非空时抛出路径错误，连带 `evolve --apply-check` 在三条 macOS 腿失败。修法是 `_scan()` 先 `resolve()` 项目根，并加符号链接回归测试；这不是 macOS 特例分支，而是统一路径口径。
-- 2026-10-01 [未发布] **Windows CI 控制台编码与 worktree 路径断言修复**。Windows 的 cp1252 控制台会让 `dispatch.py` 中文候选/拉起提示触发 `UnicodeEncodeError`，现复用 `wsc._utf8_streams()` 统一标准流；worktree 回归改用 `samefile` 比较，避开 Windows 短名与长名差异。复现：`$env:PYTHONIOENCODING='cp1252'; python -m unittest discover -s tests -p test_dispatch.py -k cp1252 -v`；全量 367 条 OK（skipped=6）。
+- 2026-10-01 [未发布] **Windows CI 控制台编码与 worktree 路径断言修复**。Windows 的 cp1252 控制台会让 `dispatch.py` 中文候选/拉起提示触发 `UnicodeEncodeError`，现复用 `wsc._utf8_streams()` 统一标准流；worktree 回归改用 `samefile` 比较，避开 Windows 短名与长名差异。cp1252 回归只在 Windows 执行，POSIX 明确跳过。复现：`$env:PYTHONIOENCODING='cp1252'; python -m unittest discover -s tests -p test_dispatch.py -k cp1252 -v`；全量 367 条 OK（Windows skipped=6）。
 
 - 2026-10-01 [未发布] **CI 浅克隆假红修复**。`actions/checkout` 默认只取一个提交，P1 的 v3→v4 迁移测试要读历史骨架 commit `1617d1c`，`evolve --apply-check` 又会连 `.git` 复制到临时副本，因此 stdlib/oracle 在 Ubuntu/Python 3.11–3.13 上各报 3 条失败。浅克隆复现为 `test_maintain` 28 条中 2 条迁移用例失败；同一副本 `git fetch --unshallow` 后 28/28 通过。修法是 stdlib/oracle 显式 `fetch-depth: 0`，不改迁移语义，也不把历史缺失误判成成功。
 
