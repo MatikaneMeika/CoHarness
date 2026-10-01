@@ -17,8 +17,8 @@
 8. **`evolve.py` 在开发面，不在分发面**：它是骨架库维护者的晋升审核工具（读项目登记表、跨本机实例数同类摩擦、在**临时副本**里试装补丁跑自测），因此不随 `wsc init` 进任何下游项目，`curl` 单文件模式也带不动它。它同样只用标准库、不出网；对下游项目只读，唯一的写是你指定的 `--out` 记录文件；`--apply-check` 只在系统临时目录里动，本体一个字不改，临时目录跑完即删
 9. **`maintain.py` 在维护面**：管已实例化项目的装机指纹与升级。写盘只有两处——`.agent/skeleton.lock`（`lock` 子命令）和 `migrate --yes` 显式升级；`migrate` 默认 dry-run 且落盘前自动建备份分支，`audit` 全程只读。它不联网、只用标准库
 10. **最小模式（`init --minimal`）关掉了什么**：卡片层执法（改动挂卡、认领冲突、边界交集）依赖任务卡，没卡时 `check.py` 显式打印"最小模式关闭"并放行，命名规范与登记管线照常执法。关掉与留下的都在项目 `AGENTS.md` 的「最小模式」节里写着；补一张卡进 `backlog/tasks/` 即恢复执法——执法读文件，不读工具
-11. **审计者视角**：想知道这些承诺是不是真的，跑 `python -m unittest discover -s tests`——`tests/test_distribution_surface.py` 会用 AST 检查四个门面的 import 全在标准库或同目录模块、无网络符号、行数在上限内，并检查文档里没留下已经腐烂的手写数字
-12. **展示面（`board.py` + `board_render.py` + `panel.py`）只读，全链零动态执行**：面板不写文件、不认领、不改卡、不出网，跑完项目的工作区与 `git status` 一模一样（`tests/test_panel.py::test_panel_writes_nothing_into_the_project` 钉住，且断言不留 `__pycache__`）。它读卡片时**复用项目自己的** `scripts/check.py`——理由是"卡片格式与边界只准有一套口径"，而那份文件本来就每次提交都被 pre-commit 执行。装载走 `importlib` 固定路径（曾经用 `exec(compile(...))`，被安全门按 CWE-95 判成高危拦截提交后改掉）：装载期间临时置 `sys.dont_write_bytecode`，别人的项目目录里照样不留 `__pycache__`。`tests/test_distribution_surface.py::test_panel_loads_check_py_without_dynamic_execution` 钉住两件事：`board.py`/`board_render.py` 无任何 `exec`/`eval`/`compile`，且装载路径必须是 `<项目>/scripts/check.py`；四个门面一律禁 `eval`/`exec`
+11. **审计者视角**：想知道这些承诺是不是真的，跑 `python -m unittest discover -s tests`——`tests/test_distribution_surface.py` 会用 AST 检查五个入口的 import 全在标准库或同目录模块、无网络符号、行数在上限内，并检查文档里没留下已经腐烂的手写数字
+12. **展示面默认只读，派发是唯一写路径，全链零动态执行**：面板默认不写文件、不认领、不改卡、不出网，跑完项目的工作区与 `git status` 一模一样（`tests/test_panel.py::test_panel_writes_nothing_into_the_project` 钉住，且断言不留 `__pycache__`）；**唯一的写路径是派发页**（任务页按 `d`）：`panel → dispatch.launch` 认领 + 建工作树 + 开新终端，拉起后立刻失联——不持有句柄、不读子进程输出、不记运行时状态、不自动重试、不改派，越线判据是“把 CoHarness 进程杀掉重启，状态一条都不丢”（委托记录全在 git：卡状态 + `branch.<分支>.coharness-card` 绑定 + worktree 在场）。它读卡片时**复用项目自己的** `scripts/check.py`——理由是"卡片格式与边界只准有一套口径"，而那份文件本来就每次提交都被 pre-commit 执行。装载走 `importlib` 固定路径（曾经用 `exec(compile(...))`，被安全门按 CWE-95 判成高危拦截提交后改掉）：装载期间临时置 `sys.dont_write_bytecode`，别人的项目目录里照样不留 `__pycache__`。`tests/test_distribution_surface.py::test_panel_loads_check_py_without_dynamic_execution` 钉住两件事：`board.py`/`board_render.py` 无任何 `exec`/`eval`/`compile`，且装载路径必须是 `<项目>/scripts/check.py`；五个入口一律禁 `eval`/`exec`
 
 ## 供应链建议
 
@@ -46,4 +46,3 @@
   `scripts/check.py`、`ROUTER.md`、`wsc.py`/`maintain.py`），否则就会出现两套口径
 - **报告里请附**：操作系统与 Python 版本、`python -m unittest discover -s tests` 的结果、
   以及能不能用 `tests/` 里的形状写出一条红了的最小复现——本仓库的验收方式就是"先能把它写成测试"
-

@@ -1,7 +1,8 @@
 """CoHarness 展示面入口：只读看板面板的终端循环。
 
 数据装配与渲染在 board.py（那边全是纯函数、可单测）；本文件只管按键、清屏、刷新节奏，
-以及 --plain 逃生门。**只读**：不写文件、不认领、不改卡、不出网。
+以及 --plain 逃生门。**默认只读**：不写文件、不认领、不改卡、不出网；唯一的写路径是
+派发页（panel → dispatch.launch：认领 + 工作树 + 开新终端，拉起后失联）。
 """
 import argparse
 import os
@@ -12,10 +13,12 @@ from pathlib import Path
 try:                                   # 装成包时按包内模块导入
     from . import wsc
     from . import board
+    from . import dispatch as dispatch_mod
 except ImportError:                    # curl/源码树直跑
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import wsc
     import board
+    import dispatch as dispatch_mod
 
 # 名字表只写一份：两个分支导入的是同一个 board，重复两遍迟早漂（而且白占四十行）。
 # 逐个绑成模块全局而不是就地 import，是为了 `panel_mod.project_snapshot` 这类测试注入点照旧可用。
@@ -23,7 +26,8 @@ for _name in ("_bar", "_clip_left", "_git", "_hours_since", "_norm_prefix", "_ta
               "_title",
               "WATCH_SECONDS", "board_fingerprint", "checklist", "clip", "collect_projects",
               "commits_touching", "current_page_lines", "grouped_by_role", "load_check",
-              "navigate", "project_card_facts", "project_snapshot", "render_card",
+              "dispatch_lines", "navigate", "page_view", "project_card_facts", "project_snapshot",
+              "render_card",
               "render_projects", "render_tasks", "role_label", "role_of", "term_width",
               "unfilled", "viewport", "worktree_copies"):
     globals()[_name] = getattr(board, _name)
@@ -116,9 +120,66 @@ def read_key(timeout):
 KEYMAP = {"UP": "up", "DOWN": "down", "ENT": "enter", "BS": "back", "ESC": "back"}
 
 
+def dispatch_candidates(project):
+    """候选 + 系统预选下标（直接问 dispatch，不在面板里重写机制）。"""
+    cands = dispatch_mod.candidates(project)
+    chosen = dispatch_mod.pick(cands)
+    idx = next((i for i, c in enumerate(cands) if chosen and c["id"] == chosen["id"]), 0)
+    return cands, idx
+
+
+def dispatch_now(project, card, manual=False, plan=None, launch=None):
+    """派发一次：manual 只印命令不执行；否则 plan → launch。失败只上报，不重试。"""
+    p = (plan or dispatch_mod.plan)(project, card=card)
+    if manual:
+        return f"[手动] {p['card']} → {p['role']}：{p['command'] or '（命令未解析）'}"
+    try:
+        (launch or dispatch_mod.launch)(project, p)
+    except SystemExit as e:
+        return f"[失败] {e}"
+    return f"[已拉起] {p['card']} → {p['role']}（{p['tool']}）"
+
+
+def dispatch_open(state, project):
+    """进派发页：装候选、预检预选那张；未就绪就把原因写进 note（面板据此提示），不崩。"""
+    state.update(page="dispatch", cursor=0, top=0, note="", manual=False)
+    try:
+        state["dcands"], state["cursor"] = dispatch_candidates(project)
+        if state["dcands"]:
+            card = state["dcands"][state["cursor"]]["id"]
+            p = dispatch_mod.plan(project, card=card)
+            state["note"] = "" if p["ready"] else "未就绪（强行派发会响亮失败）：" + "；".join(p["reasons"])
+    except SystemExit as e:
+        state["dcands"], state["note"] = [], str(e)
+
+
+def dispatch_key(state, key, ids, project):
+    """派发页的键：m 切手动，Enter/r 派发（r 就是重试）。处理了就返回 True。"""
+    if key == "m":
+        state["manual"] = not state.get("manual", False)
+        return True
+    if key not in ("ENT", "enter", "r"):
+        return False
+    card = ids[state["cursor"]] if ids else None
+    if card:
+        state["note"] = dispatch_now(project, card, manual=state.get("manual", False))
+    return True
+
+
+def plain_view(paths, state, width, color, build):
+    """非 TTY（管道、CI、conhost 花屏）的逃生门：一次性纯文本，不发任何转义序列。"""
+    snaps = build(deep=True)
+    if not snaps:
+        return 1
+    if state["page"] != "tasks":
+        state["page"], state["sel"], state["cursor"] = "projects", 0, 0
+    print("\n".join(current_page_lines(snaps, state, width, color)[0]))
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="coharness-panel",
-                                 description="CoHarness 只读看板面板（展示面）")
+                                 description="CoHarness 看板面板（展示面；派发是唯一写路径）")
     ap.add_argument("projects", nargs="*", help="项目路径；不给就用本机登记表")
     ap.add_argument("--plain", action="store_true",
                     help="一次性纯文本输出，不进全屏（conhost 花屏时的逃生门，也适合贴给人看）")
@@ -169,16 +230,9 @@ def main(argv=None):
 
     if args.plain or not sys.stdin.isatty():
         # 非 TTY（管道、CI、conhost 花屏）就走逃生门：一次性纯文本，不发任何转义序列。
-        snaps = build(deep=True)
-        if not snaps:
-            return 1
-        if state["page"] != "tasks":
-            state["page"], state["sel"], state["cursor"] = "projects", 0, 0
-        lines, _, _ = current_page_lines(snaps, state, width, color)
-        print("\n".join(lines))
-        return 0
+        return plain_view(paths, state, width, color, build)
 
-    DEPTH = {"projects": 0, "tasks": 1, "card": 2}
+    DEPTH = {"projects": 0, "tasks": 1, "card": 2, "dispatch": 1}
     FIELD = {"tasks": "sel", "card": "card"}
     FILTER_CYCLE = ["all", "doing", "todo", "done"]
     # 顶层也吃 deep：浅快照算不出报警，画 0 等于把"没查"报成"没有报警"（实测卡上挂着
@@ -186,14 +240,14 @@ def main(argv=None):
     snaps = build(deep=True)
     try:
         while True:
-            lines, ids, cursor_row = current_page_lines(snaps, state, width, color)
+            lines, ids, cursor_row = page_view(state, snaps, width, color)
             try:
                 height = max(5, os.get_terminal_size().lines - 2)
             except (OSError, ValueError):
                 height = 20
             state["top"] = viewport(len(lines), cursor_row, state.get("top", 0), height)
             shown = lines[state["top"]:state["top"] + height]
-            overflow = f"  -*- {len(lines)} 行，PgUp/PgDn 翻页 · s 筛选" if len(lines) > height else ""
+            overflow = f"  -*- {len(lines)} 行，PgUp/PgDn 翻页 · d 派发 · s 筛选" if len(lines) > height else ""
             sys.stdout.write("\033[2J\033[H\033[?25l")
             sys.stdout.write("\n".join(clip(l, width) for l in shown)
                              + ("\n" + overflow if overflow else "") + "\n")
@@ -203,13 +257,20 @@ def main(argv=None):
                 if args.watch:
                     snaps = build(deep=True)
                 continue
-            if key == "r":
+            if key == "r" and state["page"] != "dispatch":
+                # 派发页的 r 是原地重试，不刷新快照（交给下面的 dispatch_key）
                 snaps = build(deep=True)
                 continue
             if key == "s" and state["page"] == "tasks":
                 cyc = FILTER_CYCLE.index(state.get("filter", "all"))
                 state["filter"] = FILTER_CYCLE[(cyc + 1) % len(FILTER_CYCLE)]
                 state["cursor"], state["top"] = 0, 0
+                continue
+            if key == "d" and state["page"] == "tasks":
+                dispatch_open(state, snaps[state["sel"]]["path"])
+                continue
+            if state["page"] == "dispatch" and dispatch_key(
+                    state, key, ids, snaps[state["sel"]]["path"]):
                 continue
             if key == "ESC":
                 key = "back" if state["page"] != "projects" else "q"

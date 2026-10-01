@@ -228,3 +228,22 @@ def render_tasks(snap, cursor, width=78, color=True):
                " 验收项已勾")
     out.append("  ↑↓ 选择 · Enter 看卡 · Backspace 返回 · s 筛选 · PgUp/PgDn 翻页 · r 刷新 · q 退出")
     return out, order, cursor_row
+
+
+def dispatch_lines(cands, state, width, color):
+    """派发页：候选列表 + 系统预选高亮（↑↓ 改选由 state['cursor'] 决定）。"""
+    cur = min(max(state.get("cursor", 0), 0), max(len(cands) - 1, 0))
+    out = []
+    _title(out, f"派发 · 候选 {len(cands)}", width)
+    for i, c in enumerate(cands):
+        row = f"{'>' if i == cur else ' '} {c['id']}  {c['role']}"
+        if i == cur and color:
+            row = BOLD + row + RESET
+        out.append(clip(row, width))
+    if not cands:
+        out.append(clip("（没有可派的 todo 卡：依赖未就绪或边界冲突）", width))
+    mode = "手动（只印命令）" if state.get("manual") else "自动（回车派发）"
+    out.append(clip(f"[{mode}] ↑↓ 改选 · Enter 派发 · m 手动 · r 重试 · Esc 返回", width))
+    if state.get("note"):
+        out.append(clip(state["note"], width))
+    return out, 1 + cur

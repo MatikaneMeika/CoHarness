@@ -20,8 +20,11 @@ DEV = (H.REPO / "evolve.py",)                    # 开发面：审骨架本体
 MAINT = (H.REPO / "maintain.py",)                # 维护面：管已实例化项目的指纹/迁移/体检
 VIEW = (H.REPO / "board.py", H.REPO / "board_render.py",
         H.REPO / "panel.py")                     # 展示面：装配 / 渲染 / 终端，三层分开
+# 委托与唤醒门面：唯一写路径，按设计要拉起子进程（新终端），所以不进"禁 Popen"的那组钉子；
+DISPATCH = (H.REPO / "dispatch.py",)
 ALL = SHIPPED + DEV + MAINT + VIEW
-FIRST_PARTY = {"wsc", "maintain", "board", "board_render"}   # 同目录自带模块
+BUDGETED = ALL + DISPATCH                    # 行数/函数棘轮覆盖全部分发面与开发面
+FIRST_PARTY = {"wsc", "maintain", "board", "board_render", "dispatch"}   # 同目录自带模块
 # 行数上限：只防"无人再读得动"，不防正常生长；超了先删冗余或按面分层拆出去，别抬数字。
 # wsc.py 比 check.py 宽是因为 README 承诺"curl 一个文件就能装机"，下游命令不许散到多文件；
 # check.py 才是复制进每个项目的那一份，最严。新增能力一律进 maintain.py / evolve.py。
@@ -39,7 +42,8 @@ FIRST_PARTY = {"wsc", "maintain", "board", "board_render"}   # 同目录自带�
 # 同时加函数级棘轮（FUNC_BUDGET/NEST_BUDGET）：文件行数挡不住"为凑行数一行三语句"。
 LINE_BUDGET = {H.WSC: 1250, H.CHECK_SRC: 760, H.REPO / "evolve.py": 400,
                H.REPO / "maintain.py": 700, H.REPO / "board.py": 700,
-               H.REPO / "board_render.py": 300, H.REPO / "panel.py": 300}
+               H.REPO / "board_render.py": 300, H.REPO / "panel.py": 300,
+               H.REPO / "dispatch.py": 300}
 # 函数级棘轮：今天最长 panel.main 117 行、嵌套最深 5（wsc.cmd_init / check.check_tasks）。
 # 上限贴着现状定，挡的是"再长一截"：要长就先拆函数或拆面，别抬这个数——与 LINE_BUDGET 同一条纪律。
 FUNC_BUDGET = 120
@@ -104,7 +108,7 @@ class DistributionSurface(unittest.TestCase):
             self.assertEqual(non_std, [], f"分发面 {p.name} 引了非标准库依赖: {non_std}")
 
     def test_dev_maint_and_view_faces_may_only_add_first_party_modules(self):
-        for p in DEV + MAINT + VIEW:
+        for p in DEV + MAINT + VIEW + DISPATCH:
             extra = sorted(m for m in imports_of(p)
                            if m.split(".")[0] not in sys.stdlib_module_names and m not in FIRST_PARTY)
             self.assertEqual(extra, [], f"{p.name} 引了第三方依赖: {extra}")
@@ -154,7 +158,7 @@ class DistributionSurface(unittest.TestCase):
                       "装载的必须是项目自己的执法脚本，不是任意路径")
 
     def test_scripts_stay_readable_within_budget(self):
-        for p in ALL:
+        for p in BUDGETED:
             lines = len(p.read_text(encoding="utf-8").splitlines())
             self.assertLessEqual(lines, LINE_BUDGET[p],
                                  f"{p.name} 已 {lines} 行，超过 {LINE_BUDGET[p]} 行上限："
@@ -166,7 +170,7 @@ class DistributionSurface(unittest.TestCase):
         只有文件上限时，逼近上限的写法是"三句话挤一行"（board.py 顶到 700/700 那轮就长这样）；
         函数长度与嵌套深度才是可读性的直接度量，所以两条一起挂：要长就先拆函数/拆面。
         """
-        for p in ALL:
+        for p in BUDGETED:
             tree = ast.parse(p.read_text(encoding="utf-8"))
             for fn in ast.walk(tree):
                 if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -252,8 +256,8 @@ class DistributionSurface(unittest.TestCase):
         modules = discovered_module_names()
         total = len(modules)
         per_module = collections.Counter(modules)
-        docs = ("README.md", "README.en.md", "docs/ACCEPTANCE-v1.1.md", "CONTRIBUTING.md",
-                "docs/RELEASE-v1.1.0.md", "docs/DEMO-migrate.md")
+        # v1.1.0 的验收/发布文档是历史快照，条数由发布时的事实冻结，不随本轮增长改写。
+        docs = ("README.md", "README.en.md", "CONTRIBUTING.md", "docs/DEMO-migrate.md")
         for rel in docs:
             text = (H.REPO / rel).read_text(encoding="utf-8")
             for n in re.findall(r"(?<!\d)(\d{3})\s*(?:条|tests)", text):

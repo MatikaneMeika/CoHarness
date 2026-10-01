@@ -1,7 +1,7 @@
 # CoHarness — 骨架库与工具链
 #
 # 打包原则（ADR-10：依赖面按分发面分层）：
-#   * 运行期零第三方依赖——四个门面（wsc.py / maintain.py / evolve.py / board.py+board_render.py+panel.py）与 scripts/check.py
+#   * 运行期零第三方依赖——五个入口（wsc.py / maintain.py / evolve.py / board.py+board_render.py+panel.py / dispatch.py）与 scripts/check.py
 #   全用标准库；
 #     python-frontmatter 只作为**开发期差分预言机**放在 dev extra，绝不进运行时路径。
 #   * 单文件模式必须继续可用：`curl -O .../wsc.py` 后 `python wsc.py init ...` 照旧工作，
@@ -38,8 +38,11 @@ coharness-maintain = "coharness.maintain:main"
 coharness-evolve = "coharness.evolve:main"
 coharness-panel = "coharness.panel:main"
 # 面板是四个门面里唯一天天敲的，给它一个短别名（coharness- 前缀在 Windows 上也省 6 键）；
-# 长名字照旧保留——四门面的口径不变，短入口只是别名。
+# 长名字照旧保留——五个入口的口径不变，短入口只是别名。
 coh-panel = "coharness.panel:main"
+# 委托与唤醒门面：候选 → 预选 → 一次性拉起。短别名与面板同规矩。
+coharness-dispatch = "coharness.dispatch:main"
+coh-dispatch = "coharness.dispatch:main"
 
 # 开发期工具（差分预言机）。没装它们，`python -m unittest discover -s tests` 照样全绿，
 # 只是那 4 条对照用例自动 skip。

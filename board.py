@@ -28,7 +28,7 @@ except ImportError:                    # curl/源码树直跑
 # 渲染层的名字再导出（名字表只写一份，逐个绑成模块全局）：展示面对外仍是 board.*
 for _name in ("CORE", "UNKNOWN_ROLE", "RESET", "BOLD", "DIM", "RED", "GREEN", "YELLOW",
               "CYAN", "MAGENTA", "MARKS", "_bar", "_clip_left", "_title", "clip",
-              "dw", "grouped_by_role", "pad", "render_card", "render_projects",
+              "dw", "dispatch_lines", "grouped_by_role", "pad", "render_card", "render_projects",
               "render_tasks", "rpad"):
     globals()[_name] = getattr(board_render, _name)
 del _name
@@ -193,6 +193,15 @@ def current_page_lines(snapshots, state, width, color):
     return render_card(snap, snap["cards"][idx], width, color), [idx], 0
 
 
+def page_view(state, snapshots, width, color):
+    """当前页的行文本 + ids + 光标行：派发页走渲染层的 dispatch_lines，其余走 current_page_lines。"""
+    if state["page"] == "dispatch":
+        cands = state.get("dcands", [])
+        lines, cursor_row = dispatch_lines(cands, state, width, color)
+        return lines, [c["id"] for c in cands], cursor_row
+    return current_page_lines(snapshots, state, width, color)
+
+
 # --watch 每 5 秒重画一次；不缓存的话每张卡每轮都要起一个 git 进程，卡片一多就是白烧 CPU。
 # 桶必须按项目分：HEAD 全局单值会让多项目 watch 互相当对方的失效器（A 存 B 清，命中率归零）。
 _CACHE = {}
@@ -284,10 +293,14 @@ def navigate(state, key, count):
         s["cursor"] = max(0, s["cursor"] - 1)
     elif key in ("down", "j", "DOWN"):
         s["cursor"] = min(max(count - 1, 0), s["cursor"] + 1)
+    elif key == "d" and s["page"] == "tasks":
+        s["page"] = "dispatch"              # 任务页的 d 进派发页（唯一写路径的入口）
     elif key in ("enter", "ENT", "l", "right", "RIGHT"):
-        s["page"] = {"projects": "tasks", "tasks": "card", "card": "card"}[s["page"]]
+        s["page"] = {"projects": "tasks", "tasks": "card", "card": "card",
+                     "dispatch": "dispatch"}[s["page"]]
     elif key in ("back", "BS", "h", "left", "LEFT"):
-        s["page"] = {"card": "tasks", "tasks": "projects", "projects": "projects"}[s["page"]]
+        s["page"] = {"card": "tasks", "tasks": "projects", "projects": "projects",
+                     "dispatch": "tasks"}[s["page"]]
         if s["page"] == "projects":
             s["card"] = None
     elif key in ("pgup", "pgdn", "home", "end"):
@@ -512,4 +525,3 @@ def worktree_copies(project, rel_card):
         rows.append({"path": str(wt), "status": status or "?",
                      "assignee": ",".join(who) or "-", "done": done, "total": total})
     return rows
-

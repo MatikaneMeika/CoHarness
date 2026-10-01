@@ -98,18 +98,21 @@ python maintain.py audit   <project>   # read-only health check: hooks present/t
 python evolve.py  <project> --out record.json   # promotion review: the machine gathers objective evidence, a human fills the rest
 ```
 
-**Read-only dashboard** — who is doing what, and how far (writes nothing). After `pipx install coharness` type `coh-panel` (`coharness-panel` is the same entry under its long name); inside a clone `python panel.py` is the same command with nothing installed:
+**Dashboard + console** — who is doing what, and how far; read-only by default, with dispatch as the only write path (one key to wake the next harness). After `pipx install coharness` type `coh-panel` (`coharness-panel` is the same entry under its long name); inside a clone `python panel.py` is the same command with nothing installed:
 
 ```bash
 coh-panel --plain                            # one-shot plain text: installed projects + doing/todo/flag counts
 coh-panel --plain --project <project>         # one project's task list (grouped by role, core roles first)
-coh-panel                                    # full-screen three pages: projects → tasks → card detail (↑↓/Enter/Backspace/q)
+coh-panel                                    # full-screen four pages: projects → tasks → card detail → dispatch (↑↓/Enter/Backspace/d/q)
+coh-dispatch --advance <project>              # dispatch without the panel: claim + worktree + new terminal, then detach
 ```
 
 - Progress reads the card's own `- [ ]` acceptance checklist, cross-checked against git and local run records; mismatches are flagged outright: "committed but unticked", "ticked but not committed", "done but checklist incomplete", "diverged across worktrees"
 - Roles are derived from the single-writer ownership table in `AGENTS.md`; when it cannot be derived it says "boundary not in the ownership table" — no guessing
 - Full screen is the default; if the legacy Windows console garbles it, use `--plain` or a terminal that hands out a real TTY — Git's own mintty, verified both ways: `mintty -e coh-panel`, or `mintty -e python <lib>\panel.py` inside a clone
 - Design and rejected alternatives: [docs/rfcs/RFC-0002-面板展示面.md](docs/rfcs/RFC-0002-面板展示面.md)
+- Dispatch page (press `d` on the task page): candidates are `todo` cards whose dependencies are done and whose boundaries do not collide with an in-progress card; the system pre-selects one by a deterministic rule (lowest card number), ↑↓ re-selects, Enter dispatches, `m` prints the command without running it, `r` retries in place. A dispatch is claim + worktree + new terminal, then it detaches at once (no handle held, no output read, no runtime state kept). The launch-command table lives project-side in `.agent/dispatch.md` (`role → command`, with `{worktree}`/`{card}` placeholders); a missing table only lists candidates and does not execute
+- Boundary of delegation vs. wake-up, the rejected resident-scheduler design, and the cost of retiring the old "dashboard is read-only" promise: [docs/rfcs/RFC-0003-委托与唤醒.md](docs/rfcs/RFC-0003-委托与唤醒.md)
 
 ## A template that improves itself
 
@@ -143,7 +146,7 @@ When guidance conflicts: **project rules > spec-kit output > task cards > verbal
 
 ## Tests and quality
 
-The repo ships 301 self-tests that run without installing anything:
+The repo ships 364 self-tests that run without installing anything:
 
 ```bash
 python -m unittest discover -s tests     # zero deps; CI runs the same command on ubuntu/windows/macos × py3.11/3.12/3.13
@@ -161,7 +164,7 @@ Templates, protocol text and a few standard-library scripts: no network client, 
 
 - [ROUTER.md](ROUTER.md) — the "coharness" dispatch logic and role matching
 - [CONTRIBUTING.md](CONTRIBUTING.md) — the three channels, registration threshold, promotion gates, PR checklist
-- [docs/rfcs/](docs/rfcs/README.md) — design trade-offs with their rejected alternatives (RFC-0001 atomic claims, RFC-0002 the dashboard; both adopted)
+- [docs/rfcs/](docs/rfcs/README.md) — design trade-offs with their rejected alternatives (RFC-0001 atomic claims, RFC-0002 the dashboard, RFC-0003 delegation and wake-up; all adopted)
 - [docs/EVOLUTION-PROCESS.md](docs/EVOLUTION-PROCESS.md) — the pipeline; [docs/CHANGELOG.md](docs/CHANGELOG.md) — append-only log
 - [docs/EVOLUTION-PLAN.md](docs/EVOLUTION-PLAN.md) — why it is shaped like this (ADRs)
 - [SECURITY.md](SECURITY.md) — safety and data boundary

@@ -86,3 +86,4 @@ AGENTS.md / .agent/ 规则文件 > spec-kit 产物（constitution/spec/plan）> 
 - 功能分支推上或合并；`git-wt remove` 清理本卡工作树
 - 跑过全量测试后先 `git status --short` 看一眼：测试产物（尤其证据目录里的 json/csv/png）可能被被动改写，用 `git restore --source=HEAD --staged --worktree <路径>` 还原，别把它们当成果提交（I-002 晋升）
 - 卡内"交接说明"节留 ≤5 行（做了什么、验证方式、注意事项）——下一个接手的是另一个工具，它没有你的会话记忆
+- 唤醒下一张卡：`coh-dispatch --advance <项目>`——按候选与确定性预选拉起下一个 harness（认领 + 建工作树 + 开新终端），拉起后立刻失联（不持有句柄、不读输出、不自动重试）；启动命令表在项目侧 `.agent/dispatch.md`

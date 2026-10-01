@@ -1,7 +1,8 @@
 """展示面测试：board.py 的装配/渲染与 panel.py 的导航。
 
 三条不容妥协的口径，逐条钉住：
-1. **只读**——面板跑完不许留下任何文件改动或 __pycache__（写路径只有 wsc claim）；
+1. **默认只读**——面板默认跑完不留任何文件改动或 __pycache__；唯一写路径是派发
+   （panel → dispatch.launch：认领 + 工作树 + 拉起），派发以外一律只读；
 2. **不写第二套解析器**——卡片必须经项目自己的 scripts/check.py 读，缺函数就降级不崩；
 3. **报警要有凭据**——"提交了没勾""跨工作树分叉"这些旗子必须由真 git 状态触发，
    不能是渲染层的装饰。角色一律从 AGENTS.md 所有权表推，推不到就明说推不到。
@@ -200,7 +201,7 @@ class BoardData(unittest.TestCase):
         board.render_projects([{"name": "x", "skeleton": "y", "doing": 0, "todo": 0,
                                 "flags": 0, "errors": 0}], 0, 60, color=True)
         self.assertEqual(H.run(["git", "status", "--porcelain"], cwd=self.proj).stdout.strip(),
-                         before, "面板是只读面，跑完工作区必须一模一样")
+                         before, "除派发路径外面板只读：跑完工作区必须一模一样")
         junk = [p for p in self.proj.rglob("__pycache__")]
         self.assertEqual(junk, [], "载入项目 check.py 不许留下 __pycache__")
 
@@ -517,6 +518,7 @@ class EndToEnd(unittest.TestCase):
         self.assertIn("任务看板", H.out(r2))
         self.assertIn("T-002", H.out(r2))
         # 只读承诺在子进程这条路上同样成立：项目里不许多出文件
+        # 默认只读承诺在子进程这条路上同样成立（派发是唯一写路径，这里没走派发）：项目里不许多出文件
         self.assertEqual(list(a.rglob("__pycache__")), [])
 
     def test_minimal_instance_is_labeled_not_broken(self):
@@ -618,6 +620,22 @@ class InteractiveLoop(unittest.TestCase):
         self.assertNotIn("Traceback", out)
 
 
+    def test_d_opens_the_dispatch_page_and_enter_dispatches(self):
+        """派发页在真循环里走得通：d 进页、Enter 走 dispatch（注入替身，不真开终端）。"""
+        seen = []
+        plan = lambda pr, card=None: {"card": card, "role": "coder", "tool": "codex",
+                                     "command": "codex --cd /wt", "worktree": "/wt",
+                                     "ready": True, "reasons": [], "tool_missing": False}
+        with unittest.mock.patch.object(panel_mod.dispatch_mod, "candidates",
+                                        lambda p: [{"id": "T-020", "role": "coder"}]), \
+             unittest.mock.patch.object(panel_mod.dispatch_mod, "plan", plan), \
+             unittest.mock.patch.object(panel_mod.dispatch_mod, "launch",
+                                        lambda pr, p, **k: seen.append(p["card"]) or {"ok": True}):
+            rc, out, keys = self._run(["d", "ENT", "q"])
+        self.assertEqual(rc, 0)
+        self.assertIn("派发", out)
+        self.assertEqual(seen, ["T-020"], "Enter 在派发页要走 dispatch.launch")
+
     def test_the_loop_never_builds_a_shallow_snapshot(self):
         """交互模式一律 deep：报警位是这个面板存在的理由，宁可多一次 rev-parse。"""
         calls, real = [], panel_mod.project_snapshot
@@ -712,6 +730,121 @@ class RefreshCost(unittest.TestCase):
         self.assertEqual(commits_of(again, "T-030"), 1, "B 的数字不许串到 A 上")
         self.assertLessEqual(len(self.calls), 1,
                              f"回访 A 还是重打了 {len(self.calls)} 次 git：缓存被 B 清掉了")
+
+
+class DispatchPage(unittest.TestCase):
+    """派发页：候选列表 + 系统预选高亮；↑↓ 改选；Enter 派发；m 手动只印命令；r 重试。
+
+    派发是面板唯一的写路径，其余一律只读——写路径的真写由下面 DispatchWrites 钉住。
+    """
+
+    CANDS = [{"id": "T-001", "role": "coder"}, {"id": "T-002", "role": "doc-writer"}]
+
+    def state(self, **kw):
+        return dict({"page": "dispatch", "sel": 0, "cursor": 0, "quit": False,
+                     "manual": False, "note": ""}, **kw)
+
+    def fake_plan(self, card="T-002"):
+        return {"card": card, "role": "coder", "tool": "codex",
+                "command": "codex --cd /wt", "worktree": "/wt",
+                "ready": True, "reasons": [], "tool_missing": False}
+
+    def test_dispatch_page_marks_the_selected_candidate(self):
+        lines, row = panel_mod.dispatch_lines(self.CANDS, self.state(cursor=1), 78, False)
+        self.assertIn("T-002", lines[row], "光标行要指向当前选中的候选")
+        self.assertIn("T-001", "\n".join(lines))
+
+    def test_arrow_keys_move_the_dispatch_selection(self):
+        s = board.navigate(self.state(), "down", len(self.CANDS))
+        self.assertEqual(s["cursor"], 1)
+        lines, row = panel_mod.dispatch_lines(self.CANDS, s, 78, False)
+        self.assertIn("T-002", lines[row])
+
+    def test_dispatch_open_flags_an_unready_preselection(self):
+        """缺表 / 工具不在 PATH 这类未就绪要在进页时就报，而不是等按了 Enter 才炸。"""
+        state = self.state()
+        unready = {"card": "T-001", "role": "coder", "tool": "codex", "command": "",
+                   "worktree": "/wt", "ready": False, "tool_missing": False,
+                   "reasons": ["缺 .agent/dispatch.md 启动命令表"]}
+        with unittest.mock.patch.object(panel_mod.dispatch_mod, "candidates",
+                                        lambda p: [{"id": "T-001", "role": "coder"}]), \
+             unittest.mock.patch.object(panel_mod.dispatch_mod, "plan",
+                                        lambda pr, card=None: unready):
+            panel_mod.dispatch_open(state, "P")
+        lines, _ = panel_mod.dispatch_lines(state["dcands"], state, 78, False)
+        self.assertIn("dispatch.md", "\n".join(lines))
+
+    def test_dispatch_page_says_so_when_there_is_nothing_to_dispatch(self):
+        lines, _ = panel_mod.dispatch_lines([], self.state(), 78, False)
+        self.assertIn("没有可派", "\n".join(lines))
+
+    def test_enter_dispatches_the_selected_card(self):
+        seen = []
+        note = panel_mod.dispatch_now(
+            "P", "T-002", manual=False, plan=lambda pr, card=None: self.fake_plan(card),
+            launch=lambda pr, p: seen.append(p["card"]) or {"ok": True})
+        self.assertEqual(seen, ["T-002"])
+        self.assertIn("T-002", note)
+
+    def test_manual_mode_prints_the_command_instead_of_launching(self):
+        def boom(*a, **k):
+            raise AssertionError("手动模式不许执行")
+        note = panel_mod.dispatch_now(
+            "P", "T-002", manual=True, plan=lambda pr, card=None: self.fake_plan(card),
+            launch=boom)
+        self.assertIn("codex --cd /wt", note)
+
+    def test_retry_dispatches_again(self):
+        seen = []
+        plan = lambda pr, card=None: self.fake_plan(card)
+        launch = lambda pr, p: seen.append(p["card"]) or {"ok": True}
+        panel_mod.dispatch_now("P", "T-002", plan=plan, launch=launch)
+        panel_mod.dispatch_now("P", "T-002", plan=plan, launch=launch)
+        self.assertEqual(seen, ["T-002", "T-002"], "重试等价于再派发一次")
+
+    def test_failure_is_reported_not_retried(self):
+        calls = []
+
+        def boom(pr, p):
+            calls.append(p["card"])
+            raise SystemExit("认领失败")
+
+        note = panel_mod.dispatch_now("P", "T-002", plan=lambda pr, card=None: self.fake_plan(card),
+                                     launch=boom)
+        self.assertEqual(len(calls), 1, "失败只报一次，不许自动重试")
+        self.assertIn("认领失败", note)
+
+
+class DispatchWrites(unittest.TestCase):
+    """派发是面板唯一的写路径，而且它确实会写：真 claim 落卡 + 真工作树（只把开终端换替身）。"""
+
+    def setUp(self):
+        self.tmp = H.tmp_dir()
+        self.addCleanup(H.rmtree, self.tmp)
+        self.proj = self.tmp / "proj"
+        self.assertEqual(H.wsc("init", "03", str(self.proj)).returncode, 0)
+        git(self.proj, "init", "-q", "--initial-branch=main")
+        git(self.proj, "config", "user.name", "coharness-test")
+        git(self.proj, "config", "user.email", "coharness-test@invalid")
+        make_card(self.proj, "T-080", status="todo", assignee="[]", allowed=("  - code/",))
+        git(self.proj, "add", "-A")
+        self.assertEqual(git(self.proj, "commit", "-q", "-m", "基线").returncode, 0)
+
+    def test_the_dispatch_path_writes_while_the_rest_stays_read_only(self):
+        before = git(self.proj, "status", "--porcelain").stdout.strip()
+        board.project_snapshot(self.proj)
+        self.assertEqual(git(self.proj, "status", "--porcelain").stdout.strip(), before,
+                         "只读路径不许动工作区")
+        # 只把"agent CLI 在不在 PATH"钉成替身；git-wt 仍走真实探测（不在 → 原生 git worktree）
+        which = lambda t: "/fake/" + t if t == "codex" else None
+        with unittest.mock.patch.object(panel_mod.dispatch_mod, "which", which):
+            note = panel_mod.dispatch_now(
+                self.proj, "T-080", manual=False,
+                launch=lambda pr, p: panel_mod.dispatch_mod.launch(
+                    pr, p, spawn=lambda c, w: (True, "")))
+        self.assertIn("T-080", note)
+        text = (self.proj / "backlog" / "tasks" / "T-080.md").read_text(encoding="utf-8")
+        self.assertIn("status: doing", text, "派发路径确实会写：认领把卡改成 doing")
 
 
 if __name__ == "__main__":
