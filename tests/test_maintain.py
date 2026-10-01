@@ -189,6 +189,7 @@ class Maintain(unittest.TestCase):
         (proj / "scripts" / "check.py").write_text(old, encoding="utf-8", newline="\n")
         self.assertEqual(maintain("lock", str(proj)).returncode, 0)
         lock = json.loads(self.proj_lock(proj).read_text(encoding="utf-8"))
+        lock["skeleton_commit"] = "1617d1c"
         lock["schema"] = 3
         self.proj_lock(proj).write_text(json.dumps(lock, ensure_ascii=False, indent=1) + "\n",
                                        encoding="utf-8", newline="\n")
@@ -214,6 +215,7 @@ class Maintain(unittest.TestCase):
         check.write_text(local, encoding="utf-8", newline="\n")
         self.assertEqual(maintain("lock", str(proj)).returncode, 0)
         lock = json.loads(self.proj_lock(proj).read_text(encoding="utf-8"))
+        lock["skeleton_commit"] = "1617d1c"
         lock["schema"] = 3
         self.proj_lock(proj).write_text(json.dumps(lock, ensure_ascii=False, indent=1) + "\n",
                                        encoding="utf-8", newline="\n")
@@ -224,6 +226,22 @@ class Maintain(unittest.TestCase):
         self.assertEqual(json.loads(self.proj_lock(proj).read_text(encoding="utf-8"))["schema"], 3)
         branches = H.git(proj, "branch", "--list", "coh-backup-*").stdout
         self.assertNotIn("coh-backup-", branches, "预检失败不得留下备份分支")
+
+    def test_skeleton_detection_uses_lock_before_custom_title(self):
+        """ClassObserver 这类项目会把 AGENTS.md 标题改成项目名，锁里的 skeleton 必须先被信任。"""
+        proj = self.fresh("03")
+        self.assertEqual(maintain("lock", str(proj)).returncode, 0)
+        lock = json.loads(self.proj_lock(proj).read_text(encoding="utf-8"))
+        lock["schema"] = 3
+        self.proj_lock(proj).write_text(json.dumps(lock, ensure_ascii=False, indent=1) + "\n",
+                                       encoding="utf-8", newline="\n")
+        agents = proj / "AGENTS.md"
+        body = agents.read_text(encoding="utf-8").splitlines()
+        agents.write_text("# ClassObserver - 自定义论文项目\n" + "\n".join(body[1:]) + "\n",
+                          encoding="utf-8", newline="\n")
+        out = H.out(maintain("migrate", str(proj)))
+        self.assertIn("v3 -> v4", out)
+        self.assertNotIn("找不到 AGENTS.md", out)
 
     def test_sync_prints_drift_hint_without_rewriting_check(self):
         proj = self.fresh("03")

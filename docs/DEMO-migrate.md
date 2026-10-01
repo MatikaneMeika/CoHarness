@@ -29,9 +29,9 @@ python docs/demo/migrate_demo.py --keep   # 保留临时项目目录，自己进
 $ python maintain.py lock C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project
 [lock] 已写 C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project\.agent\skeleton.lock（这份指纹可以提交进项目仓库：不含本机路径）
   skeleton = 03-multi-harness-project
-  skeleton_commit = 1617d1c
+  skeleton_commit = <骨架库 HEAD>
   schema = 4
-  check_sha256 = 28f5c1a36e2b
+  check_sha256 = f0e3d145dc3d
 ### 第 2 步：把指纹改回 schema=1，模拟「这个项目还停在老版本」
 
 $ python maintain.py migrate C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project
@@ -77,9 +77,9 @@ v3 -> v4: scripts/check.py 三方合并到当前骨架（审阅意见 / 结果�
   - 已到位：scripts/check.py 已是当前骨架版本
 [lock] 已写 C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project\.agent\skeleton.lock（这份指纹可以提交进项目仓库：不含本机路径）
   skeleton = 03-multi-harness-project
-  skeleton_commit = 1617d1c
+  skeleton_commit = <骨架库 HEAD>
   schema = 4
-  check_sha256 = e1aec874ca6d
+  check_sha256 = fc7c50b48170
 
 [migrate] 已落盘并把 schema 记到 4；改动都在备份分支 coh-backup-<时间戳> 的对照下，回滚：git reset --hard coh-backup-<时间戳>
 
@@ -124,5 +124,5 @@ v3 -> v4: scripts/check.py 三方合并到当前骨架（审阅意见 / 结果�
 - **幂等**：升到当前 schema 后再跑一次，答案是"已是最新 schema，无升级步骤"
 - **步骤是本轮真实改动**：v1→v2 七步、v2→v3 一步与 v3→v4 的 `check.py` 三方合并都对应 CHANGELOG 里已有的行，不是为演示编的
 
-对应的自动化证据：`tests/test_maintain.py` 27 条（含 dry-run 不写盘、备份分支、幂等、拒绝无仓库落盘、
+对应的自动化证据：`tests/test_maintain.py` 28 条（含 dry-run 不写盘、备份分支、幂等、拒绝无仓库落盘、
 v2→v3 不凭空生成、指纹不含本机路径、七项 v1 遗留各自被处理、schema 可从项目卡读回）。

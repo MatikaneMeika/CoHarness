@@ -84,6 +84,11 @@ def _sha(path: Path):
 
 def _guess_skeleton(project: Path):
     """按 AGENTS.md 的标题反推骨架名（装机时标题里的占位符已被填掉，只能比对结构）。"""
+    lock = read_lock(project) or {}
+    wanted = lock.get("skeleton")
+    for sk in wsc.discover_skeletons():
+        if wanted and sk.name == wanted:
+            return sk
     agents = project / "AGENTS.md"
     if not agents.exists():
         return None
