@@ -42,10 +42,8 @@ SELF_AUTHORIZED = (".agent/improvements.md",)
 
 
 def _read_text(p: Path):
-    try:
-        return p.read_text(encoding="utf-8")
-    except OSError:
-        return None
+    try: return p.read_text(encoding="utf-8")
+    except OSError: return None
 
 
 def _utf8_streams():
@@ -88,8 +86,7 @@ def _unquote(value: str):
 
 def _scalar(value: str, origin, lineno):
     v = _strip_comment(value)
-    if not v:
-        return ""
+    if not v: return ""
     head = v[0]
     if head in "|>":
         raise CardFormatError(f"{origin}:{lineno} 块标量 '{head}' 不支持，{_SUBSET}")
@@ -247,8 +244,7 @@ def load_config():
 def parse_boundary(body: str, origin, body_first_line=1):
     """提取卡体 '## 边界' 节的 allowed_paths / forbidden_paths（与 frontmatter 同一套子集）。"""
     m = re.search(r"^##\s*边界\s*$", body, re.M)
-    if not m:
-        return [], [], False
+    if not m: return [], [], False
     rest = body[m.end():]
     nxt = re.search(r"^##\s+", rest, re.M)
     section = rest[: nxt.start()] if nxt else rest
@@ -268,8 +264,7 @@ def parse_boundary(body: str, origin, body_first_line=1):
 def load_cards(tasks_dir: Path):
     """读卡目录。返回 (卡片, 格式错误) —— 写错的卡绝不静默跳过或给错值。"""
     cards, errors = [], []
-    if not tasks_dir.exists():
-        return cards, errors
+    if not tasks_dir.exists(): return cards, errors
     for p in sorted(tasks_dir.glob("*.md")):
         text = _read_text(p)
         if text is None:
@@ -499,8 +494,7 @@ def ownership_rows():
     写者恰是角色一览里一个角色"的行；模板行与散文行判不了，报数留给审核人——宁少判，不诬判。
     """
     text = _read_text(ROOT / "AGENTS.md")
-    if text is None:
-        return [], 0
+    if text is None: return [], 0
     roles, cands, section = set(), [], ""
     for ln in text.splitlines():
         s = ln.strip()
@@ -537,8 +531,7 @@ def _owning_row(rel, rows):
 def _role_declared(rel, rows, cards):
     """该路径被表的"可判"行管辖时，覆盖它的在做卡必须带 role: 标签（身兼多角由卡声明）。"""
     row = _owning_row(rel, rows)
-    if not row:
-        return True
+    if not row: return True
     act = [c for c in cards if c["status"] in ("doing", "review")
            and path_covered(rel, c["allowed"])]
     return any(f"role:{row[1]}" in str(x) for c in act
@@ -674,12 +667,18 @@ def check_hints(cards):
 
 def _harness_id():
     """这次执行算在谁头上：环境变量优先，其次 git 身份，都没有就 unknown。"""
-    env = os.environ.get("COHARNESS_HARNESS", "").strip()
-    if env:
-        return env
+    if env := os.environ.get("COHARNESS_HARNESS", "").strip(): return env
     ok, name = _git_out(["config", "user.name"])
     return name.strip() if ok and name.strip() else "unknown"
 
+
+def _bound_card():
+    """优先读分支绑定：branch.<branch>.coharness-card = <卡文件名>。"""
+    ok, branch = _git_out(["rev-parse", "--abbrev-ref", "HEAD"])
+    branch = branch.strip()
+    if not ok or not branch or branch == "HEAD": return None
+    ok, value = _git_out(["config", "--get", f"branch.{branch}.coharness-card"])
+    return Path(value.strip()).stem if ok and value.strip() else None
 
 TELEMETRY_MAX_LINES = 2000   # 记账上限：stats/面板每次都读全量，无界增长会拖慢展示面
 
@@ -717,8 +716,8 @@ def main():
     ap.add_argument("--tasks", action="store_true")
     ap.add_argument("--diff", action="store_true")
     ap.add_argument("--stale", action="store_true")
-    ap.add_argument("--no-track", action="store_true",
-                    help="这次执行不写 .agent/telemetry.jsonl")
+    ap.add_argument("--card", help="本次执行归属的卡号；缺省优先读分支绑定")
+    ap.add_argument("--no-track", action="store_true", help="这次执行不写 .agent/telemetry.jsonl")
     args = ap.parse_args()
     run_all = not (args.names or args.tasks or args.diff or args.stale)
     started = time.monotonic()
@@ -747,8 +746,9 @@ def main():
         ran["stale"] = True
     if run_all:
         print("\n结论:", "全部通过 ✓" if ok else "存在违规 ✗（见上）")
-    my_card = next((c["meta"].get("id") for c in cards
-                    if c["status"] == "doing" and _harness_id() in c["assignees"]), None)
+    my_card = args.card or _bound_card() or next((
+        c["meta"].get("id") for c in cards if c["status"] == "doing" and
+        _harness_id() in c["assignees"]), None)
     record_run(ran, 0 if ok else 1, my_card, started)
     sys.exit(0 if ok else 1)
 

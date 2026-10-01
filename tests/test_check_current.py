@@ -1,4 +1,5 @@
 """钉住 check.py 的命名规范与 flag 契约（docs/EVOLUTION-PLAN.md:100-111 的手工断言落盘）。"""
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -243,6 +244,20 @@ class TestReviewNotesFormat(TempProjectCase):
                     "- [ ] File: docs/ARCHITECTURE.md\n  Lines: all\n  Comment: \"x\"\n随手一句\n")
         text = self.assertCheck(["--tasks"], 1)
         self.assertIn("Lines:", text)
+
+
+class TelemetryCard(TempProjectCase):
+    def last_card(self):
+        f = self.proj / ".agent" / "telemetry.jsonl"
+        return json.loads(f.read_text(encoding="utf-8").splitlines()[-1])["card"]
+
+    def test_explicit_card_wins_then_branch_binding_is_used(self):
+        H.git_repo(self.proj)
+        H.git(self.proj, "config", "branch.main.coharness-card", "T-123.md")
+        self.assertCheck(["--tasks", "--card", "T-999"], 0)
+        self.assertEqual(self.last_card(), "T-999")
+        self.assertCheck(["--tasks"], 0)
+        self.assertEqual(self.last_card(), "T-123")
 
 
 if __name__ == "__main__":
