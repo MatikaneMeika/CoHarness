@@ -7,3 +7,5 @@
 *.yml text eol=lf
 scripts/hooks/pre-commit text eol=lf
 scripts/hooks/pre-push text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
