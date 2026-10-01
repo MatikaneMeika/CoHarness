@@ -14,6 +14,7 @@
    - 合并完的分支删除；`git-wt list` 对照，孤儿工作树/分支清零
    - 临时文件、.bak、调试残留清出仓库
 6. **升级检查**：`python scripts/check.py` 全绿才算收尾完成
+7. **harness 巡检**：集成或开工巡检时运行 `python scripts/dispatch_env.py --json`，报告缺工具、未映射候选、未就绪角色与配置漂移；升级给 architect 或用户，不自动改写、不自动 fallback。自动派发未由用户显式开启时，不调用 `coh-dispatch --advance`。
 
 ## 约束
 

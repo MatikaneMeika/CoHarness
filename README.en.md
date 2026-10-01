@@ -105,6 +105,7 @@ coh-panel --plain                            # one-shot plain text: installed pr
 coh-panel --plain --project <project>         # one project's task list (grouped by role, core roles first)
 coh-panel                                    # full-screen four pages: projects → tasks → card detail → dispatch (↑↓/Enter/Backspace/d/q)
 coh-dispatch --advance <project>              # dispatch without the panel: claim + worktree + new terminal, then detach
+                                              # auto-dispatch is off by default; only an explicit user switch enables it
 ```
 
 - Progress reads the card's own `- [ ]` acceptance checklist, cross-checked against git and local run records; mismatches are flagged outright: "committed but unticked", "ticked but not committed", "done but checklist incomplete", "diverged across worktrees"
@@ -112,6 +113,7 @@ coh-dispatch --advance <project>              # dispatch without the panel: clai
 - Full screen is the default; if the legacy Windows console garbles it, use `--plain` or a terminal that hands out a real TTY — Git's own mintty, verified both ways: `mintty -e coh-panel`, or `mintty -e python <lib>\panel.py` inside a clone
 - Design and rejected alternatives: [docs/rfcs/RFC-0002-面板展示面.md](docs/rfcs/RFC-0002-面板展示面.md)
 - Dispatch page (press `d` on the task page): candidates are `todo` cards whose dependencies are done and whose boundaries do not collide with an in-progress card; the system pre-selects one by a deterministic rule (lowest card number), ↑↓ re-selects, Enter dispatches, `m` prints the command without running it, `r` retries in place. A dispatch is claim + worktree + new terminal, then it detaches at once (no handle held, no output read, no runtime state kept). The launch-command table lives project-side in `.agent/dispatch.md` (`role → command`, with `{worktree}`/`{card}` placeholders); a missing table only lists candidates and does not execute
+- Host harness discovery: the project-side `python scripts/dispatch_env.py --json` probes candidates and role commands read-only; skeletons bake in no local CLI names or paths, and the architect fills them from the host or an explicit user instruction. Auto-dispatch is off by default and only the user can ask the architect/integrator to enable or disable it; an available candidate is not an automatic mapping
 - Boundary of delegation vs. wake-up, the rejected resident-scheduler design, and the cost of retiring the old "dashboard is read-only" promise: [docs/rfcs/RFC-0003-委托与唤醒.md](docs/rfcs/RFC-0003-委托与唤醒.md)
 
 ## A template that improves itself
@@ -146,7 +148,7 @@ When guidance conflicts: **project rules > spec-kit output > task cards > verbal
 
 ## Tests and quality
 
-The repo ships 367 self-tests that run without installing anything:
+The repo ships 377 self-tests that run without installing anything:
 
 ```bash
 python -m unittest discover -s tests     # zero deps; CI runs the same command on ubuntu/windows/macos × py3.11/3.12/3.13

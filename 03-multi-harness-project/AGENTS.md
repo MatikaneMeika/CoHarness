@@ -72,6 +72,7 @@
 - 状态四列：`todo → doing → review → done`（写在 `backlog/config.yml` 的 `statuses`；真工具默认是 `To Do / In Progress / Done`，装机时按 wsc init 的提示改成这四列）
 - 认领 = `python {{COHARNESS_LIB}}/wsc.py claim <项目> T-xxx <harness标识>`（同步+校验+提交+推送绑成一步，被抢就还原并列出可认领的卡）；手工路径为 `backlog task edit -a <标识> -s doing` 且**提交直接进 main**；一卡一 assignee；卡片与 `.agent/improvements.md` 属自授权改动（不再要求挂卡），细则见 parallel-protocol
 - 收工唤醒下一个：`coh-dispatch --advance <项目>`（按候选/预选拉起下一个 harness：认领 + 建工作树 + 开新终端，拉起后立刻失联；启动命令表在 `.agent/dispatch.md`，缺表只列候选不执行）
+- 自动派发默认关闭；只有用户明确要求 architect 或 integrator“开启自动派发”后，收工协议才可自动调用 `coh-dispatch --advance`。候选 harness 由 architect 用 `python scripts/dispatch_env.py --json` 只读探测（或按用户指定）后登记，骨架不预置本机 CLI 或路径；候选可用不等于自动改派。
 - **收工留痕三查**（I-004，2026-09-30 晋升）：卡状态改到位后必须确认 ① `git status --short` 为空；② `git rev-parse HEAD` 与 `origin/main` 相同；③ 本卡 worktree 已 remove。**看板与卡片读磁盘，显示 done 不等于已入册**——曾发生 289 个文件（含整版交付物）只存在于工作区、git 历史无记录的事故。
 
 ## 角色一览
@@ -79,12 +80,12 @@
 | 角色 | 文件 | 职责 |
 |---|---|---|
 | pm | `.agent/roles/pm.md` | spec-kit 规格流程 + 转卡拆分（allowed_paths 互斥） |
-| architect | `.agent/roles/architect.md` | /speckit-plan 技术方案、接口契约、ADR |
+| architect | `.agent/roles/architect.md` | /speckit-plan 技术方案、接口契约、ADR；维护候选 harness 清单与角色→CLI 映射 |
 | coder-<组件> | `.agent/roles/coder-frontend.md` 等 | 按卡实现，路径白名单（卡"边界"节） |
 | doc-writer | `.agent/roles/doc-writer.md` | 文档/企划书生产 |
 | reviewer | `.agent/roles/reviewer.md` | 合入前审查门禁 |
 | tester | `.agent/roles/tester.md` | 集成回归 |
-| integrator | `.agent/roles/integrator.md` | 合并串行化、stale 改派、状态总裁决 |
+| integrator | `.agent/roles/integrator.md` | 合并串行化、stale 改派、状态总裁决；只读巡检 harness 就绪度 |
 
 同一会话可身兼多角，但**实现与审查必须分开两轮**；多 harness 并行规则见 `.agent/workflows/parallel-protocol.md`。
 

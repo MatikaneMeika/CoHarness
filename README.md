@@ -103,6 +103,7 @@ coh-panel --plain --project <项目>            # 直接看某个项目的任务
 coh-panel                                    # 全屏四页：项目 → 任务 → 卡详情 → 派发（↑↓/Enter/Backspace/d/q）
 python panel.py                              # 在克隆里跑同一个入口，不必装机
 coh-dispatch --advance <项目>                # 不面板也能派发：认领 + 建工作树 + 开新终端，拉起后失联
+                                            # 自动派发默认关闭；用户明确要求开启后收工协议才会自动唤醒
 ```
 
 - 完成度读卡片里本来就有的 `## 验收清单` 勾选项，佐证读 git 与本地运行记账；两边对不上会直接标出来：`提交了没勾`、`勾了没提交`、`done 但清单未满`、`跨工作树分叉`（同一张卡在不同工作树里状态不一致，`.coh-p2` 演练真出现过）
@@ -110,6 +111,7 @@ coh-dispatch --advance <项目>                # 不面板也能派发：认领 
 - 终端默认全屏，本机 conhost 花屏就用 `--plain`；要全屏就换给得了 TTY 的终端——Git 自带的 mintty 两条都真机验过：`mintty -e coh-panel`，没装机的克隆里 `mintty -e python <库>\panel.py`
 - 设计与否决记录在 [docs/rfcs/RFC-0002-面板展示面.md](docs/rfcs/RFC-0002-面板展示面.md)
 - 派发页（任务页按 `d`）：候选 = 依赖就绪、边界不与在做卡冲突的 todo 卡；系统按确定性规则预选（卡号最小），↑↓ 改选，Enter 派发，`m` 只印命令不执行，`r` 原地重试。派发 = 认领 + 建工作树 + 开新终端，拉起后立刻失联（不持有句柄、不读输出、不记运行时状态）。启动命令表在项目侧 `.agent/dispatch.md`（角色 → 命令，支持 `{worktree}`/`{card}` 占位符），缺表只列候选不执行
+- 主机 harness 发现：项目侧 `python scripts/dispatch_env.py --json` 只读探测候选与角色命令是否就绪；骨架不预置本机 CLI 名称或路径，由 architect 按本机环境或用户指定登记。自动派发默认关闭，只有用户明确对 architect/integrator 说“开启自动派发/关闭自动派发”后才切换；候选可用不等于自动改派
 - 委托与唤醒的边界、被否决的常驻调度器方案、以及“展示面只读”承诺的代价： [docs/rfcs/RFC-0003-委托与唤醒.md](docs/rfcs/RFC-0003-委托与唤醒.md)
 
 ## 会自己进化的模板
@@ -144,7 +146,7 @@ coh-dispatch --advance <项目>                # 不面板也能派发：认领 
 
 ## 自测与质量
 
-仓库自带 367 条自测，跑起来不需要装任何东西：
+仓库自带 377 条自测，跑起来不需要装任何东西：
 
 ```bash
 python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows/macos × py3.11/3.12/3.13 上跑同样的命令

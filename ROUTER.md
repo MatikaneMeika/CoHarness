@@ -48,6 +48,8 @@
 4. 干活全程遵守项目 AGENTS.md 的全局禁令与角色约束；收工按 parallel-protocol 汇报（03）或项目 workflow 的收尾节（其余骨架）
 5. 想知道全局状态（谁在做哪张卡、做到哪一步、哪里不一致）→ `python <库>\panel.py --plain [--project 路径]`：默认只读看板，按角色分组并把“提交了没勾 / 勾了没提交 / 跨工作树分叉”标出来，不写任何文件。装机过（`pipx install coharness`）就敲 `coh-panel`，与 `python <库>\panel.py` 是同一个入口；要全屏就别用 conhost（花屏），换给得了 TTY 的终端，Windows 上 `mintty -e coh-panel`（克隆里 `mintty -e python <库>\panel.py`）实测可用。要一键把下一个 harness 拉起来：面板里任务页按 `d` 进派发页（候选 + 预选高亮，Enter 派发 / `m` 只印命令 / `r` 重试），或直接 `coh-dispatch --advance <项目>`——认领 + 建工作树 + 开新终端，拉起后失联；启动命令表在项目侧 `.agent/dispatch.md`
 
+> 自动派发默认关闭。候选 harness 由项目侧 `scripts/dispatch_env.py` 只读探测或用户指定，不预置本机 CLI/路径；只有用户明确要求 architect 或 integrator“开启自动派发/关闭自动派发”后才切换。候选可用不等于自动改派。
+
 ## 自我迭代
 
 骨架用着不顺手（规则缺口 / 能力缺口）→ 项目内 `.agent/improvements.md` 登记 → 本项目试点 → **「evolve <项目路径>」**：跑库侧审核工具 `python <库>\evolve.py <项目> [--out 记录.json]`，机器取客观证据、人判有效性与必要性，标准见 `docs/EVOLUTION-PROCESS.md`；晋升前必须过 `evolve.py --apply-check 补丁.diff`（临时副本试装 + 全套自测）与 `evolve.py --verify-record 记录.json`（三证 + 用户批准缺一即红）。用户批准后写回本体并记入 `docs/CHANGELOG.md`。只想快速看待审条目用 `wsc.py improve <项目>`，跨项目数同类摩擦加 `--cross`。

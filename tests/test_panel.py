@@ -823,6 +823,10 @@ class DispatchWrites(unittest.TestCase):
         self.addCleanup(H.rmtree, self.tmp)
         self.proj = self.tmp / "proj"
         self.assertEqual(H.wsc("init", "03", str(self.proj)).returncode, 0)
+        (self.proj / ".agent" / "dispatch.md").write_text(
+            "# dispatch\n\n| 角色 | 启动命令 |\n|---|---|\n"
+            "| coder | `fake-harness --cd {worktree}` |\n",
+            encoding="utf-8")
         git(self.proj, "init", "-q", "--initial-branch=main")
         git(self.proj, "config", "user.name", "coharness-test")
         git(self.proj, "config", "user.email", "coharness-test@invalid")
@@ -836,7 +840,7 @@ class DispatchWrites(unittest.TestCase):
         self.assertEqual(git(self.proj, "status", "--porcelain").stdout.strip(), before,
                          "只读路径不许动工作区")
         # 只把"agent CLI 在不在 PATH"钉成替身；git-wt 仍走真实探测（不在 → 原生 git worktree）
-        which = lambda t: "/fake/" + t if t == "codex" else None
+        which = lambda t: "/fake/" + t if t == "fake-harness" else None
         with unittest.mock.patch.object(panel_mod.dispatch_mod, "which", which):
             note = panel_mod.dispatch_now(
                 self.proj, "T-080", manual=False,

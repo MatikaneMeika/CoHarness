@@ -15,7 +15,8 @@ from pathlib import Path
 
 import helpers as H
 
-SHIPPED = (H.WSC, H.CHECK_SRC)                  # 分发面：随骨架进每个下游项目，可 curl 单文件
+DISPATCH_ENV = (H.SKELETON / "scripts" / "dispatch_env.py",)  # 03 项目侧只读发现脚本
+SHIPPED = (H.WSC, H.CHECK_SRC) + DISPATCH_ENV   # 分发面：随骨架进每个下游项目，可 curl 单文件
 DEV = (H.REPO / "evolve.py",)                    # 开发面：审骨架本体
 MAINT = (H.REPO / "maintain.py",)                # 维护面：管已实例化项目的指纹/迁移/体检
 VIEW = (H.REPO / "board.py", H.REPO / "board_render.py",
@@ -41,6 +42,7 @@ FIRST_PARTY = {"wsc", "maintain", "board", "board_render", "dispatch"}   # 同�
 # 700/700 那轮就是"再挤一行"的信号，而它不随骨架分发、没有单文件承诺——所以拆，而不是抬。
 # 同时加函数级棘轮（FUNC_BUDGET/NEST_BUDGET）：文件行数挡不住"为凑行数一行三语句"。
 LINE_BUDGET = {H.WSC: 1250, H.CHECK_SRC: 760, H.REPO / "evolve.py": 400,
+               H.SKELETON / "scripts" / "dispatch_env.py": 220,
                H.REPO / "maintain.py": 700, H.REPO / "board.py": 700,
                H.REPO / "board_render.py": 300, H.REPO / "panel.py": 300,
                H.REPO / "dispatch.py": 300}
