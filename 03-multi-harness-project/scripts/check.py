@@ -20,7 +20,7 @@ import re
 import subprocess
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -361,6 +361,9 @@ def check_tasks(cards, columns, card_errors=()):
             problems.append("title 为空")
         if c["status"] in ("doing", "review") and not c["assignees"]:
             problems.append(f"status={c['status']} 但未认领（assignee 为空）")
+        updated = str(c["meta"].get("updated_date", "")).strip()
+        if (ts := _parse_updated(updated)) and ts > datetime.now() + timedelta(minutes=10):
+            problems.append(f"updated_date 超出本地当前时间 10 分钟: {updated}")
         if len(c["assignees"]) > 1:
             problems.append(f"一卡多 assignee: {c['assignees']}（认领必须唯一）")
         if not c["has_boundary"]:

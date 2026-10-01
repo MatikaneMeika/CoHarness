@@ -123,6 +123,12 @@ class TestCardFormat(TempProjectCase):
         H.write_card(self.proj, "T-014", updated=datetime.now().strftime("%Y-%m-%d %H:%M"))
         self.assertCheck(["--stale"], 0, "[stale] 无僵死卡")
 
+    def test_updated_date_far_in_the_future_is_blocked(self):
+        from datetime import datetime, timedelta
+        future = datetime.now() + timedelta(minutes=11)
+        H.write_card(self.proj, "T-015", updated=future.strftime("%Y-%m-%d %H:%M"))
+        self.assertCheck(["--tasks"], 1, "T-015.md", "超出本地当前时间 10 分钟")
+
     def test_updated_date_with_t_separator_is_not_read_as_date_only(self):
         """同一时刻写成 `2020-01-01 12:00` 与 `2020-01-01T12:00:00` 必须报同样的僵死小时数。
 
