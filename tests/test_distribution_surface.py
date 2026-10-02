@@ -41,7 +41,9 @@ FIRST_PARTY = {"wsc", "maintain", "board", "board_render", "dispatch"}   # 同�
 # 2026-09-30 展示面按面拆开（board 700→装配 500 / 渲染 board_render 226）：board.py 顶到
 # 700/700 那轮就是"再挤一行"的信号，而它不随骨架分发、没有单文件承诺——所以拆，而不是抬。
 # 同时加函数级棘轮（FUNC_BUDGET/NEST_BUDGET）：文件行数挡不住"为凑行数一行三语句"。
-LINE_BUDGET = {H.WSC: 1250, H.CHECK_SRC: 760, H.REPO / "evolve.py": 400,
+# 2026-10-02 check.py 760→820：W20 的 `--against <ref>` 必须在 CI 干净树上复用同一套挂卡
+# 判定；它随骨架分发，拆出去就违背单文件执法契约。这是第三次上调，按先例走独立提交。
+LINE_BUDGET = {H.WSC: 1250, H.CHECK_SRC: 820, H.REPO / "evolve.py": 400,
                H.SKELETON / "scripts" / "dispatch_env.py": 220,
                H.REPO / "maintain.py": 700, H.REPO / "board.py": 700,
                H.REPO / "board_render.py": 300, H.REPO / "panel.py": 300,
