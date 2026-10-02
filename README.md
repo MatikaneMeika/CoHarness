@@ -185,15 +185,23 @@ python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows/mac
 - [docs/EVOLUTION-PLAN.md](docs/EVOLUTION-PLAN.md) —— 为什么这么设计（从全自研到借力成熟组件的过程）
 - [SECURITY.md](SECURITY.md) —— 安全与数据安全边界
 
-任务卡用 [Backlog.md](https://github.com/MrLesk/backlog.md)，规格拆解用 [GitHub Spec Kit](https://github.com/github/spec-kit)，工作树用 [Worktrunk](https://github.com/max-sixty/worktrunk)（Windows 下命令叫 git-wt），版本按 2026-09-26 核实。
+任务卡用 [Backlog.md](https://github.com/MrLesk/backlog.md)（1.53.0），规格拆解用 [GitHub Spec Kit](https://github.com/github/spec-kit)（1.0.13），工作树用 [Worktrunk](https://github.com/max-sixty/worktrunk)（0.80.0，Windows 下命令叫 git-wt），三者均经 2026-10-02 隔离沙盒全流程真装真跑核验。
 
 <details>
-<summary>第三方工具的已知坑（Backlog.md 1.53.0，2026-09-28 真装真跑）</summary>
+<summary>第三方工具的已知坑与实测经验（Backlog 1.53.0 / Spec Kit 1.0.13 / Worktrunk 0.80.0，2026-10-02 真装真跑）</summary>
 
-- 默认看板列是 `To Do / In Progress / Done`，要用本骨架的四列得改 `backlog/config.yml` 的 `statuses`（`backlog config set` 拒绝直改）
-- 它按 `t-<编号> - <标题>.md` 认卡，手工建的 `T-001.md` 工具不列
-- `backlog init --agent-instructions` 会往 AGENTS.md 注入它自己的说明，本骨架要求写 `none`
-- Vibe Kanban 试了解过：已宣布 sunset 且看板数据存在应用目录里不进仓库，放弃
+- **Backlog.md**：
+  - 默认看板列是 `To Do / In Progress / Done`，要用本骨架的四列得改 `backlog/config.yml` 的 `statuses`（`backlog config set` 拒绝直改）
+  - 它按 `t-<编号> - <标题>.md` 认卡，手工建的 `T-001.md` 工具不列
+  - `backlog init --agent-instructions` 会往 AGENTS.md 注入它自己的说明，本骨架要求写 `none`
+- **Spec Kit**：
+  - `specify init` 不篡改 `AGENTS.md`（四集成均 0 篡改已跟踪文件），但会建 `.specify/memory/constitution.md` 骨架；项目实例化后需将 `docs/CONSTITUTION-SOURCE.md` 灌入，维持全局纪律单一源
+  - Codex 集成将技能装至 `.agents/skills`（复数），generic 需显式指定 `--commands-dir`
+- **Worktrunk**（`git-wt`）：
+  - `git-wt switch -c` 开新树位于兄弟目录 `../<repo>.<branch>`；无 shell 挂钩环境下不自动改变终端当前目录，需显式切入
+  - Windows 下进程持有工作树句柄时后台清理会延迟，收工合并后需回主工作树执行 `git-wt remove <branch> -y`
+  - 命令为 `switch` / `list` / `merge` / `remove`，无 `add` 子命令
+- **排除工具**：Vibe Kanban 试了解过：已宣布 sunset 且看板数据存在应用目录里不进仓库，放弃
 
 </details>
 

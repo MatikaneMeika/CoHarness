@@ -117,7 +117,7 @@
 **待验项（按计划不为此安装依赖，留给首次真实使用）**
 - Backlog.md 真实 frontmatter 与 check.py 解析的兼容 → **已验（2026-10-02，W21 / T-109 实操）**：在系统临时目录沙盒实装 `backlog.md@1.53.0` 真建卡实测，覆盖基础、引号、含 #、列表、留空、role 标签等多值边界，产物钉入 `tests/fixtures/backlog-real-*`；除单引号内 `''` 转义被 `_strip_comment` 截断暴露既有解析器缺陷外，扁平子集 100% 兼容；口径差已对齐（详见 `docs/audits/T-109-Backlog-frontmatter兼容实测.md` 与末尾补注）。
 - `backlog.config.yml` 列配置的精确键名（当前为宽容解析，解析失败回落默认四列，不影响执法）
-- `specify init` 四集成（zcode/codex/qodercli/generic）实操、git-wt 双 worktree 并行实操
+- `specify init` 四集成（zcode/codex/qodercli/generic）实操、git-wt 双 worktree 并行实操 → **已验（2026-10-02，T-111 实操）**：在系统临时目录沙盒实装 `specify 1.0.13` 与 `wt v0.80.0` 全流程实测；四集成均不修改或注入第二规则源入 `AGENTS.md`，“唯一权威”宪法完好；git-wt 双 worktree 严格对照 `parallel-protocol.md` 四铁律（一卡一树、认领走 main、pull 时机、收工三查）全绿通过；Windows 锁与 dispatch.py 误用 `git-wt add` 等 6 项摩擦已登记 improvements 口径（详见 `docs/audits/T-111-specify四集成与git-wt双worktree实操.md` 与末尾补注）。
 
 ## 决策记录（ADR）
 
@@ -213,4 +213,14 @@ W5/W7/W9/W12 落地后，`wsc.py` 一度涨到 1137 行——**自己写的行�
 - **README 与 EVOLUTION-PLAN 口径差对齐**：
   - `README.md:173` 折叠区注明的“2026-09-28 真装真跑”系当时装机试用发现的 3 个外部交互坑（默认看板列、`t-<编号>` 认卡命名、`--agent-instructions` 注入）；而 `:167` 记录的“本机不装 backlog”指骨架库本身未作为常驻依赖安装，且卡片 frontmatter 解析器的深层边界兼容性实测此前一直搁置。
   - 本次（2026-10-02）在隔离临时沙盒中完成真装真跑真建卡，两处口径在此对齐：已知坑仍然有效，frontmatter 兼容实测完成销账。
+
+## 2026-10-02 补注（T-111 待验项③④实测销账）
+
+- **待验项③销账（`specify init` 四集成）**：2026-10-02 完成 T-111 实操。在系统临时目录沙盒隔离安装 `specify 1.0.13`，对 `zcode`、`codex`、`qodercli`、`generic` 4 种集成模式运行完整初始化与 git diff 审计。
+  - **规则权威性结论**：4 种集成均未向 `AGENTS.md` 注入第二规则源，未篡改已跟踪的任何规则文件（改动数为 0），完全符合“`AGENTS.md` 唯一权威”宪法。
+  - **摩擦与处置**：Codex 生成 `.agents/` 目录与骨架 `.agent/` 存在单复数差异，generic 需显式提供 `--commands-dir` 参数，生成的 `.specify/memory/constitution.md` 占位原则需由项目实例化后自 `docs/CONSTITUTION-SOURCE.md` 灌入，均已登记入审计记录。
+- **待验项④销账（`git-wt` 双 worktree 并行实操）**：2026-10-02 完成 T-111 实操。在系统临时目录搭建包含中心裸仓库与多 harness 的隔离演练环境，使用 `wt v0.80.0`（Windows 下命令 `git-wt`）进行双卡（T-001/T-002）两工作树完整生命周期推演。
+  - **铁律对照结论**：一卡一树（`git-wt switch -c` 创建独立兄弟目录）、认领提交 main（先到先得原子推送）、pull 时机（开工前、认领前、push 前三处写死）、收工三查（I-004 三项检查全绿，0 孤儿树）全部 100% 严密闭环，`check.py` 成功拦截卡外改动与不存在路径。
+  - **缺陷取证与处置**：暴露 `dispatch.py:207` 误调不存在的 `git-wt add` 子命令（CLI 真实为 `switch` 等），以及 Windows 下非 shell 集成终端不自动 cd 与跨树文件锁摩擦；均已立案登记入 `docs/audits/T-111-specify四集成与git-wt双worktree实操.md`，不违规越界改动骨架代码。
+
 
