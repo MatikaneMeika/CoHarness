@@ -70,18 +70,29 @@ def _origin(path):
 
 
 def _strip_comment(value: str):
-    """去行尾注释；引号里的 # 不算注释。"""
+    """去行尾注释；引号里的 # 不算注释；跳过成对单引号 '' 与反斜杠转义 \\\"。"""
     v = value.strip()
     if v[:1] in ("\"", "'"):
-        close = v.find(v[0], 1)
-        if close != -1:
-            return v[: close + 1]
+        q, i, n = v[0], 1, len(v)
+        while i < n:
+            if q == "'" and v[i] == "'":
+                if i + 1 < n and v[i + 1] == "'":
+                    i += 2
+                    continue
+                return v[: i + 1]
+            if q == '"' and v[i] == "\\":
+                i += 2
+                continue
+            if q == '"' and v[i] == '"':
+                return v[: i + 1]
+            i += 1
     return re.split(r"\s+#", v)[0].strip()
 
 
 def _unquote(value: str):
     if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-        return value[1:-1]
+        inner = value[1:-1]
+        return inner.replace("''", "'") if value[0] == "'" else inner.replace(r'\"', '"')
     return value
 
 
