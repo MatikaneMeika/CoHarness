@@ -2,7 +2,12 @@
 
 > 格式：`- YYYY-MM-DD [晋升 I-xxx@来源项目] 摘要`；非晋升的本体演进用 `[演进]` 标签，缺陷修复用 `[缺陷修复]` 并附复现方式。只增不改。
 
+- 2026-10-02 [缺陷修复] **`_strip_comment` 与 `_unquote` 成对引号转义截断修复（W21 产物兼容）**。Backlog.md 1.53.0 生成的单引号标量使用 YAML 标准 `''` 转义（如 `title: 'Fix user''s issue #123'`），`check.py` 原 `_strip_comment` 在首个单引号处截断导致静默读成 `'Fix user'`（违反 ADR-10 决定 1）；现改为单引号跳过 `''`、双引号跳过 `\"`，并在 `_unquote` 同步做 `''`→`'` 与 `\"`→`"` 反转义。`check.py` 807/820 行未抬上限。
+  复现（改前红改后绿）：`python -m unittest discover -s tests -p "test_backlog_real_fixtures.py"`（改前 `AssertionError: 'Fix user' != "Fix user's issue #123"`，改后全绿）。
+
 - 2026-10-02 [未发布] **远端 diff 执法（W20）**。`check.py` 新增 `--against <ref>`：CI 在干净树上用 `git diff --name-status <ref>...HEAD` 取得变更集，复用现有挂卡/forbidden/所有权判定；ref 或合并基缺失响亮失败，不按空集全绿。03 workflow 升为 PR 用 `origin/main`、push 用 `event.before`，`fetch-depth: 0`；基线全零或 force-push 后不可达时发 `::notice::` 后降级为 names+tasks。`LINE_BUDGET` 760→820，理由写在棘轮注释；本轮不 push、不 merge、不 bump、不 tag、不发布。
+
+- 2026-10-02 [未发布] **远端门禁随骨架分发 + 老项目迁移步（W19）**。03 骨架新增 `.github/workflows/coharness.yml`（push/PR 挂 main，跑 `check.py --names --tasks --no-track`），`pyproject.toml` package-data 逐条写死点目录 glob 让它随 pip 装机；`maintain.py` `SCHEMA` 4→5，新增 `up_remote_gate` 迁移步：复制 workflow + `AGENTS.md` 按指纹基线三方合并补「远端门禁」小节，冲突拒绝覆盖、默认 dry-run；四套骨架项目卡声明行同步升到 5。RFC-0004 成文。本轮不 push、不 merge、不 bump、不 tag、不发布。
 
 - 2026-10-02 [未发布] **审阅返工闭环**。reviewer fail 必须写结构化 `## 审阅意见` 并将卡退回 `doing`；原 assignee 和 worktree 保持不变。`check.py` 新增状态约束：`doing` 可以带未勾选审阅意见，`review` / `done` 不得带未勾选项。返工后追加新 commit、勾完意见再交回 `review`；integrator 不得合并存在未勾选项的卡。本轮只做本地提交，不推送、不合并 main、不 bump、不打 tag、不发布。
 - 2026-10-01 [未发布] **主机 harness 发现与自动派发显式开关**。03 骨架新增只读 `scripts/dispatch_env.py`：解析 `.agent/dispatch.md` 的候选清单与角色命令，只探 PATH，报告 `available/missing/unmapped/unready_roles`，不执行候选 CLI、不联网、不改映射。骨架不预置任何本机 CLI 名称或路径，候选由 architect 按本机环境探测或用户指定后登记；自动派发默认关闭，只有用户明确要求 architect/integrator“开启自动派发/关闭自动派发”后才切换。新增 10 条发现/骨架钉子，全量 377 条；本轮只做本地提交，不推送、不合并 main、不 bump、不打 tag、不发布。
