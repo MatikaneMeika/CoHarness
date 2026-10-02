@@ -404,6 +404,24 @@ class Maintain(unittest.TestCase):
         self.assertEqual(r.returncode, 1, msg=H.out(r))
         self.assertIn("ownership_rows", json.loads(r.stdout)["missing_capabilities"])
 
+    def test_audit_flags_missing_review_return_enforcement(self):
+        """PoseWise 形状：有 `## 审阅意见` 格式校验、无 `has_unchecked` 返工执法——不得报“规则能力齐全”。
+
+        旧的宽泛标记 `审阅意见` 会被格式校验命中，导致 audit 误报齐全（2026-10-02 对 PoseWise_Health
+        实测：audit --quick --json 报 missing_capabilities=[]，但该卡确实停在 done+未勾项无拦截）。
+        """
+        proj = self.fresh("03")
+        check = proj / "scripts" / "check.py"
+        text = check.read_text(encoding="utf-8")
+        self.assertIn("## 审阅意见", text, "夹具前提：格式校验在位")
+        self.assertIn("has_unchecked", text, "夹具前提：新版执法标记在位")
+        check.write_text(text.replace("has_unchecked", "unchecked_seen"),
+                         encoding="utf-8", newline="\n")
+        self.assertEqual(maintain("lock", str(proj)).returncode, 0)
+        r = maintain("audit", str(proj), "--quick", "--json")
+        self.assertEqual(r.returncode, 1, msg=H.out(r))
+        self.assertIn("has_unchecked", json.loads(r.stdout)["missing_capabilities"])
+
     def test_audit_flags_an_illegal_merged_board(self):
         """I-004 的真实形状：两条分支各自合法，合进 main 后是同人两张 doing 卡——merge 不跑钩子。"""
         proj = self.fresh("03")

@@ -124,5 +124,5 @@ v3 -> v4: scripts/check.py 三方合并到当前骨架（审阅意见 / 结果�
 - **幂等**：升到当前 schema 后再跑一次，答案是"已是最新 schema，无升级步骤"
 - **步骤是本轮真实改动**：v1→v2 七步、v2→v3 一步与 v3→v4 的 `check.py` 三方合并都对应 CHANGELOG 里已有的行，不是为演示编的
 
-对应的自动化证据：`tests/test_maintain.py` 28 条（含 dry-run 不写盘、备份分支、幂等、拒绝无仓库落盘、
+对应的自动化证据：`tests/test_maintain.py` 29 条（含 dry-run 不写盘、备份分支、幂等、拒绝无仓库落盘、
 v2→v3 不凭空生成、指纹不含本机路径、七项 v1 遗留各自被处理、schema 可从项目卡读回）。

@@ -2,6 +2,9 @@
 
 > 格式：`- YYYY-MM-DD [晋升 I-xxx@来源项目] 摘要`；非晋升的本体演进用 `[演进]` 标签，缺陷修复用 `[缺陷修复]` 并附复现方式。只增不改。
 
+- 2026-10-02 [缺陷修复] **audit 漂移检测的能力标记粒度过宽导致漏报**。`maintain.py` 的 `CHECK_CAPABILITIES` 原用宽泛词 `审阅意见` 做能力标记，而旧版 check.py 的审阅意见**格式校验**里也有 `## 审阅意见`，字符串命中即被判「规则能力齐全」；对 PoseWise_Health 实测 `audit --quick --json` 报 `missing_capabilities=[]`，但其 `T-019` 卡确实停在 `done` + 未勾项无拦截。修法：标记换成只有新版才有的精确符号 `has_unchecked`（CoHarness check.py 出现 3 次、PoseWise 0 次），并加回归测试。
+  复现（改前红改后绿）：`python -m unittest discover -s tests -p "test_maintain.py" -k "review_return"`（改前 `missing_capabilities` 不含 `has_unchecked`）。
+
 - 2026-10-02 [缺陷修复] **dispatch 工作树建树修复（废除 `git-wt add` 误调，坚守原生路径契约 + 建树失败 detail 补 `argv` 与退出码）**。① T-111 实测暴露 `dispatch.py` 在 PATH 有 `git-wt` 时调用 `["git-wt", "add", "-b", ...]`，而真实 worktrunk 0.80.0 无 `add` 子命令（子命令为 switch/list/remove/merge 等），且其 `switch -c` 只能按配置建到 `../<repo>.<branch>`，无法满足 dispatch 落在 `<项目名>.wt/<卡号>` 的工作树路径契约；现坚守路径契约，废除 `git-wt` 偏好，统一走原生 `git worktree add` 并于注释注明理由。② HANDOFF §1.4-F 闭环：`_worktree` 建树失败 detail 补充 `argv`（参数列表，不裸拼 shell 字符串）与 `returncode`，真实报错诚实透传，保持既有"不重试、不静默改派"。`dispatch.py` 299/300 行未抬上限。
   复现（改前红改后绿）：`python -m unittest discover -s tests -p "test_dispatch.py" -k "worktree"`（改前 3 失败：`test_claim_success_then_actual_worktree_add_failure_leaves_card_doing_handoff_1_4_c` 与 `test_worktree_failure_detail_contains_argv_and_returncode` 报 AssertionError "argv=..." not found；`test_worktree_uses_native_git_even_if_git_wt_in_path` 报 Lists differ: ['git-wt', 'add', '-b'] != ['git', 'worktree', 'add']；改后 7 条全绿）。
 

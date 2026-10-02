@@ -31,7 +31,9 @@ except ImportError:       # curl 单文件 / clone 后直接跑脚本时的形�
 ROOT = wsc.ROOT
 _run = wsc._run
 SCHEMA = 5
-CHECK_CAPABILITIES = ("审阅意见", "结果:", "可观察", "ownership_rows", "_role_declared")
+# 能力标记必须选“只有新版才有的精确符号”：`审阅意见` 这类词在旧版格式校验里也会出现，
+# 会让漂移检测误报“齐全”（PoseWise 实测：有 `## 审阅意见` 格式校验、无 `has_unchecked` 返工执法）。
+CHECK_CAPABILITIES = ("has_unchecked", "结果:", "可观察", "ownership_rows", "_role_declared")
 LOCK_NAME = ".agent/skeleton.lock"
 TELEMETRY_IGNORE = ".agent/telemetry.jsonl"
 
