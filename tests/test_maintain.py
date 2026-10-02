@@ -422,6 +422,22 @@ class Maintain(unittest.TestCase):
         self.assertEqual(r.returncode, 1, msg=H.out(r))
         self.assertIn("has_unchecked", json.loads(r.stdout)["missing_capabilities"])
 
+    def test_lock_records_declared_schema_not_body_schema(self):
+        """老项目 lock 不能把落后 schema 伪装成最新，否则 migrate 会被静默跳过。"
+
+        2026-10-02 PoseWise_Health（schema 3）实测：maintain.py lock 硬写 SCHEMA=5，会让后续
+        migrate 判定“已是最新”而跳过 v3→v4→v5；本用例钉住指纹必须记项目真实版本。
+        """
+        proj = self.fresh("03")
+        agents = proj / "AGENTS.md"
+        text = agents.read_text(encoding="utf-8")
+        agents.write_text(re.sub(r"(\|\s*骨架 schema\s*\|\s*)\d+", r"\g<1>3", text),
+                          encoding="utf-8", newline="\n")
+        r = maintain("lock", str(proj))
+        self.assertEqual(r.returncode, 0, msg=H.out(r))
+        lock = json.loads(self.proj_lock(proj).read_text(encoding="utf-8"))
+        self.assertEqual(lock["schema"], 3, "指纹必须记项目真实 schema，而不是本体 SCHEMA")
+
     def test_audit_flags_an_illegal_merged_board(self):
         """I-004 的真实形状：两条分支各自合法，合进 main 后是同人两张 doing 卡——merge 不跑钩子。"""
         proj = self.fresh("03")

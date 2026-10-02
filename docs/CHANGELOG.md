@@ -2,6 +2,9 @@
 
 > 格式：`- YYYY-MM-DD [晋升 I-xxx@来源项目] 摘要`；非晋升的本体演进用 `[演进]` 标签，缺陷修复用 `[缺陷修复]` 并附复现方式。只增不改。
 
+- 2026-10-02 [缺陷修复] **`maintain.py lock` 对落后项目写虚假 schema，导致 migrate 静默跳过**。`cmd_lock` 原硬写 `schema=SCHEMA`（本体版本），对 schema 3/4 的老项目跑一次 `lock` 就把它伪装成已最新，后续 `migrate` 判定“已是最新”而跳过全部升级步骤；PoseWise_Health（schema 3）实测复现。修法：指纹改记项目 `AGENTS.md` 声明的真实 schema，落后时打印“要升级请跑 migrate（lock 本身不升级）”。
+  复现（改前红改后绿）：`python -m unittest discover -s tests -p "test_maintain.py" -k "lock_records"`（改前指纹 `schema=5`，改后 `schema=3`）。
+
 - 2026-10-02 [缺陷修复] **audit 漂移检测的能力标记粒度过宽导致漏报**。`maintain.py` 的 `CHECK_CAPABILITIES` 原用宽泛词 `审阅意见` 做能力标记，而旧版 check.py 的审阅意见**格式校验**里也有 `## 审阅意见`，字符串命中即被判「规则能力齐全」；对 PoseWise_Health 实测 `audit --quick --json` 报 `missing_capabilities=[]`，但其 `T-019` 卡确实停在 `done` + 未勾项无拦截。修法：标记换成只有新版才有的精确符号 `has_unchecked`（CoHarness check.py 出现 3 次、PoseWise 0 次），并加回归测试。
   复现（改前红改后绿）：`python -m unittest discover -s tests -p "test_maintain.py" -k "review_return"`（改前 `missing_capabilities` 不含 `has_unchecked`）。
 

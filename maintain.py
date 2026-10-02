@@ -59,8 +59,15 @@ def cmd_lock(args):
         sys.exit(f"[lock] {project} 里找不到 AGENTS.md，看不出是哪套骨架")
     rev = wsc._git_field(["git", "rev-parse", "--short", "HEAD"], ROOT)
     # 指纹里不写本机绝对路径：它是要提交进项目仓库的共享事实（队友与 CI 都要能看出 schema 漂了没）
+    # 指纹里的 schema 必须是项目的真实版本，不能硬写本体的 SCHEMA：
+    # 否则对落后的老项目跑一次 lock 就把它伪装成已最新，后续 migrate 会静默跳过全部升级。
+    declared = declared_schema(project)
+    schema_now = declared if declared is not None else 1
+    if schema_now < SCHEMA:
+        print(f"[lock] 注意：项目声明的 schema={schema_now}，落后于本体 {SCHEMA}；"
+              f"指纹按真实值 {schema_now} 记录。要升级请跑 maintain.py migrate（lock 本身不升级）")
     entry = {"skeleton": skeleton.name, "skeleton_commit": rev[1] if rev[0] == "ok" else "",
-             "schema": SCHEMA,
+             "schema": schema_now,
              "adapters": _adapters_present(project), "locked_at": f"{datetime.now():%Y-%m-%d %H:%M}",
              "check_sha256": _sha(project / "scripts" / "check.py")}
     f = project / LOCK_NAME

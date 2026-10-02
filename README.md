@@ -165,7 +165,7 @@ coh-dispatch --advance <项目>                # 不面板也能派发：认领 
 
 ## 自测与质量
 
-仓库自带 407 条自测，跑起来不需要装任何东西：
+仓库自带 408 条自测，跑起来不需要装任何东西：
 
 ```bash
 python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows/macos × py3.11/3.12/3.13 上跑同样的命令

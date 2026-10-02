@@ -166,7 +166,7 @@ When guidance conflicts: **project rules > spec-kit output > task cards > verbal
 
 ## Tests and quality
 
-The repo ships 407 self-tests that run without installing anything:
+The repo ships 408 self-tests that run without installing anything:
 
 ```bash
 python -m unittest discover -s tests     # zero deps; CI runs the same command on ubuntu/windows/macos × py3.11/3.12/3.13
