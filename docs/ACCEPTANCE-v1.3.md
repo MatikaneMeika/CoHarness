@@ -9,15 +9,15 @@
 
 - **分支**：`codex/harness-discovery`
 - **主干基线**：`main` / `origin/main` = `4ab6d750e6ae6ffe45ecffe2a4cdc90eecc94e92`（`4ab6d75`）
-- **本地领先提交数**：`31` 个提交（实跑 `git rev-list --count origin/main..HEAD` 取值）
+- **本地领先提交数**：`31+` 个提交（功能基线 `c961b1d` 为 31；后续 docs-only 同步提交不改变代码面）
 - **版本号**：`pyproject.toml` 实读为 `1.2.3`（未 bump，保持发布冻结）
-- **本地 HEAD**：`c961b1d3fb6d0ef40b1aacd9045640c6dbe43a7e`（`c961b1d`）
+- **功能基线 HEAD**：`c961b1d3fb6d0ef40b1aacd9045640c6dbe43a7e`（`c961b1d`；后续 docs-only 提交不改代码）
 
 ## §1 阶段一 W15–W18：发布收口与定位
 
 | 工作项 | 目标 | 状态 | 证据 / 现状 |
 |---|---|---|---|
-| W15 CI 偶发红取证与闭口 | 连续 10 轮全绿或覆盖 ≥2 周；环境问题成文豁免 | **OPEN（未闭口）** | 取证记录见 `docs/audits/T-101-CI偶发红取证.md`。最近 50 轮 `gh run list` 归因：`success` 28 / `failure` 22，全部 failure 均能对应具名修复提交（无未归因偶发红），但从最新向前连续 success = **1**（机械事实），未达 10 轮判据；本地 31 个提交未推送，CI 从未跑过本批代码，依规保持 open 不予静默豁免。 |
+| W15 CI 偶发红取证与闭口 | 连续 10 轮全绿或覆盖 ≥2 周；环境问题成文豁免 | **OPEN（未闭口）** | 取证记录见 `docs/audits/T-101-CI偶发红取证.md`。最近 50 轮 `gh run list` 归因：`success` 28 / `failure` 22，全部 failure 均能对应具名修复提交（无未归因偶发红），但从最新向前连续 success = **1**（机械事实），未达 10 轮判据；本地 31+ 个提交未推送，CI 从未跑过本批代码，依规保持 open 不予静默豁免。 |
 | W16 派发失败路径测试钉子 | 建树失败与认领成功建树失败钉子，行为诚实 | **已闭（本地）** | 提交 `9bcdc98`（建树失败用例注入失败前后红绿可证）+ 提交 `9f8c386`（T-113 废除 `git-wt add` 误调，坚守原生 `git worktree add` 路径契约；`_worktree` 失败 detail 补 `argv` 与 `returncode`，`tests/test_dispatch.py` 40 条全绿，`dispatch.py` 299/300 行未抬上限）。 |
 | W17 README 双语定位章节 | 补齐定位层与 Vibe Kanban 迁移注记 | **已闭（本地）** | 提交 `802030a` + `ca13ace`。`README.en.md` 补入 "How CoHarness relates to other tools" 四行详表，`README.md` 中文简版口径一致并双向互链；按机制对比、无星标数字；"Coming from Vibe Kanban?" 迁移注记在位；`tests/test_packaging.py` 钉子通过。 |
 | W18 v1.3.0 发布 | PyPI 1.3.0 上线、Release 双资产、CHANGELOG 归档 | **未开始（已冻结）** | 用户明确指令冻结发布（不 push、不 merge、不 bump 版本、不打 tag、不发 Release、不发 PyPI）；`pyproject.toml` 版本保持 `1.2.3`；`docs/CHANGELOG.md` 8 条 `[未发布]` 条目保持不变。 |
