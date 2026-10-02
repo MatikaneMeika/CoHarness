@@ -244,6 +244,33 @@ class TestReviewNotesFormat(TempProjectCase):
                     '- [ ] File: docs/ARCHITECTURE.md\n  Lines: 12-18\n  Comment: "改这里"\n')
         self.assertCheck(["--tasks"], 0)
 
+    def test_unchecked_note_in_review_is_blocked(self):
+        H.write_card(self.proj, "T-913", status="review")
+        self.append(self.proj / "backlog" / "tasks" / "T-913.md",
+                    '- [ ] File: docs/ARCHITECTURE.md\n  Lines: 12-18\n  Comment: "还没修"\n')
+        text = self.assertCheck(["--tasks"], 1)
+        self.assertIn("审阅意见有未勾选项", text)
+        self.assertIn("退回 doing", text)
+
+    def test_unchecked_note_in_done_is_blocked(self):
+        H.write_card(self.proj, "T-914", status="done")
+        self.append(self.proj / "backlog" / "tasks" / "T-914.md",
+                    '- [ ] File: docs/ARCHITECTURE.md\n  Lines: 12-18\n  Comment: "还没修"\n')
+        text = self.assertCheck(["--tasks"], 1)
+        self.assertIn("审阅意见有未勾选项", text)
+
+    def test_unchecked_note_in_doing_is_allowed(self):
+        H.write_card(self.proj, "T-915", status="doing")
+        self.append(self.proj / "backlog" / "tasks" / "T-915.md",
+                    '- [ ] File: docs/ARCHITECTURE.md\n  Lines: 12-18\n  Comment: "返工中"\n')
+        self.assertCheck(["--tasks"], 0)
+
+    def test_checked_note_in_review_is_allowed(self):
+        H.write_card(self.proj, "T-916", status="review")
+        self.append(self.proj / "backlog" / "tasks" / "T-916.md",
+                    '- [x] File: docs/ARCHITECTURE.md\n  Lines: 12-18\n  Comment: "已修"\n')
+        self.assertCheck(["--tasks"], 0)
+
     def test_stray_prose_in_section_is_blocked(self):
         H.write_card(self.proj, "T-912")
         self.append(self.proj / "backlog" / "tasks" / "T-912.md",

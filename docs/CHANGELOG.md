@@ -2,6 +2,7 @@
 
 > 格式：`- YYYY-MM-DD [晋升 I-xxx@来源项目] 摘要`；非晋升的本体演进用 `[演进]` 标签，缺陷修复用 `[缺陷修复]` 并附复现方式。只增不改。
 
+- 2026-10-02 [未发布] **审阅返工闭环**。reviewer fail 必须写结构化 `## 审阅意见` 并将卡退回 `doing`；原 assignee 和 worktree 保持不变。`check.py` 新增状态约束：`doing` 可以带未勾选审阅意见，`review` / `done` 不得带未勾选项。返工后追加新 commit、勾完意见再交回 `review`；integrator 不得合并存在未勾选项的卡。本轮只做本地提交，不推送、不合并 main、不 bump、不打 tag、不发布。
 - 2026-10-01 [未发布] **主机 harness 发现与自动派发显式开关**。03 骨架新增只读 `scripts/dispatch_env.py`：解析 `.agent/dispatch.md` 的候选清单与角色命令，只探 PATH，报告 `available/missing/unmapped/unready_roles`，不执行候选 CLI、不联网、不改映射。骨架不预置任何本机 CLI 名称或路径，候选由 architect 按本机环境探测或用户指定后登记；自动派发默认关闭，只有用户明确要求 architect/integrator“开启自动派发/关闭自动派发”后才切换。新增 10 条发现/骨架钉子，全量 377 条；本轮只做本地提交，不推送、不合并 main、不 bump、不打 tag、不发布。
 
 - 2026-10-01 [未发布] **dispatch 候选在 macOS 符号链接根路径下崩溃**。macOS 临时目录经 `/var -> /private/var`，项目自己的 `check.py` 把 `ROOT` 解析成真实路径，而 `dispatch._scan()` 仍拿未解析的项目根做 `relative_to()`；候选非空时抛出路径错误，连带 `evolve --apply-check` 在三条 macOS 腿失败。修法是 `_scan()` 先 `resolve()` 项目根，并加符号链接回归测试；这不是 macOS 特例分支，而是统一路径口径。

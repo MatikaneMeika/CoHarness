@@ -24,7 +24,7 @@
 - 提交过 pre-commit（check.py 强制）
 
 ### 4. reviewer 门禁（逐卡）
-- 按 `.agent/roles/reviewer.md` 清单；fail 退回 `doing`，pass 置 `review`
+- 按 `.agent/roles/reviewer.md` 清单；fail 写审阅意见并退回 `doing`；返工后追加 commit、勾完意见，再置 `review`；pass 置 `review`
 
 ### 5. tester 集成回归【门禁 2】
 - 全量测试 + 主链路冒烟 → 回归报告；`scripts/check.py` 全绿

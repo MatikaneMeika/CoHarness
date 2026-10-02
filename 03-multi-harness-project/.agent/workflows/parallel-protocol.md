@@ -109,6 +109,7 @@ AGENTS.md / .agent/ 规则文件 > spec-kit 产物（constitution/spec/plan）> 
 ## 收工汇报（每个 harness 每次结束任务时）
 
 - 卡状态改到位（done / review + 留给谁）：`backlog task edit` + commit + push main
+- reviewer fail：先写审阅意见并把卡退回 `doing`；返工后追加新 commit、勾完审阅意见，再退回 `review`；存在未勾选项不得合并。
 - **入册三查**（I-004，2026-09-30 晋升，缺一不可）：① `git status --short` 输出为空；② `git rev-parse HEAD` 与 `git rev-parse origin/main` 相同；③ `git-wt list` 里本卡工作树已清理。任何一项不满足就是"没干完"——看板读磁盘，显示 done 不等于已入册
 - 功能分支推上或合并；`git-wt remove` 清理本卡工作树
 - 跑过全量测试后先 `git status --short` 看一眼：测试产物（尤其证据目录里的 json/csv/png）可能被被动改写，用 `git restore --source=HEAD --staged --worktree <路径>` 还原，别把它们当成果提交（I-002 晋升）

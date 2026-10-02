@@ -377,20 +377,20 @@ def check_tasks(cards, columns, card_errors=()):
         if c["status"] == "doing" and len(c["assignees"]) == 1:
             doing_by.setdefault(c["assignees"][0], []).append(c["name"])
         body = c.get("body") or ""
-        if "## 审阅意见" in body:
-            # 三行契约（借鉴 orca 的 diff 批注格式）：条目 File: 开头，续行只允许 Lines:/Comment:
-            seen_entry = False
+        if "## 审阅意见" in body:  # 三行契约（借鉴 orca 的 diff 批注格式）：条目 File: 开头，续行只允许 Lines:/Comment:
+            seen_entry = has_unchecked = False
             for raw in body.split("## 审阅意见", 1)[1].split("\n## ", 1)[0].splitlines():
                 s = raw.strip()
                 if not s:
                     continue
                 m = re.match(r"^[-*]\s*\[([ xX])\]\s*(.*)$", s)
                 if m:
-                    seen_entry = True
+                    seen_entry, has_unchecked = True, has_unchecked or m.group(1).lower() != "x"
                     if not m.group(2).startswith("File:"):
                         problems.append(f"审阅意见条目必须以 `File: <路径>` 开头: {s[:40]}")
                 elif not seen_entry or not (s.startswith("Lines:") or s.startswith("Comment:")):
                     problems.append(f"审阅意见续行只允许 `Lines:` / `Comment:`: {s[:40]}")
+            if has_unchecked and c["status"] != "doing": problems.append("审阅意见有未勾选项：卡必须退回 doing；review/done 不得带未勾选项")
         if problems:
             ok = False
             print(f"[任务卡] {c['name']}:")

@@ -28,7 +28,8 @@
 审查记录（写进任务卡正文或 `docs/reviews/T-xxx.md`）：
 
 - **pass**：列出已查项
-- **fail**：问题列表（文件:行 + 一句话修法），卡退回 `doing`
+- **fail**：必须写入 `## 审阅意见`，卡退回 `doing`；原 assignee 和 worktree 保持不变，不重新认领。问题列表用 `File:` / `Lines:` / `Comment:` 三行结构。
+- **返工回环**：原实现者修复后追加新 commit、逐条勾掉审阅意见，再交回 `review`。
 
 ## 立场
 
