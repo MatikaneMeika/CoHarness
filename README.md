@@ -131,6 +131,7 @@ coh-dispatch --advance <项目>                # 不面板也能派发：认领 
 - 派发页（任务页按 `d`）：候选 = 依赖就绪、边界不与在做卡冲突的 todo 卡；系统按确定性规则预选（卡号最小），↑↓ 改选，Enter 派发，`m` 只印命令不执行，`r` 原地重试。派发 = 认领 + 建工作树 + 开新终端，拉起后立刻失联（不持有句柄、不读输出、不记运行时状态）。启动命令表在项目侧 `.agent/dispatch.md`（角色 → 命令，支持 `{worktree}`/`{card}` 占位符），缺表只列候选不执行
 - 主机 harness 发现：项目侧 `python scripts/dispatch_env.py --json` 只读探测候选与角色命令是否就绪；骨架不预置本机 CLI 名称或路径，由 architect 按本机环境或用户指定登记。自动派发默认关闭，只有用户明确对 architect/integrator 说“开启自动派发/关闭自动派发”后才切换；候选可用不等于自动改派
 - 委托与唤醒的边界、被否决的常驻调度器方案、以及“展示面只读”承诺的代价： [docs/rfcs/RFC-0003-委托与唤醒.md](docs/rfcs/RFC-0003-委托与唤醒.md)
+- 多 harness 派发从零上手与排错速查（登记候选 / 填命令表 / 只读体检 / 开关自动派发）： [docs/USAGE-多harness派发.md](docs/USAGE-多harness派发.md)
 
 ## 会自己进化的模板
 
