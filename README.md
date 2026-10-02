@@ -54,6 +54,24 @@ wsc init 03 ./my-project
 
 03 是最完整的一套，我们自己叫它**合作区**：谁能动哪些路径有所有权表；几个工具并行时认领动作提交到 main 串行化，一个工具一个 worktree；提交前 pre-commit 会跑 check.py，越权的改动直接被拦。其余几套的纪律大多来自真实教训——文件名带 `-v2`/`-final` 会越堆越多，改稿不回源迟早分叉，实验数据手改过一个数字整份报告就不可信了。
 
+## 它和相邻工具怎么摆位
+
+"多个异构 harness 在同一个仓库里不打架" 这一层——路径所有权、认领串行化、改动挂卡、卡边界互斥——目前没有高星项目的成形态实现。CoHarness 占的是个小而空的位：
+
+| 类别 | 状态存哪 | 管什么 | 不管什么 |
+|---|---|---|---|
+| 编排器（[claude-squad](https://github.com/smtg-ai/claude-squad)、[cmux](https://github.com/mafialink-ai/cmux)、[orca](https://github.com/stablyai/orca) 等） | 各自应用 / 进程侧 | 把多个代理进程隔离并行 | 仓库里的约定：谁能动哪些路径、改动挂不挂卡 |
+| 看板工具（Vibe Kanban，见下） | 服务端 + 本地应用库 | 给代理派卡 | 状态不进 git；项目已停止维护 |
+| 规范层（[spec-kit](https://github.com/github/spec-kit)、[OpenSpec](https://github.com/Fission-AI/OpenSpec)、[ECC](https://github.com/affaan-m/ECC)、[agents.md](https://github.com/agentsmd/agents.md) 等） | 仓库文件 | 单个代理怎么干活（规格 / 技能 / 规则） | 多个代理之间的边界与冲突 |
+| **CoHarness** | 仓库文件 + git | 多个异构 harness 同仓的边界 / 认领 / 执法 | 进程隔离与拉起（留给编排器——共生，非竞争） |
+
+对比表按机制写、不按星数写（星数会腐烂，机制不会）。每个被点名的项目都在用自己的方式描述自己，本节不排名。
+
+### 从 Vibe Kanban 迁来？
+
+[Vibe Kanban](https://github.com/BloopAI/vibe-kanban) 已宣布停止维护（README 横幅原话，末次提交 2026-09-19），未推荐迁移目标。两边的对位人群也重合：要"卡驱动派发"，不要服务端与本地应用库。如果你正符合这种形态，四列语义（`todo / doing / review / done`）可以直接沿用。本仓库的运行统计全部本地、可关可删（`--no-track` / `COHARNESS_NO_TRACK=1`）；状态在 git 里，不在你仓库旁边的某个应用目录里。
+
+
 ## 日常命令
 
 **装机与开工**

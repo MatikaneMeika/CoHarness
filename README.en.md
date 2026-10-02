@@ -57,6 +57,24 @@ Missing dependencies do not block you — the toolchain has fallback paths, and 
 
 Skeleton 03 is the full one, and what the project calls a *collaboration zone*: an ownership table says who may write which path prefix; parallel claim serialises through `main`; one harness per worktree; every commit from every tool passes the same `pre-commit` hook. The discipline in the other three comes from real lessons — `-v2`/`-final` filename suffixes pile up, edits that skip the source fork it, and one hand-edited number makes an entire report untrustworthy.
 
+## How CoHarness relates to other tools
+
+The layer that "several heterogeneous harnesses in one repo do not step on each other" -- path ownership, serialised claims, edits bound to cards, mutually-exclusive card boundaries -- has no high-incumbent implementation. CoHarness sits in a narrow, mostly empty slot:
+
+| Category | State lives in | Owns | Does not own |
+|---|---|---|---|
+| Orchestrators ([claude-squad](https://github.com/smtg-ai/claude-squad), [cmux](https://github.com/mafialink-ai/cmux), [orca](https://github.com/stablyai/orca), ...) | each app / process side | isolating and running several agent processes in parallel | the conventions inside the repo: who may write which path, whether an edit is bound to a card |
+| Kanban tools (Vibe Kanban -- see below) | server + local app dir | dispatching cards to agents | state not in git; the tool has been discontinued |
+| Spec layers ([spec-kit](https://github.com/github/spec-kit), [OpenSpec](https://github.com/Fission-AI/OpenSpec), [ECC](https://github.com/affaan-m/ECC), [agents.md](https://github.com/agentsmd/agents.md), ...) | repo files | how a single agent works (spec / skill / rule) | the boundaries and conflicts between several agents |
+| **CoHarness** | repo files + git | boundaries, serialised claims, mechanical enforcement for several heterogeneous harnesses in one repo | process isolation and wake-up (left to orchestrators -- coexistence, not competition) |
+
+The table is written by mechanism, not by popularity numbers, which decay. Each named project describes its own mechanism; this section does not rank them.
+
+### Coming from Vibe Kanban?
+
+[Vibe Kanban](https://github.com/BloopAI/vibe-kanban) announced it is sunsetting (README banner, last commit 2026-09-19); no migration target is recommended. The audiences also overlap: cards and a board in repo Markdown, no server, no local app database. If that is your shape, the four-column semantics (`todo / doing / review / done`) carry over directly. CoHarness keeps all telemetry local and switchable off with `--no-track` / `COHARNESS_NO_TRACK=1`. State lives in git, not in an app directory next to your repo.
+
+
 ## Everyday commands
 
 **Install and start work**
