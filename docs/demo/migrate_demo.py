@@ -51,10 +51,12 @@ def build_v1(root: Path) -> Path:
     shutil.copytree(src, proj, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     agents = proj / "AGENTS.md"
     text = agents.read_text(encoding="utf-8").split("\n## 降级行为")[0]
+    text = re.sub(r"\n### 远端门禁.*?(?=\n## 冲突裁决顺序)", "", text, flags=re.S)
     text = text.replace("wsc.py claim", "task edit -s doing")
     text = text.replace("{{COHARNESS_LIB}}", "<骨架库>")          # v1 的写法：下游猜不出路径
     text = re.sub(r"(?m)^\|\s*骨架 schema\s*\|\s*\d+\s*\|\n", "", text)  # v1 的项目卡没有这行声明
     agents.write_text(text + "\n## 工作方式\n\n（略）\n", encoding="utf-8", newline="\n")
+    (proj / ".github" / "workflows" / "coharness.yml").unlink(missing_ok=True)
     proto = proj / ".agent" / "workflows" / "parallel-protocol.md"
     proto.write_text(proto.read_text(encoding="utf-8").replace("{{COHARNESS_LIB}}", "<骨架库>"),
                      encoding="utf-8", newline="\n")

@@ -2,6 +2,9 @@
 
 > 格式：`- YYYY-MM-DD [晋升 I-xxx@来源项目] 摘要`；非晋升的本体演进用 `[演进]` 标签，缺陷修复用 `[缺陷修复]` 并附复现方式。只增不改。
 
+- 2026-10-02 [缺陷修复] **无指纹的 schema 3 老项目迁移卡死在预检，且 lock 会记错合并基线**。PoseWise_Health 实测：没有 `.agent/skeleton.lock` 的 schema 3 项目跑 `maintain.py migrate`（含 `--yes`）在预检报「指纹里没有 skeleton_commit，无法取三方合并基线」；若按提示补 `lock`，指纹又会把 `skeleton_commit` 记成当前 HEAD，使 base 等于当前骨架，升级被静默跳过。修法：`SCHEMA_BASELINES` 给 schema 3 登记历史基线 `1617d1c`，无指纹时 `lock` 与 `migrate` 共用它；v4→v5 不再对整份实例化 `AGENTS.md` 做全文三方合并，改为只在 `## 冲突裁决顺序` 前微创追加「远端门禁」小节，已有不同小节仍拒绝覆盖。
+  复现（改前红改后绿）：`python -m unittest discover -s tests -p "test_maintain.py" -k "without_lock"`（改前预检冲突、无 workflow；改后 `has_unchecked` 与 `.github/workflows/coharness.yml` 都在位）。
+
 - 2026-10-02 [缺陷修复] **`maintain.py lock` 对落后项目写虚假 schema，导致 migrate 静默跳过**。`cmd_lock` 原硬写 `schema=SCHEMA`（本体版本），对 schema 3/4 的老项目跑一次 `lock` 就把它伪装成已最新，后续 `migrate` 判定“已是最新”而跳过全部升级步骤；PoseWise_Health（schema 3）实测复现。修法：指纹改记项目 `AGENTS.md` 声明的真实 schema，落后时打印“要升级请跑 migrate（lock 本身不升级）”。
   复现（改前红改后绿）：`python -m unittest discover -s tests -p "test_maintain.py" -k "lock_records"`（改前指纹 `schema=5`，改后 `schema=3`）。
 

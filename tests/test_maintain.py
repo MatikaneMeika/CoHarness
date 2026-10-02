@@ -132,7 +132,7 @@ class Maintain(unittest.TestCase):
         self.assertIn("降级行为", out)
         self.assertIn("wsc claim", out)
         self.assertIn("待复制", out)
-        self.assertIn("待合并", out)
+        self.assertIn("待补", out)
         self.assertFalse((proj / ".github" / "workflows" / "coharness.yml").exists(),
                          "dry-run 不许复制 workflow")
         self.assertEqual(tree_hash(proj), before, "dry-run 不许写盘")
@@ -227,7 +227,7 @@ class Maintain(unittest.TestCase):
         dry = maintain("migrate", str(proj))
         self.assertEqual(dry.returncode, 0, msg=H.out(dry))
         self.assertIn("待复制", H.out(dry))
-        self.assertIn("待合并", H.out(dry))
+        self.assertIn("待补", H.out(dry))
         self.assertFalse(wf.exists(), "dry-run 不许复制 workflow")
         r = maintain("migrate", str(proj), "--yes")
         self.assertEqual(r.returncode, 0, msg=H.out(r))
@@ -241,6 +241,30 @@ class Maintain(unittest.TestCase):
         self.assertEqual(json.loads(self.proj_lock(proj).read_text(encoding="utf-8"))["schema"], 5)
         again = maintain("migrate", str(proj))
         self.assertIn("已是最新 schema", H.out(again))
+
+    def test_migrate_v3_without_lock_uses_builtin_baseline_and_injects_remote_gate(self):
+        """PoseWise_Health 形状：无指纹的 schema 3 老项目也能安全升到 5。
+
+        旧实现把“指纹里没有 skeleton_commit”当冲突，直接卡死预检；lock 补指纹又只会记当前
+        HEAD，导致 base=当前骨架、升级被静默跳过。本用例钉住内置历史基线 + 微创补远端门禁。
+        """
+        proj = self.fresh("03")
+        old_check = H.out(H.git(H.REPO, "show", "1617d1c:03-multi-harness-project/scripts/check.py"))
+        (proj / "scripts" / "check.py").write_text(old_check, encoding="utf-8", newline="\n")
+        old_agents = H.out(H.git(H.REPO, "show", "1617d1c:03-multi-harness-project/AGENTS.md"))
+        (proj / "AGENTS.md").write_text(old_agents, encoding="utf-8", newline="\n")
+        self.proj_lock(proj).unlink(missing_ok=True)
+        wf = proj / ".github" / "workflows" / "coharness.yml"
+        wf.unlink(missing_ok=True)
+        r = maintain("migrate", str(proj), "--yes")
+        self.assertEqual(r.returncode, 0, msg=H.out(r))
+        self.assertIn("内置基线", H.out(r))
+        self.assertIn("has_unchecked", (proj / "scripts" / "check.py").read_text(encoding="utf-8"))
+        self.assertTrue(wf.is_file())
+        agents = (proj / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("### 远端门禁", agents)
+        self.assertIn("| 骨架 schema | 5 |", agents)
+        self.assertEqual(json.loads(self.proj_lock(proj).read_text(encoding="utf-8"))["schema"], 5)
 
     def test_migrate_merge_conflict_refuses_to_overwrite(self):
         """两条三方合并冲突路径都拒绝覆盖：check.py（v3→v4，本地改过基线行）与 AGENTS.md
@@ -268,7 +292,7 @@ class Maintain(unittest.TestCase):
         agents2 = proj2 / "AGENTS.md"
         old = H.out(H.git(H.REPO, "show", "1617d1c:03-multi-harness-project/AGENTS.md"))
         marker = "## 冲突裁决顺序"
-        own = old.replace(marker, "### 本地钩子（第一道门）\n\n本项目自定义的门禁说明。\n\n" + marker, 1)
+        own = old.replace(marker, "### 远端门禁\n\n本项目自定义旧门禁。\n\n" + marker, 1)
         agents2.write_text(own, encoding="utf-8", newline="\n")
         wf2 = proj2 / ".github" / "workflows" / "coharness.yml"
         wf2.unlink(missing_ok=True)
@@ -283,13 +307,36 @@ class Maintain(unittest.TestCase):
         self.assertFalse(wf2.exists(), "dry-run 不许复制 workflow")
         r2 = maintain("migrate", str(proj2), "--yes")
         self.assertNotEqual(r2.returncode, 0, msg=H.out(r2))
-        self.assertIn("三方合并失败", H.out(r2))
+        self.assertIn("已有不同的「远端门禁」小节", H.out(r2))
         self.assertEqual(agents2.read_text(encoding="utf-8"), own, "冲突时不得覆盖本地 AGENTS.md")
         self.assertFalse(wf2.exists(), "预检失败连 workflow 也不该复制")
         self.assertEqual(json.loads(self.proj_lock(proj2).read_text(encoding="utf-8"))["schema"], 4,
                          "冲突时 schema 不推进")
         branches2 = H.git(proj2, "branch", "--list", "coh-backup-*").stdout
         self.assertNotIn("coh-backup-", branches2, "预检失败不得留下备份分支")
+
+    def test_migrate_v4_to_v5_preserves_local_agents_and_injects_remote_gate(self):
+        """远端门禁是小节注入，不是全文合并：项目自己的 AGENTS.md 定制必须原样保留。"""
+        proj = self.fresh("03")
+        agents = proj / "AGENTS.md"
+        old = H.out(H.git(H.REPO, "show", "1617d1c:03-multi-harness-project/AGENTS.md"))
+        marker = "## 冲突裁决顺序"
+        own = old.replace(marker, "### 本地钩子（第一道门）\n\n本项目自定义的门禁说明。\n\n" + marker, 1)
+        agents.write_text(own, encoding="utf-8", newline="\n")
+        wf = proj / ".github" / "workflows" / "coharness.yml"
+        wf.unlink(missing_ok=True)
+        self.assertEqual(maintain("lock", str(proj)).returncode, 0)
+        lock = json.loads(self.proj_lock(proj).read_text(encoding="utf-8"))
+        lock["skeleton_commit"] = "1617d1c"
+        lock["schema"] = 4
+        self.proj_lock(proj).write_text(json.dumps(lock, ensure_ascii=False, indent=1) + "\n",
+                                       encoding="utf-8", newline="\n")
+        r = maintain("migrate", str(proj), "--yes")
+        self.assertEqual(r.returncode, 0, msg=H.out(r))
+        text = agents.read_text(encoding="utf-8")
+        self.assertIn("### 本地钩子", text)
+        self.assertIn("### 远端门禁", text)
+        self.assertTrue(wf.is_file())
 
     def test_skeleton_detection_uses_lock_before_custom_title(self):
         """ClassObserver 这类项目会把 AGENTS.md 标题改成项目名，锁里的 skeleton 必须先被信任。"""
@@ -476,6 +523,22 @@ class Maintain(unittest.TestCase):
         self.assertEqual(r.returncode, 0, msg=H.out(r))
         lock = json.loads(self.proj_lock(proj).read_text(encoding="utf-8"))
         self.assertEqual(lock["schema"], 3, "指纹必须记项目真实 schema，而不是本体 SCHEMA")
+
+    def test_lock_backfills_schema3_baseline_instead_of_current_head(self):
+        """无指纹的 schema 3 老项目跑 lock 时，骨架基线不能写成当前 HEAD。
+
+        PoseWise_Health 实测：lock 写当前 HEAD 后，migrate 的 base 等于当前骨架，升级被静默跳过。
+        """
+        proj = self.fresh("03")
+        agents = proj / "AGENTS.md"
+        agents.write_text(re.sub(r"(\|\s*骨架 schema\s*\|\s*)\d+", r"\g<1>3",
+                                 agents.read_text(encoding="utf-8")),
+                          encoding="utf-8", newline="\n")
+        r = maintain("lock", str(proj))
+        self.assertEqual(r.returncode, 0, msg=H.out(r))
+        lock = json.loads(self.proj_lock(proj).read_text(encoding="utf-8"))
+        self.assertEqual(lock["schema"], 3)
+        self.assertEqual(lock["skeleton_commit"], "1617d1c")
 
     def test_audit_flags_an_illegal_merged_board(self):
         """I-004 的真实形状：两条分支各自合法，合进 main 后是同人两张 doing 卡——merge 不跑钩子。"""

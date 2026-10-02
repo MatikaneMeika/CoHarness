@@ -75,10 +75,10 @@ python -m unittest discover -s tests
 
 实跑结果：
 ```text
-Ran 412 tests in 1118.443s
+Ran 415 tests in 1159.852s
 
 OK (skipped=6)
 ```
 
-- **测试总数**：412 条全绿通过，`skipped=6`（差分预言机与环境依赖用例，安装 dev 依赖后不 skip）；
-- **耗时**：1118.443s（约 18.6 分钟，包含 `test_evolve.py` 中 `--apply-check` 在临时副本内全套端到端递归自测验证）。
+- **测试总数**：415 条全绿通过，`skipped=6`（差分预言机与环境依赖用例，安装 dev 依赖后不 skip）；
+- **耗时**：1159.852s（约 19.3 分钟，包含 `test_evolve.py` 中 `--apply-check` 在临时副本内全套端到端递归自测验证）。

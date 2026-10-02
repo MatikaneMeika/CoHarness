@@ -31,6 +31,7 @@ except ImportError:       # curl 单文件 / clone 后直接跑脚本时的形�
 ROOT = wsc.ROOT
 _run = wsc._run
 SCHEMA = 5
+SCHEMA_BASELINES = {3: "1617d1c"}  # 无指纹的 v3 老项目：三方合并只认这个历史骨架基线
 # 能力标记必须选“只有新版才有的精确符号”：`审阅意见` 这类词在旧版格式校验里也会出现，
 # 会让漂移检测误报“齐全”（PoseWise 实测：有 `## 审阅意见` 格式校验、无 `has_unchecked` 返工执法）。
 CHECK_CAPABILITIES = ("has_unchecked", "结果:", "可观察", "ownership_rows", "_role_declared")
@@ -52,6 +53,17 @@ def read_lock(project: Path):
         return {"_坏掉": f"无法解析 {f}"}
 
 
+def _baseline_commit(project: Path):
+    """取三方合并基线：优先指纹；无指纹时只对已登记的老 schema 用内置历史基线。"""
+    lock = read_lock(project) or {}
+    commit = lock.get("skeleton_commit")
+    if commit:
+        return commit, "指纹"
+    schema = lock.get("schema") or declared_schema(project)
+    commit = SCHEMA_BASELINES.get(schema)
+    return (commit, f"schema {schema} 内置基线") if commit else ("", "")
+
+
 def cmd_lock(args):
     project = Path(args.project).resolve()
     skeleton = _guess_skeleton(project)
@@ -66,8 +78,13 @@ def cmd_lock(args):
     if schema_now < SCHEMA:
         print(f"[lock] 注意：项目声明的 schema={schema_now}，落后于本体 {SCHEMA}；"
               f"指纹按真实值 {schema_now} 记录。要升级请跑 maintain.py migrate（lock 本身不升级）")
-    entry = {"skeleton": skeleton.name, "skeleton_commit": rev[1] if rev[0] == "ok" else "",
-             "schema": schema_now,
+    commit = rev[1] if rev[0] == "ok" else ""
+    if not (read_lock(project) or {}).get("skeleton_commit"):
+        fallback, source = _baseline_commit(project)
+        if fallback:
+            commit = fallback
+            print(f"[lock] 无指纹基线：按 {source} 记 skeleton_commit={commit}")
+    entry = {"skeleton": skeleton.name, "skeleton_commit": commit, "schema": schema_now,
              "adapters": _adapters_present(project), "locked_at": f"{datetime.now():%Y-%m-%d %H:%M}",
              "check_sha256": _sha(project / "scripts" / "check.py")}
     f = project / LOCK_NAME
@@ -324,6 +341,14 @@ def _three_way_merge(ours: str, base: str, theirs: str):
     return None, (r.stderr or r.stdout or "git merge-file 执行失败").strip()
 
 
+def _section(text: str, heading: str):
+    """截出从 heading 到下一个二级标题的 Markdown 小节。"""
+    if heading not in text:
+        return ""
+    body = heading + text.split(heading, 1)[1]
+    return body.split("\n## ", 1)[0].rstrip() + "\n"
+
+
 def up_merge_check_py(project: Path, apply_changes):
     """v3→v4：把项目 check.py 与当前骨架做三方合并，保留本地改动、冲突不落盘。"""
     skeleton = _guess_skeleton(project)
@@ -333,18 +358,17 @@ def up_merge_check_py(project: Path, apply_changes):
     src = skeleton / "scripts" / "check.py"
     if not src.exists():
         return ["跳过：当前骨架没有 scripts/check.py"]
-    lock = read_lock(project) or {}
-    commit = lock.get("skeleton_commit")
     rel = f"{skeleton.name}/scripts/check.py"
     ours = dst.read_text(encoding="utf-8")
     theirs = src.read_text(encoding="utf-8")
     if ours == theirs:
         return ["已到位：scripts/check.py 已是当前骨架版本"]
+    commit, source = _baseline_commit(project)
     if not commit:
-        return ["冲突：指纹里没有 skeleton_commit，无法取三方合并基线；check.py 未改，请先补指纹或人工同步"]
+        return ["冲突：指纹里没有 skeleton_commit，且项目声明 schema 无内置基线；check.py 未改，请人工同步"]
     base_run = _run(["git", "show", f"{commit}:{rel}"], ROOT)
     if base_run.returncode != 0:
-        return [f"冲突：取不到基线 {commit}:{rel}，check.py 未改，请人工同步"]
+        return [f"冲突：取不到基线 {commit}:{rel}（{source}），check.py 未改，请人工同步"]
     merged, conflict = _three_way_merge(ours, base_run.stdout or "", theirs)
     if conflict is not None:
         return ["冲突：scripts/check.py 三方合并失败，未覆盖；请人工处理以下补丁", conflict]
@@ -353,15 +377,14 @@ def up_merge_check_py(project: Path, apply_changes):
         return [f"冲突：合并结果仍缺执法能力 {', '.join(missing)}，未覆盖 check.py"]
     if apply_changes:
         dst.write_text(merged, encoding="utf-8", newline="\n")
-    return [f"{'已合并' if apply_changes else '待合并'}：scripts/check.py 按基线 {commit} 做三方合并"]
+    return [f"{'已合并' if apply_changes else '待合并'}：scripts/check.py 按基线 {commit}（{source}）做三方合并"]
 
 
 def up_remote_gate(project: Path, apply_changes):
-    """v4→v5：把 03 的远端门禁带给老项目——复制 workflow，AGENTS.md 与骨架做三方合并。
+    """v4→v5：复制远端门禁 workflow，并把「远端门禁」小节微创补进 AGENTS.md。
 
-    先例 up_merge_check_py：本地改过的 AGENTS.md 不静默覆盖，冲突时打出补丁人处理；
-    workflow 已存在且与骨架不同，同样拒绝覆盖。该文件只随 03 分发，别的骨架整步跳过。
-    """
+    不再对整份 AGENTS.md 做三方合并：实例化项目的项目卡会被填成真实业务，模板占位符
+    会让全文合并无意义地冲突。已有不同小节或 workflow 时仍然拒绝覆盖。"""
     skeleton = _guess_skeleton(project)
     if skeleton is None:
         return ["跳过：认不出骨架来源，无法带远端门禁"]
@@ -383,26 +406,22 @@ def up_remote_gate(project: Path, apply_changes):
         notes.append("待复制：.github/workflows/coharness.yml（远端门禁第二道门，--names --tasks --no-track）")
     agents = project / "AGENTS.md"
     if not agents.exists():
-        return notes + ["跳过：没有 AGENTS.md，workflow 已处理但「远端门禁」小节无从合并"]
+        return notes + ["跳过：没有 AGENTS.md，workflow 已处理但「远端门禁」小节无从补"]
     ours = agents.read_text(encoding="utf-8")
-    theirs = (skeleton / "AGENTS.md").read_text(encoding="utf-8")
-    if ours == theirs:
-        return notes + ["已到位：AGENTS.md 已是当前骨架版本"]
-    lock = read_lock(project) or {}
-    commit = lock.get("skeleton_commit")
-    rel = f"{skeleton.name}/AGENTS.md"
-    if not commit:
-        return notes + ["冲突：指纹里没有 skeleton_commit，无法取三方合并基线；AGENTS.md 未改，"
-                        "请先补指纹或人工同步"]
-    base_run = _run(["git", "show", f"{commit}:{rel}"], ROOT)
-    if base_run.returncode != 0:
-        return notes + [f"冲突：取不到基线 {commit}:{rel}，AGENTS.md 未改，请人工同步"]
-    merged, conflict = _three_way_merge(ours, base_run.stdout or "", theirs)
-    if conflict is not None:
-        return notes + ["冲突：AGENTS.md 三方合并失败，未覆盖；请人工处理以下补丁", conflict]
+    src_agents = (skeleton / "AGENTS.md").read_text(encoding="utf-8")
+    section = _section(src_agents, "### 远端门禁")
+    if not section:
+        return notes + ["跳过：当前骨架 AGENTS.md 没有「远端门禁」小节"]
+    if "### 远端门禁" in ours:
+        if _section(ours, "### 远端门禁") == section:
+            return notes + ["已到位：AGENTS.md 有当前「远端门禁」小节"]
+        return notes + ["冲突：AGENTS.md 已有不同的「远端门禁」小节，未覆盖；请人工同步"]
+    marker = "\n## 冲突裁决顺序"
+    new = (ours.replace(marker, "\n" + section + marker, 1) if marker in ours
+           else ours.rstrip() + "\n\n" + section)
     if apply_changes:
-        agents.write_text(merged, encoding="utf-8", newline="\n")
-    notes.append(f"{'已合并' if apply_changes else '待合并'}：AGENTS.md 按基线 {commit} 三方合并补「远端门禁」小节")
+        agents.write_text(new, encoding="utf-8", newline="\n")
+    notes.append(f"{'已补' if apply_changes else '待补'}：AGENTS.md 追加「远端门禁」小节")
     return notes
 
 
@@ -442,8 +461,8 @@ UPGRADES = {
     3: ("scripts/check.py 三方合并到当前骨架（审阅意见 / 结果行 / 可观察验收 / 所有权执法），"
         "冲突拒绝覆盖",
         (up_merge_check_py,)),
-    4: ("复制远端门禁 .github/workflows/coharness.yml + AGENTS.md 三方合并补「远端门禁」小节，"
-        "冲突拒绝覆盖",
+    4: ("复制远端门禁 .github/workflows/coharness.yml + AGENTS.md 微创补「远端门禁」小节，"
+        "已有不同小节拒绝覆盖",
         (up_remote_gate,)),
 }
 

@@ -54,9 +54,9 @@ v2 -> v3: 适配指针升级为各工具原生目录格式（.cursor/rules、.wi
 v3 -> v4: scripts/check.py 三方合并到当前骨架（审阅意见 / 结果行 / 可观察验收 / 所有权执法），冲突拒绝覆盖
   - 已到位：scripts/check.py 已是当前骨架版本
 
-v4 -> v5: 复制远端门禁 .github/workflows/coharness.yml + AGENTS.md 三方合并补「远端门禁」小节，冲突拒绝覆盖
-  - 已到位：.github/workflows/coharness.yml 已是当前骨架版本
-  - 待合并：AGENTS.md 按基线 <骨架库 HEAD> 三方合并补「远端门禁」小节
+v4 -> v5: 复制远端门禁 .github/workflows/coharness.yml + AGENTS.md 微创补「远端门禁」小节，已有不同小节拒绝覆盖
+  - 待复制：.github/workflows/coharness.yml（远端门禁第二道门，--names --tasks --no-track）
+  - 待补：AGENTS.md 追加「远端门禁」小节
   - 待改：AGENTS.md 项目卡声明 schema=5
 
 （dry-run：什么都没写。确认无误再加 --yes，落盘前会自动建备份分支）
@@ -67,7 +67,7 @@ v4 -> v5: 复制远端门禁 .github/workflows/coharness.yml + AGENTS.md 三方�
 $ python maintain.py migrate C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project --yes
 == migrate C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project（当前 schema=1←指纹，本体 schema=5）==
 
-（预检：在临时副本上按同样步骤先跑一遍，输出与上面的 dry-run 同形——待追加 / 待改写 / 待迁移 / 待合并 / 待改，冲突就停在这里不落盘）
+（预检：在临时副本上按同样步骤先跑一遍，输出与上面的 dry-run 同形——待追加 / 待改写 / 待迁移 / 待复制 / 待补 / 待改，冲突就停在这里不落盘）
 
 [migrate] 已建备份分支 coh-backup-<时间戳>（回到旧状态：git reset --hard coh-backup-<时间戳>）
 
@@ -86,9 +86,9 @@ v2 -> v3: 适配指针升级为各工具原生目录格式（.cursor/rules、.wi
 v3 -> v4: scripts/check.py 三方合并到当前骨架（审阅意见 / 结果行 / 可观察验收 / 所有权执法），冲突拒绝覆盖
   - 已到位：scripts/check.py 已是当前骨架版本
 
-v4 -> v5: 复制远端门禁 .github/workflows/coharness.yml + AGENTS.md 三方合并补「远端门禁」小节，冲突拒绝覆盖
-  - 已到位：.github/workflows/coharness.yml 已是当前骨架版本
-  - 已合并：AGENTS.md 按基线 <骨架库 HEAD> 三方合并补「远端门禁」小节
+v4 -> v5: 复制远端门禁 .github/workflows/coharness.yml + AGENTS.md 微创补「远端门禁」小节，已有不同小节拒绝覆盖
+  - 已复制：.github/workflows/coharness.yml（远端门禁第二道门，--names --tasks --no-track）
+  - 已补：AGENTS.md 追加「远端门禁」小节
   - 已改：AGENTS.md 项目卡声明 schema=5
 [lock] 已写 C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project\.agent\skeleton.lock（这份指纹可以提交进项目仓库：不含本机路径）
   skeleton = 03-multi-harness-project
@@ -124,6 +124,7 @@ v4 -> v5: 复制远端门禁 .github/workflows/coharness.yml + AGENTS.md 三方�
  D backlog/tasks/T-000-board.md
  M scripts/check.py
 ?? .cursor/
+?? .github/
 
 下一步就是常规提交：git add -A && git commit -m 'migrate v1 -> v5'
 ```
@@ -140,8 +141,8 @@ v4 -> v5: 复制远端门禁 .github/workflows/coharness.yml + AGENTS.md 三方�
 - **只补真需要的**：没装过适配指针的项目不会被塞进五个新文件；`check.py` 只在"缺自授权"这一条明确旧版特征时刷新，
   其它差异交给 `audit` 报漂移，不静默覆盖
 - **幂等**：升到当前 schema 后再跑一次，答案是"已是最新 schema，无升级步骤"
-- **步骤是本轮真实改动**：v1→v2 七步、v2→v3 一步、v3→v4 的 `check.py` 三方合并与 v4→v5 的远端门禁复制/合并
+- **步骤是本轮真实改动**：v1→v2 七步、v2→v3 一步、v3→v4 的 `check.py` 三方合并与 v4→v5 的远端门禁复制/微创补节
   都对应 CHANGELOG 里已有的行，不是为演示编的
 
-对应的自动化证据：`tests/test_maintain.py` 34 条（含 dry-run 不写盘、备份分支、幂等、拒绝无仓库落盘、
+对应的自动化证据：`tests/test_maintain.py` 37 条（含 dry-run 不写盘、备份分支、幂等、拒绝无仓库落盘、
 v2→v3 不凭空生成、指纹不含本机路径、七项 v1 遗留各自被处理、schema 可从项目卡读回）。
