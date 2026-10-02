@@ -189,15 +189,23 @@ Templates, protocol text and a few standard-library scripts: no network client, 
 - [docs/EVOLUTION-PLAN.md](docs/EVOLUTION-PLAN.md) — why it is shaped like this (ADRs)
 - [SECURITY.md](SECURITY.md) — safety and data boundary
 
-Task cards use [Backlog.md](https://github.com/MrLesk/backlog.md), spec decomposition uses [GitHub Spec Kit](https://github.com/github/spec-kit), worktrees use [Worktrunk](https://github.com/max-sixty/worktrunk) (git-wt on Windows); versions verified 2026-09-26.
+Task cards use [Backlog.md](https://github.com/MrLesk/backlog.md) (1.53.0), spec decomposition uses [GitHub Spec Kit](https://github.com/github/spec-kit) (1.0.13), worktrees use [Worktrunk](https://github.com/max-sixty/worktrunk) (0.80.0, the command is called git-wt on Windows); all three verified by full-workflow install and execution in an isolated sandbox on 2026-10-02.
 
 <details>
-<summary>Known third-party quirks (Backlog.md 1.53.0, really installed and run 2026-09-28)</summary>
+<summary>Known third-party quirks and hands-on lessons (Backlog 1.53.0 / Spec Kit 1.0.13 / Worktrunk 0.80.0, really installed and run 2026-10-02)</summary>
 
-- The default board columns are `To Do / In Progress / Done`; this skeleton's four columns require editing `statuses` in `backlog/config.yml` (`backlog config set` refuses direct edits)
-- It recognizes cards as `t-<number> - <title>.md`; a hand-made `T-001.md` is not listed by the tool
-- `backlog init --agent-instructions` injects its own instructions into AGENTS.md; this skeleton requires `none`
-- Vibe Kanban was evaluated and dropped: announced sunset, and its board data lives in an app directory outside the repo
+- **Backlog.md**:
+  - The default board columns are `To Do / In Progress / Done`; this skeleton's four columns require editing `statuses` in `backlog/config.yml` (`backlog config set` refuses direct edits)
+  - It recognizes cards as `t-<number> - <title>.md`; a hand-made `T-001.md` is not listed by the tool
+  - `backlog init --agent-instructions` injects its own instructions into AGENTS.md; this skeleton requires `none`
+- **Spec Kit**:
+  - `specify init` does not tamper with `AGENTS.md` (all four integrations tamper with 0 tracked files), but creates a `.specify/memory/constitution.md` skeleton; after project instantiation, `docs/CONSTITUTION-SOURCE.md` must be pumped in to maintain a single source of global discipline
+  - The Codex integration installs skills to `.agents/skills` (plural); generic requires explicitly specifying `--commands-dir`
+- **Worktrunk** (`git-wt`):
+  - `git-wt switch -c` creates a new tree in a sibling directory `../<repo>.<branch>`; in environments without shell hooks it does not automatically change the terminal's working directory, so you must explicitly switch into it
+  - On Windows, background cleanup is delayed when a process holds a handle to the worktree; after merge at sign-off, return to the main worktree and run `git-wt remove <branch> -y`
+  - Commands are `switch` / `list` / `merge` / `remove`; there is no `add` subcommand
+- **Dropped tools**: Vibe Kanban was evaluated and dropped: announced sunset, and its board data lives in an app directory outside the repo
 
 </details>
 
