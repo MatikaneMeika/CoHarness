@@ -30,7 +30,7 @@ except ImportError:       # curl 单文件 / clone 后直接跑脚本时的形�
 
 ROOT = wsc.ROOT
 _run = wsc._run
-SCHEMA = 4
+SCHEMA = 5
 CHECK_CAPABILITIES = ("审阅意见", "结果:", "可观察", "ownership_rows", "_role_declared")
 LOCK_NAME = ".agent/skeleton.lock"
 TELEMETRY_IGNORE = ".agent/telemetry.jsonl"
@@ -347,6 +347,56 @@ def up_merge_check_py(project: Path, apply_changes):
     return [f"{'已合并' if apply_changes else '待合并'}：scripts/check.py 按基线 {commit} 做三方合并"]
 
 
+def up_remote_gate(project: Path, apply_changes):
+    """v4→v5：把 03 的远端门禁带给老项目——复制 workflow，AGENTS.md 与骨架做三方合并。
+
+    先例 up_merge_check_py：本地改过的 AGENTS.md 不静默覆盖，冲突时打出补丁人处理；
+    workflow 已存在且与骨架不同，同样拒绝覆盖。该文件只随 03 分发，别的骨架整步跳过。
+    """
+    skeleton = _guess_skeleton(project)
+    if skeleton is None:
+        return ["跳过：认不出骨架来源，无法带远端门禁"]
+    src = skeleton / ".github" / "workflows" / "coharness.yml"
+    if not src.exists():
+        return ["跳过：当前骨架不带远端门禁 workflow（只随 03 骨架分发）"]
+    notes = []
+    dst = project / ".github" / "workflows" / "coharness.yml"
+    if dst.exists():
+        if dst.read_text(encoding="utf-8") == src.read_text(encoding="utf-8"):
+            notes.append("已到位：.github/workflows/coharness.yml 已是当前骨架版本")
+        else:
+            notes.append("冲突：.github/workflows/coharness.yml 已存在且与骨架不同，未覆盖；请人工处理")
+    elif apply_changes:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(str(src), str(dst))
+        notes.append("已复制：.github/workflows/coharness.yml（远端门禁第二道门，--names --tasks --no-track）")
+    else:
+        notes.append("待复制：.github/workflows/coharness.yml（远端门禁第二道门，--names --tasks --no-track）")
+    agents = project / "AGENTS.md"
+    if not agents.exists():
+        return notes + ["跳过：没有 AGENTS.md，workflow 已处理但「远端门禁」小节无从合并"]
+    ours = agents.read_text(encoding="utf-8")
+    theirs = (skeleton / "AGENTS.md").read_text(encoding="utf-8")
+    if ours == theirs:
+        return notes + ["已到位：AGENTS.md 已是当前骨架版本"]
+    lock = read_lock(project) or {}
+    commit = lock.get("skeleton_commit")
+    rel = f"{skeleton.name}/AGENTS.md"
+    if not commit:
+        return notes + ["冲突：指纹里没有 skeleton_commit，无法取三方合并基线；AGENTS.md 未改，"
+                        "请先补指纹或人工同步"]
+    base_run = _run(["git", "show", f"{commit}:{rel}"], ROOT)
+    if base_run.returncode != 0:
+        return notes + [f"冲突：取不到基线 {commit}:{rel}，AGENTS.md 未改，请人工同步"]
+    merged, conflict = _three_way_merge(ours, base_run.stdout or "", theirs)
+    if conflict is not None:
+        return notes + ["冲突：AGENTS.md 三方合并失败，未覆盖；请人工处理以下补丁", conflict]
+    if apply_changes:
+        agents.write_text(merged, encoding="utf-8", newline="\n")
+    notes.append(f"{'已合并' if apply_changes else '待合并'}：AGENTS.md 按基线 {commit} 三方合并补「远端门禁」小节")
+    return notes
+
+
 UPGRADES = {
     1: ("本地记账进 .gitignore + 库路径代入绝对值 + 认领首选 wsc claim + 补降级行为节 + "
         "删常驻卡 + 看板列改四列 statuses + 刷新缺自授权的旧 check.py",
@@ -357,6 +407,9 @@ UPGRADES = {
     3: ("scripts/check.py 三方合并到当前骨架（审阅意见 / 结果行 / 可观察验收 / 所有权执法），"
         "冲突拒绝覆盖",
         (up_merge_check_py,)),
+    4: ("复制远端门禁 .github/workflows/coharness.yml + AGENTS.md 三方合并补「远端门禁」小节，"
+        "冲突拒绝覆盖",
+        (up_remote_gate,)),
 }
 
 
@@ -366,7 +419,7 @@ def _pending_steps(schema):
 
 _PENDING_PREFIX = (("已追加", "待追加"), ("已改写", "待改写"), ("已改为", "待改"),
                   ("已补", "待补"), ("已迁移", "待迁移"), ("已删除", "待删除"),
-                  ("已刷新", "待刷新"), ("已合并", "待合并"))
+                  ("已刷新", "待刷新"), ("已合并", "待合并"), ("已复制", "待复制"))
 
 
 def _pending_line(line):

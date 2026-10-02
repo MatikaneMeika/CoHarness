@@ -34,9 +34,9 @@ class Maintain(unittest.TestCase):
         self.tmp = H.tmp_dir()
         self.addCleanup(H.rmtree, self.tmp)
 
-    def fresh(self, name, downgrade=False):
-        proj = H.make_project(self.tmp, H.REPO / name) if name != "03" else \
-            H.make_project(self.tmp)
+    def fresh(self, name, downgrade=False, parent=None):
+        proj = H.make_project(parent or self.tmp, H.REPO / name) if name != "03" else \
+            H.make_project(parent or self.tmp)
         H.git_repo(proj)
         H.git(proj, "config", "user.name", "maint")
         H.git(proj, "config", "user.email", "maint@invalid")
@@ -52,18 +52,23 @@ class Maintain(unittest.TestCase):
     def downgrade_schema(self, lock, to):
         """把指纹里的 schema 调低，模拟"这个项目还停在老版本"。"""
         text = lock.read_text(encoding="utf-8")
-        lock.write_text(text.replace('"schema": 4', f'"schema": {to}'),
+        lock.write_text(text.replace('"schema": 5', f'"schema": {to}'),
                         encoding="utf-8", newline="")
 
     def make_v1(self, proj):
         """把项目退回本轮改动之前的样子（v1），migrate 才有东西可做。"""
         agents = proj / "AGENTS.md"
         text = agents.read_text(encoding="utf-8")
+        wf = proj / ".github" / "workflows" / "coharness.yml"
+        wf.unlink(missing_ok=True)
+        if "\n### 远端门禁" in text:
+            text = re.split(r"\n### 远端门禁", text)[0] + "\n\n## 冲突裁决顺序" + \
+                   text.split("## 冲突裁决顺序", 1)[1]
         text = re.split(r"\n## 降级行为", text)[0]
         text = text.replace("wsc.py claim", "task edit -s doing")
         text = text.replace(str(H.REPO), "<CoHarness>")
-        # v1 的项目卡里没有 schema 声明行——留着会让 migrate 误判成已最新
-        text = re.sub(r"(?m)^\|\s*骨架 schema\s*\|\s*\d+\s*\|\n", "", text)
+        # schema 声明行留着：这些测试都补了指纹（migrate 信指纹，schema 以指纹为准），
+        # 留着它与骨架一致，v4→v5 的 AGENTS.md 三方合并就少一个无谓的冲突面
         agents.write_text(text + "\n", encoding="utf-8", newline="\n")
         gi = proj / ".gitignore"
         gi.write_text(gi.read_text(encoding="utf-8").replace(".agent/telemetry.jsonl", "telemetry.off"),
@@ -89,15 +94,16 @@ class Maintain(unittest.TestCase):
         self.assertTrue(lock.is_file())
         text = lock.read_text(encoding="utf-8")
         self.assertIn("03-multi-harness-project", text)
-        self.assertIn('"schema": 4', text)
+        self.assertIn('"schema": 5', text)
         self.assertRegex(text, r'"check_sha256": "[0-9a-f]{12}"')
 
     def test_schema_lists_upgrade_steps(self):
         out = H.out(maintain("schema"))
-        self.assertIn("骨架 schema 版本：4", out)
+        self.assertIn("骨架 schema 版本：5", out)
         self.assertIn("v1 -> v2", out)
         self.assertIn("v2 -> v3", out)
         self.assertIn("v3 -> v4", out)
+        self.assertIn("v4 -> v5", out)
 
     def test_sha_normalizes_line_endings_and_keeps_binary(self):
         import maintain
@@ -115,6 +121,8 @@ class Maintain(unittest.TestCase):
 
     def test_migrate_dry_run_writes_nothing(self):
         proj = self.fresh("03", downgrade=True)
+        self.assertEqual(maintain("lock", str(proj)).returncode, 0)
+        self.downgrade_schema(self.proj_lock(proj), 1)
         before = tree_hash(proj)
         r = maintain("migrate", str(proj))
         self.assertEqual(r.returncode, 0, msg=H.out(r))
@@ -123,10 +131,16 @@ class Maintain(unittest.TestCase):
         self.assertIn("待改", out)
         self.assertIn("降级行为", out)
         self.assertIn("wsc claim", out)
+        self.assertIn("待复制", out)
+        self.assertIn("待合并", out)
+        self.assertFalse((proj / ".github" / "workflows" / "coharness.yml").exists(),
+                         "dry-run 不许复制 workflow")
         self.assertEqual(tree_hash(proj), before, "dry-run 不许写盘")
 
     def test_migrate_yes_applies_and_backs_up(self):
         proj = self.fresh("03", downgrade=True)
+        self.assertEqual(maintain("lock", str(proj)).returncode, 0)
+        self.downgrade_schema(self.proj_lock(proj), 1)
         r = maintain("migrate", str(proj), "--yes")
         self.assertEqual(r.returncode, 0, msg=H.out(r))
         self.assertIn("已建备份分支", H.out(r))
@@ -140,7 +154,10 @@ class Maintain(unittest.TestCase):
         self.assertIn(".agent/telemetry.jsonl", (proj / ".gitignore").read_text(encoding="utf-8"))
         self.assertNotIn("<骨架库>", (proj / ".agent" / "workflows" /
                                     "parallel-protocol.md").read_text(encoding="utf-8"))
-        self.assertIn('"schema": 4', (proj / ".agent" / "skeleton.lock").read_text(encoding="utf-8"))
+        wf = proj / ".github" / "workflows" / "coharness.yml"
+        self.assertTrue(wf.is_file(), "migrate 必须把远端门禁 workflow 带进老项目")
+        self.assertIn("--names --tasks --no-track", wf.read_text(encoding="utf-8"))
+        self.assertIn('"schema": 5', (proj / ".agent" / "skeleton.lock").read_text(encoding="utf-8"))
 
     def fresh_with_legacy(self, name):
         """带旧单文件适配的项目：旧文件必须进 bootstrap 提交，否则"改动未挂卡"当场拦下。"""
@@ -159,7 +176,7 @@ class Maintain(unittest.TestCase):
         proj = self.fresh_with_legacy("v23")
         self.assertEqual(maintain("lock", str(proj)).returncode, 0)
         lock = self.proj_lock(proj)
-        self.assertIn('"schema": 4', lock.read_text(encoding="utf-8"))
+        self.assertIn('"schema": 5', lock.read_text(encoding="utf-8"))
         self.downgrade_schema(lock, 2)
         dry = maintain("migrate", str(proj))
         self.assertIn("待迁移 .cursorrules", H.out(dry))
@@ -168,7 +185,7 @@ class Maintain(unittest.TestCase):
         self.assertEqual(yes.returncode, 0, msg=H.out(yes))
         self.assertFalse((proj / ".cursorrules").exists())
         self.assertTrue((proj / ".cursor" / "rules" / "coharness.mdc").exists())
-        self.assertIn('"schema": 4', lock.read_text(encoding="utf-8"))
+        self.assertIn('"schema": 5', lock.read_text(encoding="utf-8"))
 
     def test_migrate_v2_to_v3_does_not_invent_adapters(self):
         proj = self.fresh("03")
@@ -180,6 +197,8 @@ class Maintain(unittest.TestCase):
 
     def test_migrate_is_idempotent(self):
         proj = self.fresh("03", downgrade=True)
+        self.assertEqual(maintain("lock", str(proj)).returncode, 0)
+        self.downgrade_schema(self.proj_lock(proj), 1)
         self.assertEqual(maintain("migrate", str(proj), "--yes").returncode, 0)
         second = maintain("migrate", str(proj))
         self.assertIn("已是最新 schema", H.out(second))
@@ -195,19 +214,38 @@ class Maintain(unittest.TestCase):
                                        encoding="utf-8", newline="\n")
         return lock
 
-    def test_migrate_v3_to_v4_merges_check_py_and_is_idempotent(self):
+    def test_migrate_v3_to_v5_merges_check_py_and_brings_remote_gate(self):
+        """v3 老项目一路迁到最新：check.py 按 1617d1c 基线三方合并（v3→v4），再复制远端门禁
+        workflow + AGENTS.md 合并补「远端门禁」小节（v4→v5）；幂等。"""
         proj = self.fresh("03")
         self._write_v3_check(proj)
-        check = proj / "scripts" / "check.py"
+        agents = proj / "AGENTS.md"
+        agents.write_text(H.out(H.git(H.REPO, "show", "1617d1c:03-multi-harness-project/AGENTS.md")),
+                          encoding="utf-8", newline="\n")
+        wf = proj / ".github" / "workflows" / "coharness.yml"
+        wf.unlink(missing_ok=True)
+        dry = maintain("migrate", str(proj))
+        self.assertEqual(dry.returncode, 0, msg=H.out(dry))
+        self.assertIn("待复制", H.out(dry))
+        self.assertIn("待合并", H.out(dry))
+        self.assertFalse(wf.exists(), "dry-run 不许复制 workflow")
         r = maintain("migrate", str(proj), "--yes")
         self.assertEqual(r.returncode, 0, msg=H.out(r))
         self.assertIn("v3 -> v4", H.out(r))
+        self.assertIn("v4 -> v5", H.out(r))
+        check = proj / "scripts" / "check.py"
         self.assertIn("ownership_rows", check.read_text(encoding="utf-8"))
-        self.assertEqual(json.loads(self.proj_lock(proj).read_text(encoding="utf-8"))["schema"], 4)
+        self.assertTrue(wf.is_file())
+        self.assertIn("--names --tasks --no-track", wf.read_text(encoding="utf-8"))
+        self.assertIn("远端门禁", agents.read_text(encoding="utf-8"))
+        self.assertEqual(json.loads(self.proj_lock(proj).read_text(encoding="utf-8"))["schema"], 5)
         again = maintain("migrate", str(proj))
         self.assertIn("已是最新 schema", H.out(again))
 
-    def test_migrate_v3_to_v4_conflict_does_not_overwrite(self):
+    def test_migrate_merge_conflict_refuses_to_overwrite(self):
+        """两条三方合并冲突路径都拒绝覆盖：check.py（v3→v4，本地改过基线行）与 AGENTS.md
+        （v4→v5，本地在「远端门禁」小节插入点写了自家内容）。冲突时预检退出：不落盘、不建
+        备份分支、schema 不推进。"""
         proj = self.fresh("03")
         self._write_v3_check(proj)
         check = proj / "scripts" / "check.py"
@@ -226,6 +264,32 @@ class Maintain(unittest.TestCase):
         self.assertEqual(json.loads(self.proj_lock(proj).read_text(encoding="utf-8"))["schema"], 3)
         branches = H.git(proj, "branch", "--list", "coh-backup-*").stdout
         self.assertNotIn("coh-backup-", branches, "预检失败不得留下备份分支")
+        proj2 = self.fresh("03", parent=self.tmp / "v45conflict")
+        agents2 = proj2 / "AGENTS.md"
+        old = H.out(H.git(H.REPO, "show", "1617d1c:03-multi-harness-project/AGENTS.md"))
+        marker = "## 冲突裁决顺序"
+        own = old.replace(marker, "### 本地钩子（第一道门）\n\n本项目自定义的门禁说明。\n\n" + marker, 1)
+        agents2.write_text(own, encoding="utf-8", newline="\n")
+        wf2 = proj2 / ".github" / "workflows" / "coharness.yml"
+        wf2.unlink(missing_ok=True)
+        self.assertEqual(maintain("lock", str(proj2)).returncode, 0)
+        lock2 = json.loads(self.proj_lock(proj2).read_text(encoding="utf-8"))
+        lock2["skeleton_commit"] = "1617d1c"
+        lock2["schema"] = 4
+        self.proj_lock(proj2).write_text(json.dumps(lock2, ensure_ascii=False, indent=1) + "\n",
+                                        encoding="utf-8", newline="\n")
+        dry2 = maintain("migrate", str(proj2))
+        self.assertIn("待复制", H.out(dry2), "schema 4 项目 dry-run 要显示将复制 workflow")
+        self.assertFalse(wf2.exists(), "dry-run 不许复制 workflow")
+        r2 = maintain("migrate", str(proj2), "--yes")
+        self.assertNotEqual(r2.returncode, 0, msg=H.out(r2))
+        self.assertIn("三方合并失败", H.out(r2))
+        self.assertEqual(agents2.read_text(encoding="utf-8"), own, "冲突时不得覆盖本地 AGENTS.md")
+        self.assertFalse(wf2.exists(), "预检失败连 workflow 也不该复制")
+        self.assertEqual(json.loads(self.proj_lock(proj2).read_text(encoding="utf-8"))["schema"], 4,
+                         "冲突时 schema 不推进")
+        branches2 = H.git(proj2, "branch", "--list", "coh-backup-*").stdout
+        self.assertNotIn("coh-backup-", branches2, "预检失败不得留下备份分支")
 
     def test_skeleton_detection_uses_lock_before_custom_title(self):
         """ClassObserver 这类项目会把 AGENTS.md 标题改成项目名，锁里的 skeleton 必须先被信任。"""
@@ -367,7 +431,10 @@ class Maintain(unittest.TestCase):
         self.assertIn("认领冲突", H.out(a))
 
     def test_skeleton_declares_its_schema_and_it_matches_maintain(self):
-        """骨架自己在项目卡里声明 schema，且必须与 maintain.SCHEMA 一致——两个来源不许漂。"""
+        """骨架项目卡声明的 schema 必须与 maintain.SCHEMA 一致——两个来源不许漂。
+
+        schema 升版时，migrate 步（maintain.py）与四套骨架卡里的声明行必须同一提交落地，
+        否则新实例化的项目会声明一个 migrate 迁不到的版本。"""
         import maintain
         pattern = r"^\|\s*骨架 schema\s*\|\s*(\d+)\s*\|"
         for sk in ("01-solo-code", "02-study-office", "03-multi-harness-project",
@@ -390,13 +457,11 @@ class Maintain(unittest.TestCase):
         check = proj / "scripts" / "check.py"
         check.write_text(check.read_text(encoding="utf-8").replace("SELF_AUTHORIZED", "OLD_NAME"),
                          encoding="utf-8", newline="")
-        agents = proj / "AGENTS.md"
-        agents.write_text(re.sub(r"(?m)^\|\s*骨架 schema\s*\|\s*\d+\s*\|\n", "",
-                                 agents.read_text(encoding="utf-8")),
-                          encoding="utf-8", newline="")
         H.git_repo(proj)
         H.git(proj, "config", "user.name", "v1")
         H.git(proj, "config", "user.email", "v1@invalid")
+        self.assertEqual(maintain("lock", str(proj)).returncode, 0)
+        self.downgrade_schema(self.proj_lock(proj), 1)
         dry = maintain("migrate", str(proj))
         out = H.out(dry)
         for needle in ("待删除", "T-000-board.md", "待改写", "statuses", "待刷新"):
@@ -413,11 +478,18 @@ class Maintain(unittest.TestCase):
         self.assertNotIn("待", again.split("== migrate", 1)[-1])
 
     def test_schema_can_come_from_the_project_card(self):
-        """没有指纹的老项目：migrate 该从 AGENTS.md 的声明读 schema，而不是硬按 v1 猜。"""
+        """没有指纹的老项目：migrate 该从 AGENTS.md 的声明读 schema，而不是硬按 v1 猜。
+
+        声明值直接从项目卡里读出来断言——骨架升版改声明值时不影响这条测试的意图。"""
         proj = self.fresh("03")
-        out = H.out(maintain("migrate", str(proj)))
+        card = re.search(r"^\|\s*骨架 schema\s*\|\s*(\d+)\s*\|",
+                         (proj / "AGENTS.md").read_text(encoding="utf-8"), re.M)
+        self.assertTrue(card, "骨架项目卡里必须有 schema 声明行")
+        r = maintain("migrate", str(proj))
+        self.assertEqual(r.returncode, 0, msg=H.out(r))
+        out = H.out(r)
         self.assertIn("AGENTS.md 声明", out)
-        self.assertIn("当前 schema=4", out)
+        self.assertIn(f"当前 schema={card.group(1)}", out)
 
     def test_audit_flags_a_ledger_written_outside_agent(self):
         proj = self.fresh("03")
