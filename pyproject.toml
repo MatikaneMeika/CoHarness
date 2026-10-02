@@ -56,13 +56,14 @@ packages = ["coharness"]
 include-package-data = false
 
 [tool.setuptools.package-data]
-# 打包用的 glob 走 unix 语义：`*` 不匹配以点开头的名字，所以 `.agent/` 与 `.gitignore`
-# 必须逐条写死；漏一条的后果是 pip 装出来的骨架缺文件而源码树里看不出来。
-# 由 tests/test_distribution_surface.py::test_package_data_covers_every_shipped_file 钉住。
+# 打包用的 glob 走 unix 语义：`*` 不匹配以点开头的名字，所以 `.agent/`、`.gitignore` 与
+# `.github/` 必须逐条写死；漏一条的后果是 pip 装出来的骨架缺文件而源码树里看不出来。
+# 由 tests/test_packaging.py::test_package_data_patterns_cover_every_shipped_file 钉住。
 coharness = [
     "0*/*.md",
     "0*/.gitignore",
     "0*/.gitattributes",
+    "0*/.github/workflows/*.yml",
     "0*/*/*.md",
     "0*/*/*.py",
     "0*/*/*.yml",

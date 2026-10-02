@@ -128,6 +128,24 @@ class SkeletonIntegrity(unittest.TestCase):
             self.assertIn("{{COHARNESS_LIB}}/ROUTER.md", head,
                           f"{sk} 的调度权威行没带库路径，换一个 harness 打开项目读不到 ROUTER")
 
+    def test_remote_gate_workflow_ships_with_03_only(self):
+        """远端门禁（W19 / RFC-0004）：`--no-verify` 与裸克隆两条绕过路径要在远端堵上。
+
+        workflow 只随 03 骨架分发（03 才是多 harness 执法场景）；AGENTS.md 的远端门禁节
+        必须声明这个文件；口径与 pre-push 同源（--names --tasks），CI 一律 --no-track。
+        """
+        rel = ".github/workflows/coharness.yml"
+        text = (H.REPO / "03-multi-harness-project" / rel).read_text(encoding="utf-8")
+        self.assertIn("scripts/check.py --names --tasks --no-track", text,
+                      "workflow 口径必须与执法面同源，且 runner 上不写遥测")
+        for sk in SKELETONS:
+            present = (H.REPO / sk / rel).exists()
+            self.assertEqual(present, sk == "03-multi-harness-project",
+                             f"{sk} 携带远端门禁 workflow 的状态不对（只许 03 带）")
+        agents = (H.REPO / "03-multi-harness-project" / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("远端门禁", agents, "03 骨架 AGENTS.md 缺「远端门禁」小节")
+        self.assertIn(f"`{rel}`", agents, "远端门禁小节没有声明 workflow 文件路径")
+
     def test_skeletons_ship_no_run_residue(self):
         for sk in SKELETONS:
             junk = [p for p in (H.REPO / sk).rglob("*")

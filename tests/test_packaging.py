@@ -61,6 +61,17 @@ class Packaging(unittest.TestCase):
         missing = sorted(tracked_shippables() - matched)
         self.assertEqual(missing, [], f"这些文件该进包却没被任何 pattern 命中：{missing[:10]}")
 
+    def test_remote_gate_workflow_is_shipped(self):
+        """远端门禁（W19 / RFC-0004）必须进包：`.github` 以点开头，unix glob 的 `*`
+        不匹配它，pattern 只能逐条写死；漏一条 pip 装出来的骨架就缺这道门。"""
+        pattern = "0*/.github/workflows/*.yml"
+        self.assertIn(pattern, PATTERNS, "package-data 缺远端门禁 workflow 的逐条写死项")
+        hits = {Path(h).relative_to(H.REPO).as_posix()
+                for h in glob.glob(str(H.REPO / pattern), recursive=True)
+                if Path(h).is_file()}
+        self.assertIn("03-multi-harness-project/.github/workflows/coharness.yml", hits,
+                      "pattern 没命中 03 骨架的远端门禁 workflow")
+
     def test_shipped_skeleton_files_are_the_tracked_ones(self):
         """反向检查：pattern 不该把 tests/、workspace/ 这类开发面文件卷进分发物。"""
         # 库自己的开发面目录不许进分发物；骨架内部的 tests/ 是项目结构的一部分，另算

@@ -95,6 +95,10 @@
 
 `check.py` 每次执行会在项目内 `.agent/telemetry.jsonl` 追加一行本地运行记账（时间、harness 标识、跑了哪几项、通过与否、当时在做的卡）。它已在 `.gitignore` 里——不进版本库、不联网、不弄脏工作区，只给 `python <库>/wsc.py stats <项目>` 当数据源（遵循率 / 返工信号 / stale 分布）。不想留：`--no-track` 或环境变量 `COHARNESS_NO_TRACK=1`。
 
+### 远端门禁（CI，第二道门）
+
+`.github/workflows/coharness.yml`（随骨架带入的 GitHub Actions workflow）：push 到 main 与指向 main 的 PR 会在 runner 上跑 `python scripts/check.py --names --tasks --no-track`。口径：**本地钩子是第一道门，CI 是第二道**——`--no-verify` 逃得过本地、逃不过远端；裸克隆没装钩子也躲不开这道门。CI 红了先修卡 / 改派（按所有权表），不是原样重推。仓库不在 GitHub 托管时该文件惰性无害；等价门禁（GitLab CI 等）按 `.agent/improvements.md` 登记为能力缺口，不私改执法面。
+
 ## 冲突裁决顺序
 
 ```

@@ -1,0 +1,17 @@
+# 远端门禁（第二道门）：本地钩子是第一道，--no-verify 逃得过本地、逃不过远端。
+name: coharness-gate
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: CoHarness gate (names + tasks)
+        run: python scripts/check.py --names --tasks --no-track
