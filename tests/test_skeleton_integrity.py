@@ -138,6 +138,11 @@ class SkeletonIntegrity(unittest.TestCase):
         text = (H.REPO / "03-multi-harness-project" / rel).read_text(encoding="utf-8")
         self.assertIn("scripts/check.py --names --tasks --no-track", text,
                       "workflow 口径必须与执法面同源，且 runner 上不写遥测")
+        self.assertIn("fetch-depth: 0", text, "W20 的 --against 需要完整历史")
+        self.assertIn("--against \"$COHARNESS_AGAINST\"", text,
+                      "远端门禁没有把 CI 变更集交给 --against")
+        self.assertIn("::notice::", text, "基线不可用时必须可见降级，不许静默")
+        self.assertIn("git merge-base", text, "force-push 旧基线不可达时也要走可见降级")
         for sk in SKELETONS:
             present = (H.REPO / sk / rel).exists()
             self.assertEqual(present, sk == "03-multi-harness-project",

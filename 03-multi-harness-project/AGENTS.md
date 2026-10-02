@@ -97,7 +97,7 @@
 
 ### 远端门禁（CI，第二道门）
 
-`.github/workflows/coharness.yml`（随骨架带入的 GitHub Actions workflow）：push 到 main 与指向 main 的 PR 会在 runner 上跑 `python scripts/check.py --names --tasks --no-track`。口径：**本地钩子是第一道门，CI 是第二道**——`--no-verify` 逃得过本地、逃不过远端；裸克隆没装钩子也躲不开这道门。CI 红了先修卡 / 改派（按所有权表），不是原样重推。仓库不在 GitHub 托管时该文件惰性无害；等价门禁（GitLab CI 等）按 `.agent/improvements.md` 登记为能力缺口，不私改执法面。
+`.github/workflows/coharness.yml`（随骨架带入的 GitHub Actions workflow）：push 到 main 与指向 main 的 PR 会在 runner 上跑 `python scripts/check.py --names --tasks --against <基线> --no-track`。PR 基线为 `origin/main`，push 基线为 `event.before`；基线全零或 force-push 后不可达时发 `::notice::` 后只跑 names+tasks，降级可见。口径：**本地钩子是第一道门，CI 是第二道**——`--no-verify` 逃得过本地、逃不过远端；裸克隆没装钩子也躲不开这道门。CI 红了先修卡 / 改派（按所有权表），不是原样重推。仓库不在 GitHub 托管时该文件惰性无害；等价门禁（GitLab CI 等）按 `.agent/improvements.md` 登记为能力缺口，不私改执法面。
 
 ## 冲突裁决顺序
 

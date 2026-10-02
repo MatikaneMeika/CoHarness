@@ -9,6 +9,7 @@
     python scripts/check.py --names       # 仅命名规范
     python scripts/check.py --tasks       # 仅任务卡格式 / 边界节 / 认领冲突
     python scripts/check.py --diff        # 仅改动挂卡（判本次提交暂存的改动，需要 git）
+    python scripts/check.py --against REF # 仅改动挂卡（判 REF...HEAD，供 CI 使用）
     python scripts/check.py --stale       # 仅 stale 卡报告（advisory）
 
 退出码：0 = 通过；1 = 存在违规（stale 提示不算违规，不拦截提交）。
@@ -425,16 +426,9 @@ def _git_out(args):
     return r.returncode == 0, (r.stdout or "")
 
 
-def staged_files():
-    """本次提交将纳入的改动，返回 (新路径列表, 全路径列表)。
-
-    判据必须是暂存集而不是工作区：`git status` 会把没 add 的文件、以及被折叠成
-    目录的未跟踪项都算进来，全新实例化的项目连第一个提交都拦掉。
-    挂卡判"新路径"（重命名按新路径归属）；所有权核对拿"全路径"——重命名的旧路径
-    也盯，改个名逃不出所有权表。
-    """
-    ok, out = _git_out(["-c", "core.quotepath=false", "diff", "--cached",
-                        "--name-status", "--no-ext-diff", "-M"])
+def _name_status(args):
+    """把 git --name-status 输出拆成 (新路径, 全路径)；重命名旧路径也进全路径。"""
+    ok, out = _git_out(args)
     if not ok:
         return None
     fresh, every = [], []
@@ -450,6 +444,35 @@ def staged_files():
             fresh.append(p)
             every.append(p)
     return fresh, every
+
+
+def staged_files():
+    """本次提交将纳入的改动，返回 (新路径列表, 全路径列表)。
+
+    判据必须是暂存集而不是工作区：`git status` 会把没 add 的文件、以及被折叠成
+    目录的未跟踪项都算进来，全新实例化的项目连第一个提交都拦掉。
+    挂卡判"新路径"（重命名按新路径归属）；所有权核对拿"全路径"——重命名的旧路径
+    也盯，改个名逃不出所有权表。
+    """
+    return _name_status(["-c", "core.quotepath=false", "diff", "--cached",
+                        "--name-status", "--no-ext-diff", "-M"])
+
+
+def against_files(ref):
+    """CI 形态的变更集：`<ref>...HEAD`；ref 或合并基缺失都响亮失败，不按空集全绿。"""
+    ok, _ = _git_out(["rev-parse", "--verify", "-q", f"{ref}^{{commit}}"])
+    if not ok:
+        print(f"[改动挂卡] 基线不存在或不是 commit: {ref}")
+        return None
+    ok, _ = _git_out(["merge-base", ref, "HEAD"])
+    if not ok:
+        print(f"[改动挂卡] 基线 {ref} 与 HEAD 没有合并基，无法计算变更集")
+        return None
+    changed = _name_status(["-c", "core.quotepath=false", "diff", "--name-status",
+                            "--no-ext-diff", "-M", f"{ref}...HEAD"])
+    if changed is None:
+        print(f"[改动挂卡] 无法读取 {ref}...HEAD 的变更集")
+    return changed
 
 
 def has_commits():
@@ -541,21 +564,7 @@ def _role_declared(rel, rows, cards):
                for x in (c["meta"].get("labels") or []))
 
 
-def check_diff(cards, tasks_rel=""):
-    changed = staged_files()
-    if changed is None:
-        print("[改动挂卡] 跳过（不是 git 仓库或 git 不可用）")
-        return True
-    if minimal_mode() and not cards:
-        print("[改动挂卡] 最小模式关闭（无任务卡可挂；清单见 TODO.md）")
-        return True
-    if not has_commits():
-        print("[改动挂卡] 首次入库（仓库还没有提交）：不执法；此后每次提交都必须在卡内")
-        return True
-    fresh, every = changed
-    if not fresh:
-        print("[改动挂卡] 通过（暂存区没有改动）")
-        return True
+def _judge_changes(cards, tasks_rel, fresh, every):
     rows, opaque = ownership_rows()
     ok, governed = True, 0
     for rel in every:
@@ -593,6 +602,32 @@ def check_diff(cards, tasks_rel=""):
             ok = False
             print(f"[所有权] 扩权: {rel} 按所有权表只归 {_owning_row(rel, rows)[1]} 写"
                   f"（在做的卡没有对应 role: 标签）——以表为准，扩权先改表")
+    return ok, governed, rows, opaque
+
+
+def check_diff(cards, tasks_rel="", against=None):
+    if against is not None:
+        changed = against_files(against)
+        source = f"{against}...HEAD"
+        if changed is None:
+            return False
+    else:
+        changed = staged_files()
+        source = "暂存区"
+        if changed is None:
+            print("[改动挂卡] 跳过（不是 git 仓库或 git 不可用）")
+            return True
+    if minimal_mode() and not cards:
+        print("[改动挂卡] 最小模式关闭（无任务卡可挂；清单见 TODO.md）")
+        return True
+    if not has_commits():
+        print("[改动挂卡] 首次入库（仓库还没有提交）：不执法；此后每次提交都必须在卡内")
+        return True
+    fresh, every = changed
+    if not fresh:
+        print(f"[改动挂卡] 通过（{source}没有改动）")
+        return True
+    ok, governed, rows, opaque = _judge_changes(cards, tasks_rel, fresh, every)
     if ok:
         print("[改动挂卡] 通过")
     print(f"[所有权] 核对 {governed} 个路径 × {len(rows)} 行可判；"
@@ -719,10 +754,11 @@ def main():
     ap.add_argument("--tasks", action="store_true")
     ap.add_argument("--diff", action="store_true")
     ap.add_argument("--stale", action="store_true")
+    ap.add_argument("--against", metavar="REF", help="CI：检查 <REF>...HEAD 的改动挂卡")
     ap.add_argument("--card", help="本次执行归属的卡号；缺省优先读分支绑定")
     ap.add_argument("--no-track", action="store_true", help="这次执行不写 .agent/telemetry.jsonl")
     args = ap.parse_args()
-    run_all = not (args.names or args.tasks or args.diff or args.stale)
+    run_all = not (args.names or args.tasks or args.diff or args.stale or args.against is not None)
     started = time.monotonic()
 
     tasks_dir, columns = load_config()
@@ -740,8 +776,8 @@ def main():
     if run_all or args.tasks:
         ran["tasks"] = check_tasks(cards, columns, card_errors)
         ok &= ran["tasks"]
-    if run_all or args.diff:
-        ran["diff"] = check_diff(cards, tasks_rel)
+    if run_all or args.diff or args.against is not None:
+        ran["diff"] = check_diff(cards, tasks_rel, args.against)
         ok &= ran["diff"]
     if run_all or args.stale:
         check_stale(cards)  # advisory

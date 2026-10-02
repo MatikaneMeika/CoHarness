@@ -10,8 +10,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: CoHarness gate (names + tasks)
-        run: python scripts/check.py --names --tasks --no-track
+      - name: CoHarness gate (names + tasks + against)
+        shell: bash
+        env:
+          COHARNESS_AGAINST: ${{ github.event_name == 'pull_request' && 'origin/main' || github.event.before }}
+        run: |
+          if [ -z "$COHARNESS_AGAINST" ] || [ "$COHARNESS_AGAINST" = "0000000000000000000000000000000000000000" ]; then
+            echo "::notice::远端门禁基线不可用；本次降级为 names + tasks"
+            python scripts/check.py --names --tasks --no-track
+          else
+            if ! git rev-parse --verify -q "$COHARNESS_AGAINST^{commit}" >/dev/null || \
+               ! git merge-base "$COHARNESS_AGAINST" HEAD >/dev/null; then
+              echo "::notice::远端门禁基线不可达；本次降级为 names + tasks"
+              python scripts/check.py --names --tasks --no-track
+            else
+              python scripts/check.py --names --tasks --against "$COHARNESS_AGAINST" --no-track
+            fi
+          fi

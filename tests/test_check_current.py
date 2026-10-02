@@ -189,6 +189,40 @@ class TestCardFormat(TempProjectCase):
         self.assertCheck(["--tasks"], 0, "[任务卡] 无任务卡")
 
 
+class AgainstBaseline(TempProjectCase):
+    """W20：CI 干净树没有暂存集，`--against <ref>` 必须复用同一套挂卡判定。"""
+
+    def setUp(self):
+        super().setUp()
+        H.git_repo(self.proj)
+        self.base = H.git(self.proj, "rev-parse", "HEAD").stdout.strip()
+
+    def commit(self, message):
+        H.git(self.proj, "add", "-A")
+        H.git(self.proj, "commit", "-q", "-m", message)
+
+    def test_change_without_a_covering_card_is_blocked(self):
+        (self.proj / "unowned.txt").write_text("x", encoding="utf-8")
+        self.commit("change without card")
+        self.assertCheck(["--against", self.base], 1,
+                        "[改动挂卡]", "改动未挂任何任务卡: unowned.txt")
+
+    def test_change_covered_by_a_doing_card_passes(self):
+        H.write_card(self.proj, "T-700", allowed=["  - notes/"])
+        (self.proj / "notes").mkdir()
+        (self.proj / "notes" / "a.txt").write_text("x", encoding="utf-8")
+        self.commit("covered change")
+        self.assertCheck(["--against", self.base], 0, "[改动挂卡] 通过")
+
+    def test_missing_baseline_fails_loudly(self):
+        self.assertCheck(["--against", "no-such-ref"], 1,
+                        "[改动挂卡]", "基线不存在", "no-such-ref")
+
+    def test_empty_baseline_is_not_treated_as_no_flag(self):
+        self.assertCheck(["--against", ""], 1,
+                        "[改动挂卡]", "基线不存在或不是 commit")
+
+
 class TestAdvisoryHints(TempProjectCase):
     """advisory 面（借鉴 orca 的显式 outcome）：交接说明 `结果:` 首行与验收清单可观察证据。
 
