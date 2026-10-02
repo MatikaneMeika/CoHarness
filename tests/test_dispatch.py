@@ -383,8 +383,7 @@ class Launch(Base):
                 D.launch(self.proj, p, spawn=self.spawn)
         msg = str(ctx.exception)
         self.assertIn(sentinel, msg, "stderr 不能被吞掉")
-        # 已知差异：dispatch.py 的 detail 只拼 stdout+stderr，未含 argv/returncode。
-        # 这属独立缺陷修复卡的范围，本测试先钉住真实行为与 stderr 透传。
+        # T-113 补齐：真实 _worktree 失败已在 detail 补 argv 与 returncode；此处仍钉住 launch 透传 detail 的行为。
         text = (self.proj / "backlog" / "tasks" / "T-002.md").read_text(encoding="utf-8")
         self.assertIn("status: doing", text, "认领已落盘，建树失败也不得回滚")
         self.assertEqual(self.calls, [], "建树失败不许继续 spawn")
@@ -406,6 +405,8 @@ class Launch(Base):
         with self.assertRaises(SystemExit) as ctx:
             D.launch(self.proj, bad_plan, spawn=self.spawn)
         self.assertIn("建工作树失败", str(ctx.exception))
+        self.assertIn("argv=['git', 'worktree', 'add', '-b', 'coh/T-002'", str(ctx.exception))
+        self.assertIn("returncode=", str(ctx.exception))
         text = (self.proj / "backlog" / "tasks" / "T-002.md").read_text(encoding="utf-8")
         self.assertIn("status: doing", text, "认领已落盘，worktree 建失败也不得回滚")
         self.assertNotIn("status: todo", text)
@@ -413,6 +414,29 @@ class Launch(Base):
         self.assertEqual(self.worktree_paths(), before, "失败后不许留下半套 worktree 登记")
         self.assertEqual((self.proj / "backlog" / "tasks" / "T-003.md").read_text(encoding="utf-8"),
                          other, "失败不得动别的卡")
+
+    def test_worktree_failure_detail_contains_argv_and_returncode(self):
+        """建树失败 detail 必须包含 argv 参数列表与 returncode，报错诚实。"""
+        blocker = self.tmp / "wt-blocker-direct"
+        blocker.write_text("我是文件", encoding="utf-8")
+        bad_path = blocker / "T-002"
+        ok, detail = D._worktree(self.proj, bad_path, "T-002")
+        self.assertFalse(ok)
+        self.assertIn("argv=['git', 'worktree', 'add', '-b', 'coh/T-002'", detail)
+        self.assertIn("returncode=", detail)
+
+    def test_worktree_uses_native_git_even_if_git_wt_in_path(self):
+        """即使 git-wt 在 PATH，也坚守 dispatch 路径契约一律走原生 git worktree add。"""
+        with unittest.mock.patch.object(D, "which", lambda t: "/fake/bin/git-wt" if t == "git-wt" else None):
+            with unittest.mock.patch.object(D.subprocess, "run") as mock_run:
+                mock_run.return_value = unittest.mock.Mock(returncode=0, stdout="", stderr="")
+                target = self.tmp / "test.wt" / "T-002"
+                ok, _detail = D._worktree(self.proj, target, "T-002")
+                self.assertTrue(ok)
+                mock_run.assert_called_once()
+                argv = mock_run.call_args[0][0]
+                self.assertEqual(argv[:3], ["git", "worktree", "add"])
+                self.assertNotIn("git-wt", argv)
 
     def test_existing_worktree_from_another_project_is_rejected(self):
         p = D.plan(self.proj)

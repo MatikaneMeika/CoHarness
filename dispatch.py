@@ -58,7 +58,6 @@ def _card_number(cid):
     m = re.search(r"\d+", str(cid))
     return (int(m.group()) if m else 1 << 30, str(cid))
 
-
 def _scan(project):
     """候选与受阻一次算清：todo + 无人认领 + 依赖就绪 + 边界不与在做卡冲突。"""
     # check.py 的 ROOT 会 resolve；先对齐它，macOS 的 /var 符号链接才不会炸 relative_to()。
@@ -94,7 +93,6 @@ def _scan(project):
     blocked.sort(key=lambda b: _card_number(b[0]))
     return cands, blocked
 
-
 def candidates(project):
     """依赖就绪、边界不冲突的 todo 卡（无人认领），按卡号升序。"""
     return _scan(project)[0]
@@ -107,12 +105,10 @@ def pick(cards):
     """确定性预选：依赖就绪的 todo 里取卡号最小；空候选返回 None。"""
     return min(cards, key=lambda c: _card_number(c["id"])) if cards else None
 
-
 def _worktree_path(project, card):
     """工作树落在项目外的兄弟目录：`<项目名>.wt/<卡号>`（不污染项目自身）。"""
     root = Path(project).resolve()
     return root.parent / f"{root.name}.wt" / (str(card) or "card")
-
 
 def _harness_id(project):
     """这次派发是谁：环境变量优先，其次 git user.name；都没有就返回空串。"""
@@ -130,16 +126,13 @@ def _git_in(cwd, *args):
                        text=True, encoding="utf-8", errors="replace")
     return (r.stdout or "").strip() if r.returncode == 0 else ""
 
-
 def _common_git_dir(cwd):
     raw = _git_in(cwd, "rev-parse", "--git-common-dir")
     path = Path(raw) if raw else None
     return (path if path.is_absolute() else Path(cwd) / path).resolve() if path else None
 
-
 def _install_hint(tool):
     return f"先装 {tool} 并确认它在 PATH（安装方式由该工具提供），或改 {TABLE_REL} 的启动命令"
-
 
 def plan(project, card=None, tool=None, who=None):
     """出一次派发计划：选卡 → 推角色 → 解析命令 → 探工具。不产生任何副作用。"""
@@ -192,7 +185,11 @@ def _claim(project, card, who):
     return r.returncode == 0, (r.stdout or "") + (r.stderr or "")
 
 def _worktree(project, path, card):
-    """建工作树：优先 git-wt（worktrunk），不在 PATH 时降级原生 `git worktree add`。"""
+    """建工作树：一律走原生 `git worktree add`。
+
+    不用 git-wt（worktrunk）：0.80.0 无 add 子命令且 switch -c 无法满足
+    dispatch 指定路径（<项目名>.wt/<卡号>）契约；坚守契约不改路径。
+    """
     path = Path(path)
     if path.exists():
         root = _git_in(path, "rev-parse", "--show-toplevel")
@@ -204,11 +201,13 @@ def _worktree(project, path, card):
         return False, (f"路径已存在但不是本卡的 worktree：{path}"
                       f"（git root={root or '不是 git 仓库'}，branch={branch or '未知'}，"
                       f"same_repo={'yes' if same_repo else 'no'}）")
-    argv = (["git-wt", "add", "-b", f"coh/{card}", str(path)] if which("git-wt")
-            else ["git", "worktree", "add", "-b", f"coh/{card}", str(path)])
+    argv = ["git", "worktree", "add", "-b", f"coh/{card}", str(path)]
     r = subprocess.run(argv, cwd=str(project), capture_output=True, text=True,
                        encoding="utf-8", errors="replace")
-    return r.returncode == 0, (r.stdout or "") + (r.stderr or "")
+    if r.returncode != 0:
+        out = ((r.stdout or "") + (r.stderr or "")).strip()
+        return False, f"argv={argv} returncode={r.returncode}" + (f"\n{out}" if out else "")
+    return True, ""
 
 
 def _spawn_default(command, cwd):
