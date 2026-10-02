@@ -1,0 +1,3 @@
+project_name: "Legacy Config Project"
+default_status: "todo"
+columns: ["todo", "doing", "review", "done"]

@@ -2,6 +2,9 @@
 
 > 格式：`- YYYY-MM-DD [晋升 I-xxx@来源项目] 摘要`；非晋升的本体演进用 `[演进]` 标签，缺陷修复用 `[缺陷修复]` 并附复现方式。只增不改。
 
+- 2026-10-02 [演进] **Backlog 列配置键名核实与宽容回落改为响亮提示（W22）**。实测 Backlog.md 1.53.0 唯一列配置键名为 `statuses`（`columns` 为早期猜测，CLI 报错 `Unknown config key: columns` 且不予识别）；`check.py` 的 `load_config()` 改为专读真键 `statuses`，彻底废止 `columns` 伪键兼容；当配置文件存在但缺少有效 `statuses` 定义或误用未知键时，将原静默回落改为响亮提示（打印 `[配置]` 警告指引改用 `statuses`），再回落默认四列；修复自定义 `backlog_directory` 时根配置 `backlog.config.yml` 候选遗漏问题。`check.py` 815/820 行未抬上限。
+  复现（改前红改后绿）：`python -m unittest discover -s tests -p test_check_current.py -k TestBacklogConfig`（改前 4 失败，改后全绿）。
+
 - 2026-10-02 [缺陷修复] **`_strip_comment` 与 `_unquote` 成对引号转义截断修复（W21 产物兼容）**。Backlog.md 1.53.0 生成的单引号标量使用 YAML 标准 `''` 转义（如 `title: 'Fix user''s issue #123'`），`check.py` 原 `_strip_comment` 在首个单引号处截断导致静默读成 `'Fix user'`（违反 ADR-10 决定 1）；现改为单引号跳过 `''`、双引号跳过 `\"`，并在 `_unquote` 同步做 `''`→`'` 与 `\"`→`"` 反转义。`check.py` 807/820 行未抬上限。
   复现（改前红改后绿）：`python -m unittest discover -s tests -p "test_backlog_real_fixtures.py"`（改前 `AssertionError: 'Fix user' != "Fix user's issue #123"`，改后全绿）。
 

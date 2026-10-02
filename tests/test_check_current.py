@@ -189,6 +189,53 @@ class TestCardFormat(TempProjectCase):
         self.assertCheck(["--tasks"], 0, "[任务卡] 无任务卡")
 
 
+class TestBacklogConfig(TempProjectCase):
+    """W22：backlog 列配置键名核实与回落响亮提示（Backlog.md 1.53.0 真产物）。"""
+
+    def test_real_config_default_fixture(self):
+        src = H.REPO / "tests" / "fixtures" / "backlog-real-config-default.yml"
+        (self.proj / "backlog" / "config.yml").write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+        H.write_card(self.proj, "T-050", status="In Progress", assignee="[zcode-0926a]", allowed=["  - docs/"])
+        out = self.assertCheck(["--tasks"], 0, "[任务卡] 通过（1 张）")
+        self.assertNotIn("[配置]", out)
+
+    def test_real_config_custom_fixture(self):
+        src = H.REPO / "tests" / "fixtures" / "backlog-real-config-custom.yml"
+        (self.proj / "backlog" / "config.yml").write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+        H.write_card(self.proj, "T-050", status="doing", assignee="[zcode-0926a]", allowed=["  - docs/"])
+        out = self.assertCheck(["--tasks"], 0, "[任务卡] 通过（1 张）")
+        self.assertNotIn("[配置]", out)
+
+    def test_real_config_root_fixture_with_custom_backlog_dir(self):
+        src = H.REPO / "tests" / "fixtures" / "backlog-real-config-root.yml"
+        (self.proj / "backlog.config.yml").write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+        tasks_dir = self.proj / "mybacklog" / "tasks"
+        tasks_dir.mkdir(parents=True, exist_ok=True)
+        (tasks_dir / "T-052.md").write_text(
+            "---\nid: T-052\ntitle: Root config test\nstatus: In Progress\nassignee: [zcode-0926a]\n---\n\n## 边界\nallowed_paths:\n  - docs/\nforbidden_paths:\n  - AGENTS.md\n",
+            encoding="utf-8")
+        out = self.assertCheck(["--tasks"], 0, "[任务卡] 通过（1 张）")
+        self.assertNotIn("[配置]", out)
+
+    def test_unknown_key_columns_triggers_loud_warning(self):
+        src = H.REPO / "tests" / "fixtures" / "backlog-real-config-unknown-key.yml"
+        (self.proj / "backlog" / "config.yml").write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+        H.write_card(self.proj, "T-053", status="todo")
+        out = self.assertCheck(["--tasks"], 0, "[配置]", "使用了未知键 'columns'")
+        self.assertIn("已回落默认四列", out)
+
+    def test_missing_statuses_in_config_triggers_loud_warning(self):
+        (self.proj / "backlog" / "config.yml").write_text('project_name: "p"\n', encoding="utf-8")
+        H.write_card(self.proj, "T-054", status="todo")
+        out = self.assertCheck(["--tasks"], 0, "[配置]", "未找到有效的 'statuses' 列配置")
+        self.assertIn("已回落默认四列", out)
+
+    def test_unknown_columns_rejects_non_default_status_loudly(self):
+        (self.proj / "backlog" / "config.yml").write_text('columns: ["custom-status"]\n', encoding="utf-8")
+        H.write_card(self.proj, "T-055", status="custom-status", allowed=["  - docs/"])
+        out = self.assertCheck(["--tasks"], 1, "[配置]", "status 非法: 'custom-status'")
+
+
 class AgainstBaseline(TempProjectCase):
     """W20：CI 干净树没有暂存集，`--against <ref>` 必须复用同一套挂卡判定。"""
 

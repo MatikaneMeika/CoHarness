@@ -116,7 +116,7 @@
 
 **待验项（按计划不为此安装依赖，留给首次真实使用）**
 - Backlog.md 真实 frontmatter 与 check.py 解析的兼容 → **已验（2026-10-02，W21 / T-109 实操）**：在系统临时目录沙盒实装 `backlog.md@1.53.0` 真建卡实测，覆盖基础、引号、含 #、列表、留空、role 标签等多值边界，产物钉入 `tests/fixtures/backlog-real-*`；除单引号内 `''` 转义被 `_strip_comment` 截断暴露既有解析器缺陷外，扁平子集 100% 兼容；口径差已对齐（详见 `docs/audits/T-109-Backlog-frontmatter兼容实测.md` 与末尾补注）。
-- `backlog.config.yml` 列配置的精确键名（当前为宽容解析，解析失败回落默认四列，不影响执法）
+- `backlog.config.yml` 列配置的精确键名 → **已验（2026-10-02，W22 / T-110 实操）**：在系统临时目录沙盒实装 `backlog.md@1.53.0` 实测，Backlog CLI 真实键名唯一为 `statuses`（`columns` 为早期自研猜测，CLI 报 `Unknown config key` 且完全不认）；真实产物钉入 `tests/fixtures/backlog-real-config-*`；`check.py` 改读真键 `statuses` 并将宽容回落改为未知键/缺键响亮提示（`[配置]` 报警），红绿用例已覆盖（详见末尾补注）。
 - `specify init` 四集成（zcode/codex/qodercli/generic）实操、git-wt 双 worktree 并行实操 → **已验（2026-10-02，T-111 实操）**：在系统临时目录沙盒实装 `specify 1.0.13` 与 `wt v0.80.0` 全流程实测；四集成均不修改或注入第二规则源入 `AGENTS.md`，“唯一权威”宪法完好；git-wt 双 worktree 严格对照 `parallel-protocol.md` 四铁律（一卡一树、认领走 main、pull 时机、收工三查）全绿通过；Windows 锁与 dispatch.py 误用 `git-wt add` 等 6 项摩擦已登记 improvements 口径（详见 `docs/audits/T-111-specify四集成与git-wt双worktree实操.md` 与末尾补注）。
 
 ## 决策记录（ADR）
@@ -222,5 +222,15 @@ W5/W7/W9/W12 落地后，`wsc.py` 一度涨到 1137 行——**自己写的行�
 - **待验项④销账（`git-wt` 双 worktree 并行实操）**：2026-10-02 完成 T-111 实操。在系统临时目录搭建包含中心裸仓库与多 harness 的隔离演练环境，使用 `wt v0.80.0`（Windows 下命令 `git-wt`）进行双卡（T-001/T-002）两工作树完整生命周期推演。
   - **铁律对照结论**：一卡一树（`git-wt switch -c` 创建独立兄弟目录）、认领提交 main（先到先得原子推送）、pull 时机（开工前、认领前、push 前三处写死）、收工三查（I-004 三项检查全绿，0 孤儿树）全部 100% 严密闭环，`check.py` 成功拦截卡外改动与不存在路径。
   - **缺陷取证与处置**：暴露 `dispatch.py:207` 误调不存在的 `git-wt add` 子命令（CLI 真实为 `switch` 等），以及 Windows 下非 shell 集成终端不自动 cd 与跨树文件锁摩擦；均已立案登记入 `docs/audits/T-111-specify四集成与git-wt双worktree实操.md`，不违规越界改动骨架代码。
+
+## 2026-10-02 补注（T-110 待验项②实测与列配置键名核实）
+
+- **待验项②销账**：2026-10-02 完成 W22 / T-110 实操。在系统临时目录沙盒隔离安装 `backlog.md@1.53.0`，全流程运行 `backlog init`、`backlog config list`、`backlog config get <key>`、`backlog config set <key> <val>` 与不同配置位置（`backlog/config.yml` 与 `backlog.config.yml`）核实真实键名与结构。
+  - **真实键名结论**：Backlog CLI 唯一有效列配置键名为 `statuses`（在 `config.yml` 中默认形式为 `statuses: ["To Do", "In Progress", "Done"]`，亦兼容块列表 `- 项`）；`columns` 确系 CoHarness 早期自研推测键名，CLI 执行 `backlog config get columns` 明确报错 `Unknown config key: columns`，若在 `config.yml` 中配置 `columns`，Backlog CLI 完全不予识别并静默回落其内部三列默认值。
+  - **check.py 执法口径收紧**：此前 `load_config()` 使用 `cols = _yaml_list_under(t, "statuses") or _yaml_list_under(t, "columns")` 宽容回落，不仅容忍了 Backlog CLI 不支持的 `columns` 伪键，而且在配置错误时静默回落默认四列，掩盖配置缺陷。现重构 `check.py:load_config()`：
+    1. 唯一读取真键 `statuses`，彻底废止 `columns` 伪键解析；
+    2. 当配置文件存在但缺少有效 `statuses` 定义时，将原“静默宽容回落”改为响亮提示（打印 `[配置]` 警告，若含 `columns` 明确提示未知键并指引改为 `statuses`），再回落默认四列；
+    3. 修复自定义 `backlog_directory` 时根配置 `backlog.config.yml` 候选路径遗漏问题。
+  - **测试与夹具**：真实生成配置产物已脱敏钉入 `tests/fixtures/backlog-real-config-default.yml`、`tests/fixtures/backlog-real-config-custom.yml`、`tests/fixtures/backlog-real-config-root.yml` 及用于响亮提示红绿对照的 `tests/fixtures/backlog-real-config-unknown-key.yml`；`tests/test_check_current.py` 新增 `TestBacklogConfig` 6 条断言（改前 4 红、改后全绿）。
 
 

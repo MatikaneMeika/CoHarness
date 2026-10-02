@@ -227,14 +227,14 @@ def _yaml_list_under(text: str, key: str):
             continue
         if in_block:
             if re.match(r"^\s+-\s+\S", line):
-                items.append(re.sub(r"^\s+-\s+", "", line).strip())
+                items.append(re.sub(r"^\s+-\s+", "", line).strip().strip("\"'"))
             elif line.strip():
                 in_block = False
     return items
 
 
 def load_config():
-    """读 backlog 配置：卡片目录名与看板列。解析失败一律回落默认值。"""
+    """读 backlog 配置：卡片目录名与看板列。未配或配置错误时响亮提示并回落默认四列。"""
     dirname = DEFAULT_TASKS_DIRNAME
     t = _read_text(ROOT / "backlog.config.yml")
     if t:
@@ -242,13 +242,21 @@ def load_config():
         if d:
             dirname = d
     columns = list(DEFAULT_COLUMNS)
-    for cand in (ROOT / dirname / "config.yml", ROOT / f"{Path(dirname).name}.config.yml"):
+    cands = [ROOT / dirname / "config.yml"]
+    for p in (ROOT / "backlog.config.yml", ROOT / f"{Path(dirname).name}.config.yml"):
+        if p not in cands: cands.append(p)
+    for cand in cands:
         t = _read_text(cand)
         if t:
-            # 真 Backlog.md 1.53.0 用的键是 statuses；columns 是早期猜测的键名，留着兼容
-            cols = _yaml_list_under(t, "statuses") or _yaml_list_under(t, "columns")
+            # 真 Backlog.md 1.53.0 唯一认的列配置键名是 statuses；禁用旧猜测键 columns
+            cols = _yaml_list_under(t, "statuses")
             if cols:
                 columns = [c.strip().lower() for c in cols]
+            else:
+                hint = ("使用了未知键 'columns'（Backlog.md 真实键名为 'statuses'）"
+                        if _yaml_list_under(t, "columns")
+                        else "未找到有效的 'statuses' 列配置")
+                print(f"[配置] {_origin(cand)}: {hint}，已回落默认四列: {', '.join(DEFAULT_COLUMNS)}")
             break
     return ROOT / dirname / "tasks", columns
 
