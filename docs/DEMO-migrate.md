@@ -19,7 +19,7 @@ python docs/demo/migrate_demo.py --keep   # 保留临时项目目录，自己进
 - `scripts/check.py` 是 I-001 之前那版，不认识自授权（认领与登记会被自己锁死）
 - 项目卡里没有 `| 骨架 schema | N |` 声明行
 
-## 实跑输出（2026-10-01，骨架库 commit 见输出内的 skeleton_commit；临时目录与时间戳已隐去）
+## 实跑输出（2026-10-02，骨架库 commit 见输出内的 skeleton_commit；临时目录、时间戳与本机路径已隐去）
 
 ```text
 === v1 演示项目：C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project
@@ -27,15 +27,16 @@ python docs/demo/migrate_demo.py --keep   # 保留临时项目目录，自己进
 ### 第 1 步：记一次装机指纹（schema 由骨架库当前版本决定）
 
 $ python maintain.py lock C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project
+[lock] 注意：项目声明的 schema=1，落后于本体 5；指纹按真实值 1 记录。要升级请跑 maintain.py migrate（lock 本身不升级）
 [lock] 已写 C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project\.agent\skeleton.lock（这份指纹可以提交进项目仓库：不含本机路径）
   skeleton = 03-multi-harness-project
   skeleton_commit = <骨架库 HEAD>
-  schema = 4
-  check_sha256 = f0e3d145dc3d
+  schema = 1
+  check_sha256 = 7e96191bdec7
 ### 第 2 步：把指纹改回 schema=1，模拟「这个项目还停在老版本」
 
 $ python maintain.py migrate C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project
-== migrate C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project（当前 schema=1←指纹，本体 schema=4）==
+== migrate C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project（当前 schema=1←指纹，本体 schema=5）==
 
 v1 -> v2: 本地记账进 .gitignore + 库路径代入绝对值 + 认领首选 wsc claim + 补降级行为节 + 删常驻卡 + 看板列改四列 statuses + 刷新缺自授权的旧 check.py
   - 待追加：.gitignore 里补 '.agent/telemetry.jsonl'
@@ -52,13 +53,22 @@ v2 -> v3: 适配指针升级为各工具原生目录格式（.cursor/rules、.wi
 
 v3 -> v4: scripts/check.py 三方合并到当前骨架（审阅意见 / 结果行 / 可观察验收 / 所有权执法），冲突拒绝覆盖
   - 已到位：scripts/check.py 已是当前骨架版本
+
+v4 -> v5: 复制远端门禁 .github/workflows/coharness.yml + AGENTS.md 三方合并补「远端门禁」小节，冲突拒绝覆盖
+  - 已到位：.github/workflows/coharness.yml 已是当前骨架版本
+  - 待合并：AGENTS.md 按基线 <骨架库 HEAD> 三方合并补「远端门禁」小节
+  - 待改：AGENTS.md 项目卡声明 schema=5
+
 （dry-run：什么都没写。确认无误再加 --yes，落盘前会自动建备份分支）
 （已核对：dry-run 前后 git status 一致，指纹未动）
 
 ### 第 3 步：确认后落盘——先自动建备份分支
 
 $ python maintain.py migrate C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project --yes
-== migrate C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project（当前 schema=1←指纹，本体 schema=4）==
+== migrate C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project（当前 schema=1←指纹，本体 schema=5）==
+
+（预检：在临时副本上按同样步骤先跑一遍，输出与上面的 dry-run 同形——待追加 / 待改写 / 待迁移 / 待合并 / 待改，冲突就停在这里不落盘）
+
 [migrate] 已建备份分支 coh-backup-<时间戳>（回到旧状态：git reset --hard coh-backup-<时间戳>）
 
 v1 -> v2: 本地记账进 .gitignore + 库路径代入绝对值 + 认领首选 wsc claim + 补降级行为节 + 删常驻卡 + 看板列改四列 statuses + 刷新缺自授权的旧 check.py
@@ -75,13 +85,18 @@ v2 -> v3: 适配指针升级为各工具原生目录格式（.cursor/rules、.wi
 
 v3 -> v4: scripts/check.py 三方合并到当前骨架（审阅意见 / 结果行 / 可观察验收 / 所有权执法），冲突拒绝覆盖
   - 已到位：scripts/check.py 已是当前骨架版本
+
+v4 -> v5: 复制远端门禁 .github/workflows/coharness.yml + AGENTS.md 三方合并补「远端门禁」小节，冲突拒绝覆盖
+  - 已到位：.github/workflows/coharness.yml 已是当前骨架版本
+  - 已合并：AGENTS.md 按基线 <骨架库 HEAD> 三方合并补「远端门禁」小节
+  - 已改：AGENTS.md 项目卡声明 schema=5
 [lock] 已写 C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project\.agent\skeleton.lock（这份指纹可以提交进项目仓库：不含本机路径）
   skeleton = 03-multi-harness-project
   skeleton_commit = <骨架库 HEAD>
-  schema = 4
-  check_sha256 = fc7c50b48170
+  schema = 5
+  check_sha256 = 051871f8927d
 
-[migrate] 已落盘并把 schema 记到 4；改动都在备份分支 coh-backup-<时间戳> 的对照下，回滚：git reset --hard coh-backup-<时间戳>
+[migrate] 已落盘并把 schema 记到 5；改动都在备份分支 coh-backup-<时间戳> 的对照下，回滚：git reset --hard coh-backup-<时间戳>
 
 ### 第 4 步：核对结果
 
@@ -92,6 +107,7 @@ v3 -> v4: scripts/check.py 三方合并到当前骨架（审阅意见 / 结果�
   [OK] 文档里的库路径已代入绝对路径
   [OK] 认领句已升级为 wsc claim
   [OK] 指纹记到当前 schema
+  [OK] AGENTS.md 已声明当前 schema
   [OK] 常驻规则卡已清掉
   [OK] 看板列已改成本骨架四列
   [OK] 旧版 check.py 已刷新为含自授权的那版
@@ -109,7 +125,7 @@ v3 -> v4: scripts/check.py 三方合并到当前骨架（审阅意见 / 结果�
  M scripts/check.py
 ?? .cursor/
 
-下一步就是常规提交：git add -A && git commit -m 'migrate v1 -> v4'
+下一步就是常规提交：git add -A && git commit -m 'migrate v1 -> v5'
 ```
 
 ## 这几条设计是要害
@@ -119,10 +135,13 @@ v3 -> v4: scripts/check.py 三方合并到当前骨架（审阅意见 / 结果�
 - **非 git 仓库拒绝落盘**：没有备份手段就不写（`tests/test_maintain.py::test_migrate_refuses_yes_without_a_repo`）
 - **schema 有两个来源**：优先读 `.agent/skeleton.lock`，没有就读项目卡里的 `| 骨架 schema | N |` 声明，
   都没有才按 v1 处理（`migrate` 输出里的 `←指纹` / `←AGENTS.md 声明` 会说是哪个）
+- **收尾把 schema 声明推到位**：migrate 成功后 `cmd_lock` 按项目卡声明重写指纹；声明不跟着推进，
+  lock 就退回旧值、项目永远显得落后。所以迁移收尾会同步改写 `| 骨架 schema | N |` 行（缺行则按项目卡表补一行）
 - **只补真需要的**：没装过适配指针的项目不会被塞进五个新文件；`check.py` 只在"缺自授权"这一条明确旧版特征时刷新，
   其它差异交给 `audit` 报漂移，不静默覆盖
 - **幂等**：升到当前 schema 后再跑一次，答案是"已是最新 schema，无升级步骤"
-- **步骤是本轮真实改动**：v1→v2 七步、v2→v3 一步与 v3→v4 的 `check.py` 三方合并都对应 CHANGELOG 里已有的行，不是为演示编的
+- **步骤是本轮真实改动**：v1→v2 七步、v2→v3 一步、v3→v4 的 `check.py` 三方合并与 v4→v5 的远端门禁复制/合并
+  都对应 CHANGELOG 里已有的行，不是为演示编的
 
-对应的自动化证据：`tests/test_maintain.py` 30 条（含 dry-run 不写盘、备份分支、幂等、拒绝无仓库落盘、
+对应的自动化证据：`tests/test_maintain.py` 34 条（含 dry-run 不写盘、备份分支、幂等、拒绝无仓库落盘、
 v2→v3 不凭空生成、指纹不含本机路径、七项 v1 遗留各自被处理、schema 可从项目卡读回）。

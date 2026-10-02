@@ -7,7 +7,7 @@
     python docs/demo/migrate_demo.py --keep     # 跑完保留临时项目目录，自己进去看
 
 全程零网络：只用本地文件、本地 git，以及仓库里的 maintain.py。
-输出与 docs/DEMO-migrate.md 里贴的一致（那份是 2026-09-28 实跑记录）。
+输出与 docs/DEMO-migrate.md 里贴的一致（那份是 2026-10-02 实跑记录）。
 """
 import argparse
 import re
@@ -31,6 +31,12 @@ def maintain(*args, cwd=None):
     print(f"$ python maintain.py {' '.join(args)}")
     print((r.stdout or "") + (r.stderr or ""), end="" if not (r.stdout or "").endswith("\n") else "")
     return r
+
+
+def current_schema():
+    r = sh([sys.executable, MAINTAIN, "schema"], REPO)
+    m = re.search(r"骨架 schema 版本：(\d+)", r.stdout or "")
+    return int(m.group(1))
 
 
 def build_v1(root: Path) -> Path:
@@ -109,7 +115,9 @@ def main():
             "AGENTS.md 已有降级行为节": "## 降级行为" in (proj / "AGENTS.md").read_text(encoding="utf-8"),
             "文档里的库路径已代入绝对路径": "<骨架库>" not in (proj / "AGENTS.md").read_text(encoding="utf-8"),
             "认领句已升级为 wsc claim": "wsc.py claim" in (proj / "AGENTS.md").read_text(encoding="utf-8"),
-            "指纹记到当前 schema": '"schema": 4' in lock.read_text(encoding="utf-8"),
+            "指纹记到当前 schema": f'"schema": {current_schema()}' in lock.read_text(encoding="utf-8"),
+            "AGENTS.md 已声明当前 schema": f"| 骨架 schema | {current_schema()} |"
+                                    in (proj / "AGENTS.md").read_text(encoding="utf-8"),
             "常驻规则卡已清掉": not (proj / "backlog" / "tasks" / "T-000-board.md").exists(),
             "看板列已改成本骨架四列": "statuses: [todo, doing, review, done]"
                                  in (proj / "backlog" / "config.yml").read_text(encoding="utf-8"),
@@ -124,7 +132,7 @@ def main():
         print(f"  回滚办法：git reset --hard {branches.split()[-1] if branches else '(没建上)'}")
         status = sh(["git", "status", "--short"], proj).stdout
         print(f"\n升级带来的未提交改动：\n{status}")
-        print("下一步就是常规提交：git add -A && git commit -m 'migrate v1 -> v4'")
+        print(f"下一步就是常规提交：git add -A && git commit -m 'migrate v1 -> v{current_schema()}'")
     finally:
         if args.keep:
             print(f"\n（已保留演示项目：{root}）")

@@ -406,6 +406,32 @@ def up_remote_gate(project: Path, apply_changes):
     return notes
 
 
+def up_declare_schema(project: Path, apply_changes):
+    """迁移收尾：把 AGENTS.md 项目卡的「骨架 schema」行改成本体当前版本。
+
+    migrate 成功后 cmd_lock 会按这份声明重写指纹；声明不跟着推进，lock 就退回旧值，
+    项目永远显得落后（docs/demo 实测踩过）。声明行缺失时按项目卡表补一行。
+    """
+    f = project / "AGENTS.md"
+    if not f.exists():
+        return ["跳过：没有 AGENTS.md，写不进 schema 声明"]
+    text = f.read_text(encoding="utf-8")
+    row = f"| 骨架 schema | {SCHEMA} |"
+    pat = r"(?m)^\|[ \t]*骨架 schema[ \t]*\|[ \t]*\d+[ \t]*\|.*$"
+    if re.search(pat, text):
+        new = re.sub(pat, row, text, count=1)
+    else:
+        new = re.sub(r"(?m)^\|[ \t]*项[ \t]*\|[ \t]*内容[ \t]*\|\n\|---\|---\|\n",
+                     lambda m: m.group(0) + row + "\n", text, count=1)
+        if new == text:
+            return ["跳过：AGENTS.md 没有项目卡表，写不进 schema 声明"]
+    if new == text:
+        return [f"已到位：AGENTS.md 项目卡声明 schema={SCHEMA}"]
+    if apply_changes:
+        f.write_text(new, encoding="utf-8", newline="\n")
+    return [f"{'已改' if apply_changes else '待改'}：AGENTS.md 项目卡声明 schema={SCHEMA}"]
+
+
 UPGRADES = {
     1: ("本地记账进 .gitignore + 库路径代入绝对值 + 认领首选 wsc claim + 补降级行为节 + "
         "删常驻卡 + 看板列改四列 statuses + 刷新缺自授权的旧 check.py",
@@ -428,7 +454,9 @@ def _pending_steps(schema):
 
 _PENDING_PREFIX = (("已追加", "待追加"), ("已改写", "待改写"), ("已改为", "待改"),
                   ("已补", "待补"), ("已迁移", "待迁移"), ("已删除", "待删除"),
-                  ("已刷新", "待刷新"), ("已合并", "待合并"), ("已复制", "待复制"))
+                  ("已刷新", "待刷新"), ("已合并", "待合并"), ("已复制", "待复制"),
+                  # 短前缀放最后："已改为"/"已改写"要先命中，别被 "已改" 截胡
+                  ("已改", "待改"))
 
 
 def _pending_line(line):
@@ -456,7 +484,10 @@ def _preflight_migration(project, steps):
     with tempfile.TemporaryDirectory(prefix="coh-migrate-") as td:
         shadow = Path(td) / "project"
         shutil.copytree(project, shadow, ignore=shutil.ignore_patterns(".git"))
-        return _run_migration_steps(shadow, steps, True, pending=True)
+        conflicts = _run_migration_steps(shadow, steps, True, pending=True)
+        for raw in up_declare_schema(shadow, True):
+            print(f"  - {_pending_line(raw)}")
+        return conflicts
 
 
 
@@ -487,6 +518,8 @@ def cmd_migrate(args):
         conflicts = _run_migration_steps(project, steps, True)
         if conflicts:
             sys.exit("[migrate] 落盘时出现冲突，schema 未推进；请人工处理后重跑")
+        for raw in up_declare_schema(project, True):
+            print(f"  - {raw}")
         cmd_lock(argparse.Namespace(project=str(project)))
         print(f"\n[migrate] 已落盘并把 schema 记到 {SCHEMA}；改动都在备份分支 {backup} 的对照下，"
               f"回滚：git reset --hard {backup}")

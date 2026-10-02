@@ -320,6 +320,45 @@ class Maintain(unittest.TestCase):
         self.assertIn("[漂移]", out)
         self.assertEqual(check.read_text(encoding="utf-8"), before, "sync 不自动改项目文件")
 
+    def test_sync_has_no_drift_hint_when_project_is_current(self):
+        """指纹 schema 与本体一致时 sync 不许误报漂移（旧实现硬编码 4，对 schema 5 项目误报）。"""
+        proj = self.fresh("03")
+        self.assertEqual(maintain("lock", str(proj)).returncode, 0)
+        out = H.out(H.wsc("sync", str(proj)))
+        self.assertNotIn("[漂移]", out)
+
+    def test_sync_drift_hint_uses_precise_capability_marker(self):
+        """漂移检测与 maintain 同源：缺 has_unchecked 的 check.py 必须点名它（宽词“审阅意见”会漏报）。"""
+        proj = self.fresh("03")
+        self.assertEqual(maintain("lock", str(proj)).returncode, 0)
+        check = proj / "scripts" / "check.py"
+        check.write_text(check.read_text(encoding="utf-8").replace("has_unchecked", "old_marker"),
+                         encoding="utf-8", newline="\n")
+        out = H.out(H.wsc("sync", str(proj)))
+        self.assertIn("[漂移]", out)
+        self.assertIn("has_unchecked", out)
+
+    def test_migrate_declares_current_schema_when_row_missing(self):
+        """migrate 收尾要把 AGENTS.md 的 schema 声明推到本体版本，否则 lock 退回旧值、项目永远显得落后。"""
+        proj = self.fresh("03", downgrade=True)
+        agents = proj / "AGENTS.md"
+        text = re.sub(r"(?m)^\|\s*骨架 schema\s*\|\s*\d+\s*\|\n", "",
+                     agents.read_text(encoding="utf-8"))
+        agents.write_text(text, encoding="utf-8", newline="\n")
+        self.assertEqual(maintain("lock", str(proj)).returncode, 0)
+        self.downgrade_schema(self.proj_lock(proj), 1)
+        r = maintain("migrate", str(proj), "--yes")
+        self.assertEqual(r.returncode, 0, msg=H.out(r))
+        self.assertIn("| 骨架 schema | 5 |", agents.read_text(encoding="utf-8"))
+        self.assertEqual(json.loads(self.proj_lock(proj).read_text(encoding="utf-8"))["schema"], 5)
+
+    def test_migrate_demo_runs_green(self):
+        """docs/demo/migrate_demo.py 是公开演示，必须真跑通（本轮它曾因 schema 硬编码 4 崩）。"""
+        demo = H.REPO / "docs" / "demo" / "migrate_demo.py"
+        r = H.run([sys.executable, str(demo)], cwd=H.REPO, timeout=300)
+        self.assertEqual(r.returncode, 0, msg=H.out(r))
+        self.assertNotIn("[FAIL]", H.out(r))
+
     def test_migrate_refuses_yes_without_a_repo(self):
         proj = H.make_project(self.tmp)
         r = maintain("migrate", str(proj), "--yes")

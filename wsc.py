@@ -599,10 +599,10 @@ def incoming_report(project: Path):
 
 
 def _drift_notice(project: Path):
-    f = project / "scripts" / "check.py"; text = f.read_text(encoding="utf-8", errors="replace") if f.exists() else ""
-    missing = [n for n in ("审阅意见", "结果:", "可观察", "ownership_rows", "_role_declared") if n not in text]
-    lock = project / ".agent" / "skeleton.lock"; stale = lock.exists() and '"schema": 4' not in lock.read_text(encoding="utf-8", errors="replace")
-    return ([f"[漂移] 骨架 schema 落后：跑 maintain.py audit/migrate，sync 不自动改项目文件"] if stale else []) + ([f"[漂移] check.py 缺规则能力：{', '.join(missing)}：跑 maintain.py audit/migrate，sync 不自动改项目文件"] if missing else [])
+    """sync 的漂移提示：复用维护面 maintain.drift_notice，保持口径同源；单文件模式没有维护面就跳过。"""
+    import importlib.util
+    name = f"{__package__}.maintain" if __package__ else "maintain"
+    return importlib.import_module(name).drift_notice(project) if importlib.util.find_spec(name) else []
 
 def cmd_sync(args):
     project = Path(args.project).resolve() if args.project else Path.cwd()
