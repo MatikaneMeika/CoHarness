@@ -367,6 +367,53 @@ class Launch(Base):
         self.assertIn("status: doing", text, "认领已落盘，失败不得自动回滚")
         self.assertEqual(self.calls, [])
 
+    def worktree_paths(self):
+        r = H.git(self.proj, "worktree", "list", "--porcelain")
+        self.assertEqual(r.returncode, 0, H.out(r))
+        return sorted(str(Path(line[len("worktree "):]).resolve()) for line in r.stdout.splitlines()
+                      if line.startswith("worktree "))
+
+    def test_worktree_failure_reports_stderr_and_leaves_no_half_tree(self):
+        """HANDOFF §1.4-F：建树失败要诚实报错且无半套登记。"""
+        p = D.plan(self.proj, card="T-002")
+        before = self.worktree_paths()
+        sentinel = "fatal: stderr sentinel from git worktree"
+        with unittest.mock.patch.object(D, "_worktree", return_value=(False, sentinel)):
+            with self.assertRaises(SystemExit) as ctx:
+                D.launch(self.proj, p, spawn=self.spawn)
+        msg = str(ctx.exception)
+        self.assertIn(sentinel, msg, "stderr 不能被吞掉")
+        # 已知差异：dispatch.py 的 detail 只拼 stdout+stderr，未含 argv/returncode。
+        # 这属独立缺陷修复卡的范围，本测试先钉住真实行为与 stderr 透传。
+        text = (self.proj / "backlog" / "tasks" / "T-002.md").read_text(encoding="utf-8")
+        self.assertIn("status: doing", text, "认领已落盘，建树失败也不得回滚")
+        self.assertEqual(self.calls, [], "建树失败不许继续 spawn")
+        self.assertEqual(self.worktree_paths(), before, "失败后不许留下半套 worktree 登记")
+
+    def test_claim_success_then_actual_worktree_add_failure_leaves_card_doing_handoff_1_4_c(self):
+        """HANDOFF §1.4-C：认领成功后建树失败，卡停在 doing；不回滚、不重试、不改派。"""
+        p = D.plan(self.proj, card="T-002")
+        H.write_card(self.proj, "T-003", status="todo", assignee="[]",
+                     allowed=("  - project/docs/",))
+        other = (self.proj / "backlog" / "tasks" / "T-003.md").read_text(encoding="utf-8")
+        H.git(self.proj, "add", "-A")
+        H.git(self.proj, "commit", "-q", "-m", "add unrelated card")
+        before = self.worktree_paths()
+        blocker = self.tmp / "wt-blocker"
+        blocker.write_text("我是文件，不是目录", encoding="utf-8")
+        bad_plan = dict(p)
+        bad_plan["worktree"] = blocker / "T-002"
+        with self.assertRaises(SystemExit) as ctx:
+            D.launch(self.proj, bad_plan, spawn=self.spawn)
+        self.assertIn("建工作树失败", str(ctx.exception))
+        text = (self.proj / "backlog" / "tasks" / "T-002.md").read_text(encoding="utf-8")
+        self.assertIn("status: doing", text, "认领已落盘，worktree 建失败也不得回滚")
+        self.assertNotIn("status: todo", text)
+        self.assertEqual(self.calls, [], "worktree 建失败不许继续 spawn")
+        self.assertEqual(self.worktree_paths(), before, "失败后不许留下半套 worktree 登记")
+        self.assertEqual((self.proj / "backlog" / "tasks" / "T-003.md").read_text(encoding="utf-8"),
+                         other, "失败不得动别的卡")
+
     def test_existing_worktree_from_another_project_is_rejected(self):
         p = D.plan(self.proj)
         other = self.tmp / "other-project"
