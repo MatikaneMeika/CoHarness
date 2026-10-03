@@ -129,7 +129,8 @@ class SkeletonIntegrity(unittest.TestCase):
                           f"{sk} 的调度权威行没带库路径，换一个 harness 打开项目读不到 ROUTER")
 
     def test_remote_gate_workflow_ships_with_03_only(self):
-        """远端门禁（W19 / RFC-0004）：`--no-verify` 与裸克隆两条绕过路径要在远端堵上。
+        """远端门禁（W19 / RFC-0004）：`--no-verify` 与裸克隆两条绕过路径要在远端被看见；
+        硬门禁是装机选项（W25），默认检测线只可见不拦截。
 
         workflow 只随 03 骨架分发（03 才是多 harness 执法场景）；AGENTS.md 的远端门禁节
         必须声明这个文件；口径与 pre-push 同源（--names --tasks），CI 一律 --no-track。
@@ -170,10 +171,11 @@ class SkeletonIntegrity(unittest.TestCase):
         first = wf.splitlines()[0]
         self.assertIn("检测线", first, "workflow 首行没写检测线")
         self.assertIn("硬门禁", first, "workflow 首行没写硬门禁")
+        self.assertIn("bypass actors", first, "workflow 首行没给硬门禁的绕过例外")
         self.assertIn("merge_group:", wf, "workflow 首行附近应有 merge_group")
         agents = (H.REPO / "03-multi-harness-project" / "AGENTS.md").read_text(encoding="utf-8")
         for token in ("检测线", "硬门禁", "可见信号", "required check",
-                      "coharness-gate / check", "认领直推"):
+                      "coharness-gate / check", "认领直推", "bypass actors"):
             self.assertIn(token, agents, f"03 AGENTS.md 远端门禁小节缺 {token}")
         self.assertNotIn("逃不过远端", agents, "未限定硬门禁的'逃不过远端'是过度承诺")
         rfc = (H.REPO / "docs" / "rfcs" / "RFC-0004-远端门禁.md").read_text(encoding="utf-8")
@@ -184,6 +186,7 @@ class SkeletonIntegrity(unittest.TestCase):
         for rel, tokens in (("README.md", ("检测线", "可见信号")),
                             ("README.en.md", ("detection line", "visible signal"))):
             text = (H.REPO / rel).read_text(encoding="utf-8")
+            tokens = tokens + ("coharness-gate / check", "required check")
             for token in tokens:
                 self.assertIn(token, text, f"{rel} 缺两级口径关键词 {token}")
 

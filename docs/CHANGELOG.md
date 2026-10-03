@@ -2,6 +2,8 @@
 
 > 格式：`- YYYY-MM-DD [晋升 I-xxx@来源项目] 摘要`；非晋升的本体演进用 `[演进]` 标签，缺陷修复用 `[缺陷修复]` 并附复现方式。只增不改。
 
+- 2026-10-03 [演进] **远端门禁口径硬化：bypass actors 例外与 README 冲突指引（T-124 追补）**。五载体的“逃不过远端”补上限定：`--no-verify` 逃得过本地，**未配 bypass actors 时**才逃不过启用硬门禁后的远端；workflow 首行改为“默认是检测线，不是门禁”，AGENTS 小节标题显式写“CI 检测线 / 硬门禁”；中文 README 把“装机成 required check”改为“在仓库 rulesets 里绑成 required check”，中英 README 都补“硬门禁与认领直推冲突、默认不推荐”指引；RFC-0004 问题节加 W25 导读注记。测试钉子同步断言 bypass actors 与 README 的 `coharness-gate / check` / required check。全量 416 条绿。本轮不 push、不 merge、不 bump、不打 tag、不发布。
+
 - 2026-10-03 [演进] **远端门禁两级口径与硬门禁装机文档（W25/T-124）**。把“本地钩子第一道、CI 第二道 / 逃不过远端”改成两级：检测线（骨架默认，CI 红=可见信号，未配 required check 时不拦 push/合并）/ 硬门禁（装机选项，required check 绑 `coharness-gate / check`）。五个载体一口径：workflow 首行、03 `AGENTS.md`「远端门禁」小节、`maintain.py` `up_remote_gate` 注入的小节（实际从骨架 `AGENTS.md` `_section` 读取，结构同源，非硬编码）、RFC-0004、双语 README。RFC-0004 追记修正版 rulesets JSON（`conditions.ref_name` 为 `{"include": [...], "exclude": []}` 对象，非裸数组）、context 耦合、F-A 三条出路（bypass actors / 协议改走 PR / 只对 PR 合流分支开）与“检测线是与认领直推协议唯一兼容形态”的默认口径；ADR-12 追记两条。新增五载体漂移钉子，全量 416 条绿。本轮不 push、不 merge、不 bump、不打 tag、不发布。
 
 - 2026-10-03 [演进] **远端门禁 workflow 补强：merge_group 预置与最小权限（W24/T-123）**。03 骨架 workflow 增加 `merge_group`（`types: [checks_requested]`、`branches: [main]`）——启用 required check + merge queue 的仓库缺此触发器会让 check 永不报告、PR 卡死；基线表达式加第三支 `github.event.merge_group.base_sha`（该事件无 `event.before`）；顶层 `permissions: contents: read`；actions 改版本注释半钉（`@v4  # v4.x.y`、`@v5  # v5.x.y`，SHA 全钉的腐烂成本高于收益，权衡记 RFC-0004）。schema 不升（5 未发布，v1.2.3 用户走 `up_remote_gate` 自然拿到新文件）。T-108 本地等价复跑原四场景 + 注入 merge_group 可解析/不可解析两场景；PoseWise_Health 只读核对为 schema 3、无 workflow，本轮不改它。本轮不 push、不 merge、不 bump、不打 tag、不发布。

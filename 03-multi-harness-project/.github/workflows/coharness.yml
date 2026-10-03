@@ -1,4 +1,4 @@
-# 远端门禁（第二道门）：本地钩子第一道；CI 检测线默认只可见不拦截，启用 required check 才是硬门禁；--no-verify 逃得过本地，逃不过启用硬门禁后的远端。
+# 远端门禁：默认是检测线，不是门禁；本地钩子第一道，CI 检测线第二道只可见不拦截；启用 required check 才是硬门禁；--no-verify 逃得过本地，未配 bypass actors 时逃不过启用硬门禁后的远端。
 name: coharness-gate
 on:
   push:
