@@ -39,6 +39,16 @@ class CleanupRace(unittest.TestCase):
         self.assertEqual(H.git(proj, "config", "gc.auto").stdout.strip(), "0")
         self.assertEqual(H.git(proj, "config", "maintenance.auto").stdout.strip(), "false")
 
+    def test_git_helper_disables_maintenance_even_without_repo_config(self):
+        """裸 git init 的仓库（如 test_panel 的临时项目）没有仓库级 gc.auto=0，
+        git() 必须每次带 -c 把后台维护挡住：否则 commit 触发的 auto-gc 会在 teardown 时
+        跟 rmtree 抢 `.git/objects`（2026-10-03 ubuntu/macOS 腿真红：Errno 39 目录非空）。"""
+        d = H.tmp_dir()
+        self.addCleanup(H.rmtree, d)
+        H.git(d, "init", "-q", "--initial-branch=main")
+        self.assertEqual(H.git(d, "config", "gc.auto").stdout.strip(), "0")
+        self.assertEqual(H.git(d, "config", "maintenance.auto").stdout.strip(), "false")
+
 
 if __name__ == "__main__":
     unittest.main()

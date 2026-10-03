@@ -55,7 +55,10 @@ forbidden_paths:
 
 
 def git(proj, *args):
-    return H.run(["git", *H.GIT_ID[:4], *args], cwd=proj)
+    # 委托 H.git：它带 GIT_NOMAINTAIN（-c gc.auto=0 -c maintenance.auto=false）。
+    # 这里的临时项目是裸 git init，没有 H.git_repo 的仓库级配置，只能靠 -c 挡 auto-gc，
+    # 否则 commit 触发的后台维护会在 teardown 时跟 rmtree 抢 .git/objects（2026-10-03 CI 真红）。
+    return H.git(proj, *args)
 
 
 def make_card(proj, cid, *, status="doing", assignee="[wt-a]", allowed=("  - docs/",),

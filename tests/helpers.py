@@ -21,6 +21,12 @@ HOOK_SRC = SKELETON / "scripts" / "hooks" / "pre-commit"
 GIT_ID = ["-c", "user.name=coharness-test", "-c", "user.email=coharness-test@invalid",
           "-c", "commit.gpgsign=false", "-c", "core.autocrlf=false"]
 
+# 关掉 git 后台维护（gc.auto / maintenance.auto）：临时仓库活几分钟就删，维护进程只会
+# 在 teardown 时跟 rmtree 抢 `.git/objects`。git_repo 已写成仓库级配置，但裸 git init 的
+# 仓库（如 test_panel 的临时项目）没有它——2026-10-03 在 ubuntu/macOS 腿上真红过：
+# `OSError: [Errno 39] Directory not empty: '.git/objects'`。这里用 -c 覆盖每一次 git() 调用。
+GIT_NOMAINTAIN = ["-c", "gc.auto=0", "-c", "maintenance.auto=false"]
+
 # 本机登记表也不能落到用户家目录：测试里的 wsc init 一律写到这个临时 HOME
 COH_HOME = Path(tempfile.mkdtemp(prefix="coh-home-"))
 atexit.register(shutil.rmtree, str(COH_HOME), True)
@@ -61,7 +67,7 @@ def native_cli(*args, cwd=None):
 
 
 def git(cwd, *args):
-    return run(["git", *GIT_ID, *args], cwd=cwd)
+    return run(["git", *GIT_ID, *GIT_NOMAINTAIN, *args], cwd=cwd)
 
 
 def out(res):
