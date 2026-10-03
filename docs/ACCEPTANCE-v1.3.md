@@ -34,7 +34,7 @@
 | W20 `--against <ref>` 基线 diff 执法 | 干净树下 diff 改动挂卡远端执法，可见降级 | **已闭（真机）** | 提交 `61e655a`（`check.py` 行数预算 760→820 独立 commit 走先例程序）+ 提交 `93f7c98`（`check.py` 新增 `--against <ref>`，判定核心复用，基线缺失响亮失败；03 workflow 升级 PR 用 `origin/main`、push 用 `event.before`，全零/不可达可见降级发 notice；`tests/test_check_current.py::AgainstBaseline` 三类用例：卡外改动被拦、挂卡放行、基线缺失响亮失败；既有用例零改动全绿；`check.py` 现 815/820 行 ≤820）+ 提交 `e1c92b2`（`docs/audits/T-108-远端门禁本地等价验证.md` 本地 bash 等价演练，证明分支选路与真实 check.py 拦截行为成立）。**真机已跑**：`docs/audits/T-108-远端门禁真机验证.md`，临时仓 `MatikaneMeika/coharness-gate-e2e` 六场景——首次推降级绿 `37113729185`、卡外改动 push 红 `37113765618`、合法 push 绿 `37113844835`、强推降级不硬红 `37113895710`、非法看板 push 红 `37113956156`、卡外改动 PR 红 `37114008208`。 |
 
 ### 未闭项与阻塞
-- **W19 / W20 真机 run：已闭**（用户批准推送后执行）。临时仓 `MatikaneMeika/coharness-gate-e2e` 六场景真机：红 B/E/F、绿 A/C、强推降级 D；run 链接与日志行见 `docs/audits/T-108-远端门禁真机验证.md`。**rulesets 硬门禁可选项也已补测**（同文件「硬门禁」节）：直推被 GH013 拒、合法 PR `CLEAN`、卡外/非法看板 PR `BLOCKED`；并修正 RFC-0004 原稿的 context 字面量（`check`，非 `coharness-gate / check`）。仅剩 merge queue 为可选欠账。
+- **W19 / W20 真机 run：已闭**（用户批准推送后执行）。临时仓 `MatikaneMeika/coharness-gate-e2e` 六场景真机：红 B/E/F、绿 A/C、强推降级 D；run 链接与日志行见 `docs/audits/T-108-远端门禁真机验证.md`。**rulesets 硬门禁可选项也已补测**（同文件「硬门禁」节）：直推被 GH013 拒、合法 PR `CLEAN`、卡外/非法看板 PR `BLOCKED`；并修正 RFC-0004 原稿的 context 字面量（`check`，非 `coharness-gate / check`）。merge queue 为可选欠账并附理由（已收口）：临时仓为 user-owned，rulesets 的 `merge_queue` 规则被 API 422 拒（同请求换 `non_fast_forward` 成功，证明请求形状无误），本环境不可验；`merge_group` 触发器已由本地等价验证覆盖。
 
 ## §3 阶段三 W21–W23：集成验证清欠
 
