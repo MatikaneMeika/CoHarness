@@ -52,7 +52,7 @@ wsc init 03 ./my-project
 
 依赖装不上也能开工，工具链有回落路径：`wsc.py doctor` 会告诉你缺了什么、怎么装、缺着时降级成什么。
 
-03 是最完整的一套，我们自己叫它**合作区**：谁能动哪些路径有所有权表；几个工具并行时认领动作提交到 main 串行化，一个工具一个 worktree；提交前 pre-commit 会跑 check.py，越权的改动直接被拦；03 骨架随带 `.github/workflows/coharness.yml` 远端门禁（本地钩子第一道、CI 第二道，详见 [RFC-0004-远端门禁](docs/rfcs/RFC-0004-远端门禁.md)）。其余几套的纪律大多来自真实教训——文件名带 `-v2`/`-final` 会越堆越多，改稿不回源迟早分叉，实验数据手改过一个数字整份报告就不可信了。
+03 是最完整的一套，我们自己叫它**合作区**：谁能动哪些路径有所有权表；几个工具并行时认领动作提交到 main 串行化，一个工具一个 worktree；提交前 pre-commit 会跑 check.py，越权的改动直接被拦；03 骨架随带 `.github/workflows/coharness.yml` 远端门禁：本地钩子第一道，CI 检测线第二道——未配 required check 时红是可见信号不是拦截，装机成 `coharness-gate / check` 才是硬门禁（详见 [RFC-0004-远端门禁](docs/rfcs/RFC-0004-远端门禁.md)）。其余几套的纪律大多来自真实教训——文件名带 `-v2`/`-final` 会越堆越多，改稿不回源迟早分叉，实验数据手改过一个数字整份报告就不可信了。
 
 ## 它和相邻工具怎么摆位
 
@@ -165,7 +165,7 @@ coh-dispatch --advance <项目>                # 不面板也能派发：认领 
 
 ## 自测与质量
 
-仓库自带 415 条自测，跑起来不需要装任何东西：
+仓库自带 416 条自测，跑起来不需要装任何东西：
 
 ```bash
 python -m unittest discover -s tests     # 零依赖；CI 在 ubuntu/windows/macos × py3.11/3.12/3.13 上跑同样的命令

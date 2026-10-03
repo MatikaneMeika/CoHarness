@@ -97,7 +97,9 @@
 
 ### 远端门禁（CI，第二道门）
 
-`.github/workflows/coharness.yml`（随骨架带入的 GitHub Actions workflow）：push 到 main 与指向 main 的 PR 会在 runner 上跑 `python scripts/check.py --names --tasks --against <基线> --no-track`。PR 基线为 `origin/main`，push 基线为 `event.before`；基线全零或 force-push 后不可达时发 `::notice::` 后只跑 names+tasks，降级可见。口径：**本地钩子是第一道门，CI 是第二道**——`--no-verify` 逃得过本地、逃不过远端；裸克隆没装钩子也躲不开这道门。CI 红了先修卡 / 改派（按所有权表），不是原样重推。仓库不在 GitHub 托管时该文件惰性无害；等价门禁（GitLab CI 等）按 `.agent/improvements.md` 登记为能力缺口，不私改执法面。
+`.github/workflows/coharness.yml`（随骨架带入的 GitHub Actions workflow）：push 到 main、指向 main 的 PR，以及 merge queue 的 `merge_group` 事件，都会在 runner 上跑 `python scripts/check.py --names --tasks --against <基线> --no-track`。基线：PR 为 `origin/main`，merge_group 为 `github.event.merge_group.base_sha`，push 为 `event.before`；基线全零、force-push 后不可达或空值时发 `::notice::` 后只跑 names+tasks，降级可见。
+
+门禁分两级：**检测线**（骨架默认）——workflow 红了全仓可见，但未配 required check 时 push 先被接受、红不拦合并；**硬门禁**（装机选项）——在仓库 rulesets 里把 `coharness-gate / check` 绑成 required check，才算真拦。口径：本地钩子是第一道门，CI 检测线是第二道；`--no-verify` 逃得过本地，逃不过**启用硬门禁后的**远端。未启用硬门禁时，CI 红是可见信号不是拦截。CI 红了先修卡 / 改派（按所有权表），不是原样重推。硬门禁与“认领直推 main”协议有结构性冲突（required check 会拒绝认领提交），默认不推荐；装机步骤与三条出路见 RFC-0004。仓库不在 GitHub 托管时该文件惰性无害；等价门禁（GitLab CI 等）按 `.agent/improvements.md` 登记为能力缺口，不私改执法面。
 
 ## 冲突裁决顺序
 

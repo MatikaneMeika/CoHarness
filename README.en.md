@@ -55,7 +55,7 @@ Four templates, pick by deliverable:
 
 Missing dependencies do not block you — the toolchain has fallback paths, and `wsc.py doctor` tells you what is missing, how to install it, and what degrades.
 
-Skeleton 03 is the full one, and what the project calls a *collaboration zone*: an ownership table says who may write which path prefix; parallel claim serialises through `main`; one harness per worktree; every commit from every tool passes the same `pre-commit` hook; skeleton 03 also ships a `.github/workflows/coharness.yml` remote gate (local hooks as the first line of defense, CI as the second; see [RFC-0004](docs/rfcs/RFC-0004-远端门禁.md)). The discipline in the other three comes from real lessons — `-v2`/`-final` filename suffixes pile up, edits that skip the source fork it, and one hand-edited number makes an entire report untrustworthy.
+Skeleton 03 is the full one, and what the project calls a *collaboration zone*: an ownership table says who may write which path prefix; parallel claim serialises through `main`; one harness per worktree; every commit from every tool passes the same `pre-commit` hook; skeleton 03 also ships a `.github/workflows/coharness.yml` remote gate: local hooks are the first line, the CI detection line is the second — red CI is a visible signal, not an enforcement block, until `coharness-gate / check` is installed as a required check (see [RFC-0004](docs/rfcs/RFC-0004-远端门禁.md)). The discipline in the other three comes from real lessons — `-v2`/`-final` filename suffixes pile up, edits that skip the source fork it, and one hand-edited number makes an entire report untrustworthy.
 
 ## How CoHarness relates to other tools
 
@@ -166,7 +166,7 @@ When guidance conflicts: **project rules > spec-kit output > task cards > verbal
 
 ## Tests and quality
 
-The repo ships 415 self-tests that run without installing anything:
+The repo ships 416 self-tests that run without installing anything:
 
 ```bash
 python -m unittest discover -s tests     # zero deps; CI runs the same command on ubuntu/windows/macos × py3.11/3.12/3.13

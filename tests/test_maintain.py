@@ -6,6 +6,7 @@ v1→v2 的升级步骤就是本轮真实做过的四件事，不是编的演示
 """
 import hashlib
 import json
+import importlib.util
 import re
 import sys
 import unittest
@@ -14,6 +15,20 @@ from pathlib import Path
 import helpers as H
 
 MAINTAIN = H.REPO / "maintain.py"
+
+
+def maintain_module():
+    """载入 maintain.py 本体，直接断言内部小节提取器（不在骨架目录留字节码）。"""
+    sys.path.insert(0, str(H.REPO))
+    spec = importlib.util.spec_from_file_location("coh_maintain_under_test", MAINTAIN)
+    mod = importlib.util.module_from_spec(spec)
+    prev = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        sys.dont_write_bytecode = prev
+    return mod
 
 
 def maintain(*args, timeout=300):
@@ -341,6 +356,9 @@ class Maintain(unittest.TestCase):
         text = agents.read_text(encoding="utf-8")
         self.assertIn("### 本地钩子", text)
         self.assertIn("### 远端门禁", text)
+        expected = maintain_module()._section(
+            (H.SKELETON / "AGENTS.md").read_text(encoding="utf-8"), "### 远端门禁")
+        self.assertIn(expected, text, "迁移注入的小节必须与骨架 AGENTS.md 逐字同源")
         self.assertTrue(wf.is_file())
 
     def test_skeleton_detection_uses_lock_before_custom_title(self):
