@@ -75,17 +75,17 @@ python -m unittest discover -s tests
 
 实跑结果：
 ```text
-Ran 416 tests in 1092.682s
+Ran 417 tests in 1194.639s
 
 OK (skipped=6)
 ```
 
-- **测试总数**：416 条全绿通过，`skipped=6`（差分预言机与环境依赖用例，安装 dev 依赖后不 skip）；
-- **耗时**：1092.682s（约 18.2 分钟，包含 `test_evolve.py` 中 `--apply-check` 在临时副本内全套端到端递归自测验证）。
+- **测试总数**：417 条全绿通过，`skipped=6`（差分预言机与环境依赖用例，安装 dev 依赖后不 skip）；
+- **耗时**：1194.639s（约 19.9 分钟，包含 `test_evolve.py` 中 `--apply-check` 在临时副本内全套端到端递归自测验证）。
 
 ## §6 阶段四 W24–W25：门禁收口（2026-10-03 r1 追记）
 
 | 工作项 | 目标 | 状态 | 证据 / 现状 |
 |---|---|---|---|
 | W24 workflow 补强：merge_group 预置与最小权限 | merge queue 场景不卡死；模板最小权限 | **已闭（本地）** | `03-multi-harness-project/.github/workflows/coharness.yml` 增加 `merge_group`（`checks_requested` / `branches: [main]`）、`permissions: contents: read`、第三基线支 `github.event.merge_group.base_sha`、actions 版本注释半钉；`tests/test_skeleton_integrity.py` 与 `tests/test_packaging.py` 钉结构，`tests/test_maintain.py` 钉迁移产物；RFC-0004 与 CHANGELOG 追记；T-108 本地等价复跑六场景（含 merge_group 可解析/不可解析）；PoseWise_Health 只读核对为 schema 3、无 workflow，未改它。schema 保持 5。 |
-| W25 两级口径与硬门禁装机文档 | 五载体一口径；RFC-0004 硬门禁节 | **已闭（本地）** | workflow 首行、03 `AGENTS.md`、`maintain.py up_remote_gate` 注入小节（实测从骨架 `_section` 读取，测试钉逐字一致）、RFC-0004、双语 README 全部改为检测线/硬门禁两级；RFC-0004 追记修正版 rulesets JSON、context 耦合、F-A 三条出路、默认检测线与 bypass 默认不配；追补硬化：`--no-verify` 限定为“未配 bypass actors 时”，workflow 首行改“默认是检测线，不是门禁”，双语 README 补硬门禁与认领直推冲突、默认不推荐；ADR-12 追记两条；`tests/test_skeleton_integrity.py` 新增五载体漂移钉子并断言 bypass actors 与 README 关键词；全量 416 条绿。 |
+| W25 两级口径与硬门禁装机文档 | 五载体一口径；RFC-0004 硬门禁节 | **已闭（本地）** | workflow 首行、03 `AGENTS.md`、`maintain.py up_remote_gate` 注入小节（实测从骨架 `_section` 读取，测试钉逐字一致）、RFC-0004、双语 README 全部改为检测线/硬门禁两级；RFC-0004 追记修正版 rulesets JSON、context 耦合、F-A 三条出路、默认检测线与 bypass 默认不配；追补硬化：`--no-verify` 限定为“未配 bypass actors 时”，workflow 首行改“默认是检测线，不是门禁”，双语 README 补硬门禁与认领直推冲突、默认不推荐；ADR-12 追记两条；`tests/test_skeleton_integrity.py` 新增五载体漂移钉子并断言 bypass actors 与 README 关键词；全量 417 条绿。 |
