@@ -71,6 +71,11 @@ class Packaging(unittest.TestCase):
                 if Path(h).is_file()}
         self.assertIn("03-multi-harness-project/.github/workflows/coharness.yml", hits,
                       "pattern 没命中 03 骨架的远端门禁 workflow")
+        gate = (H.REPO / "03-multi-harness-project" / ".github" / "workflows" /
+                "coharness.yml").read_text(encoding="utf-8")
+        self.assertIn("merge_group:", gate, "随包分发的 workflow 缺 merge_group 预置")
+        self.assertIn("permissions:\n  contents: read", gate,
+                      "随包分发的 workflow 缺最小权限块")
 
     def test_shipped_skeleton_files_are_the_tracked_ones(self):
         """反向检查：pattern 不该把 tests/、workspace/ 这类开发面文件卷进分发物。"""

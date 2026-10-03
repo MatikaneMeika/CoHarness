@@ -236,7 +236,12 @@ class Maintain(unittest.TestCase):
         check = proj / "scripts" / "check.py"
         self.assertIn("ownership_rows", check.read_text(encoding="utf-8"))
         self.assertTrue(wf.is_file())
-        self.assertIn("--names --tasks --no-track", wf.read_text(encoding="utf-8"))
+        wf_text = wf.read_text(encoding="utf-8")
+        self.assertIn("--names --tasks --no-track", wf_text)
+        self.assertIn("merge_group:", wf_text, "迁移后的 workflow 必须带 merge_group 预置")
+        self.assertIn("permissions:\n  contents: read", wf_text, "迁移后的 workflow 必须带最小权限")
+        self.assertIn("github.event.merge_group.base_sha", wf_text,
+                      "迁移后的 workflow 必须为 merge_group 提供基线")
         self.assertIn("远端门禁", agents.read_text(encoding="utf-8"))
         self.assertEqual(json.loads(self.proj_lock(proj).read_text(encoding="utf-8"))["schema"], 5)
         again = maintain("migrate", str(proj))

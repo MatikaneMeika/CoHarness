@@ -82,3 +82,10 @@ OK (skipped=6)
 
 - **测试总数**：415 条全绿通过，`skipped=6`（差分预言机与环境依赖用例，安装 dev 依赖后不 skip）；
 - **耗时**：1159.852s（约 19.3 分钟，包含 `test_evolve.py` 中 `--apply-check` 在临时副本内全套端到端递归自测验证）。
+
+## §6 阶段四 W24–W25：门禁收口（2026-10-03 r1 追记）
+
+| 工作项 | 目标 | 状态 | 证据 / 现状 |
+|---|---|---|---|
+| W24 workflow 补强：merge_group 预置与最小权限 | merge queue 场景不卡死；模板最小权限 | **已闭（本地）** | `03-multi-harness-project/.github/workflows/coharness.yml` 增加 `merge_group`（`checks_requested` / `branches: [main]`）、`permissions: contents: read`、第三基线支 `github.event.merge_group.base_sha`、actions 版本注释半钉；`tests/test_skeleton_integrity.py` 与 `tests/test_packaging.py` 钉结构，`tests/test_maintain.py` 钉迁移产物；RFC-0004 与 CHANGELOG 追记；T-108 本地等价复跑六场景（含 merge_group 可解析/不可解析）；PoseWise_Health 只读核对为 schema 3、无 workflow，未改它。schema 保持 5。 |
+| W25 两级口径与硬门禁装机文档 | 五载体一口径；RFC-0004 硬门禁节 | **未开始** | 依赖 W24；按计划书 §10 W25 执行。 |

@@ -2,6 +2,8 @@
 
 > 格式：`- YYYY-MM-DD [晋升 I-xxx@来源项目] 摘要`；非晋升的本体演进用 `[演进]` 标签，缺陷修复用 `[缺陷修复]` 并附复现方式。只增不改。
 
+- 2026-10-03 [演进] **远端门禁 workflow 补强：merge_group 预置与最小权限（W24/T-123）**。03 骨架 workflow 增加 `merge_group`（`types: [checks_requested]`、`branches: [main]`）——启用 required check + merge queue 的仓库缺此触发器会让 check 永不报告、PR 卡死；基线表达式加第三支 `github.event.merge_group.base_sha`（该事件无 `event.before`）；顶层 `permissions: contents: read`；actions 改版本注释半钉（`@v4  # v4.x.y`、`@v5  # v5.x.y`，SHA 全钉的腐烂成本高于收益，权衡记 RFC-0004）。schema 不升（5 未发布，v1.2.3 用户走 `up_remote_gate` 自然拿到新文件）。T-108 本地等价复跑原四场景 + 注入 merge_group 可解析/不可解析两场景；PoseWise_Health 只读核对为 schema 3、无 workflow，本轮不改它。本轮不 push、不 merge、不 bump、不打 tag、不发布。
+
 - 2026-10-02 [缺陷修复] **无指纹的 schema 3 老项目迁移卡死在预检，且 lock 会记错合并基线**。PoseWise_Health 实测：没有 `.agent/skeleton.lock` 的 schema 3 项目跑 `maintain.py migrate`（含 `--yes`）在预检报「指纹里没有 skeleton_commit，无法取三方合并基线」；若按提示补 `lock`，指纹又会把 `skeleton_commit` 记成当前 HEAD，使 base 等于当前骨架，升级被静默跳过。修法：`SCHEMA_BASELINES` 给 schema 3 登记历史基线 `1617d1c`，无指纹时 `lock` 与 `migrate` 共用它；v4→v5 不再对整份实例化 `AGENTS.md` 做全文三方合并，改为只在 `## 冲突裁决顺序` 前微创追加「远端门禁」小节，已有不同小节仍拒绝覆盖。
   复现（改前红改后绿）：`python -m unittest discover -s tests -p "test_maintain.py" -k "without_lock"`（改前预检冲突、无 workflow；改后 `has_unchecked` 与 `.github/workflows/coharness.yml` 都在位）。
 

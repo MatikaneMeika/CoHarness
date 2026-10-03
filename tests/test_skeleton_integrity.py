@@ -143,6 +143,14 @@ class SkeletonIntegrity(unittest.TestCase):
                       "远端门禁没有把 CI 变更集交给 --against")
         self.assertIn("::notice::", text, "基线不可用时必须可见降级，不许静默")
         self.assertIn("git merge-base", text, "force-push 旧基线不可达时也要走可见降级")
+        self.assertIn("merge_group:", text, "required check + merge queue 场景必须有 merge_group 触发器")
+        self.assertIn("types: [checks_requested]", text, "merge_group 触发器类型不对")
+        self.assertIn("permissions:\n  contents: read", text, "workflow 缺最小权限块")
+        self.assertIn("github.event.merge_group.base_sha", text,
+                      "merge_group 事件没有自己的基线来源")
+        self.assertIn("actions/checkout@v4  # v4.", text, "checkout 版本注释半钉缺失")
+        self.assertIn("actions/setup-python@v5  # v5.", text,
+                      "setup-python 版本注释半钉缺失")
         for sk in SKELETONS:
             present = (H.REPO / sk / rel).exists()
             self.assertEqual(present, sk == "03-multi-harness-project",
