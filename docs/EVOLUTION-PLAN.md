@@ -223,6 +223,10 @@ W5/W7/W9/W12 落地后，`wsc.py` 一度涨到 1137 行——**自己写的行�
 - **merge_group 与最小权限预置**（W24）：骨架 workflow 加 `merge_group`（`types: [checks_requested]`、`branches: [main]`）与顶层 `permissions: contents: read`，actions 引用改版本注释半钉。未启用 merge queue 的仓库该触发器惰性无害；启用 required check + merge queue 后缺它会让 check 永不报告、PR 卡死。基线表达式加第三支 `github.event.merge_group.base_sha`；schema 仍为 5，不另立迁移步。
 - **门禁两级形态与 F-A 边界**（W25）：骨架默认只承诺**检测线**（CI 红=可见信号，未配 required check 时不拦 push/合并）；**硬门禁**（required check 绑 `coharness-gate / check`）是用户仓库侧的装机选项，与“认领直推 main”协议有结构性冲突（required check 会拒绝认领提交）——三条出路（bypass actors / 协议改走 PR / 只对 PR 合流分支开）与修正版 rulesets JSON 见 RFC-0004 追记。默认口径：检测线是与直推协议唯一兼容的形态；bypass actors 默认不配。
 
+### ADR-12 追记（2026-10-03 r2）：required check 的 context 是 job 名
+
+- **修正**：上条追记（W25）写的硬门禁 required check context `coharness-gate / check` 有误。T-108 rulesets 真机 A/B 证实：rulesets 的 `required_status_checks.context` 对齐 **check run 的 `name`**；本骨架 job 未写 `name:`，check run 名 = job key = **`check`**。写 `coharness-gate / check` 时合法 PR 的 check 结论 SUCCESS 却 `mergeStateStatus=BLOCKED`，改裸 `check` 后同 PR `CLEAN`。装机 JSON、RFC-0004 硬门禁节、03 `AGENTS.md`、双语 README 已同步改 `check`。ADR 只增不改，故以本条追记覆盖上条的该字面量（机制结论不变）。
+
 ## 2026-10-02 补注（T-109 待验项①实测与口径差对齐）
 
 - **待验项①销账**：2026-10-02 完成 W21 / T-109 实操。在系统临时目录沙盒隔离安装 `backlog.md@1.53.0`，真实建卡覆盖引号标题、含 `#` 值、列表（assignees/labels/dependencies）、留空值、冒号标签（`role:tester`）等边界。

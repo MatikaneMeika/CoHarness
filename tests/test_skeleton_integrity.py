@@ -175,20 +175,28 @@ class SkeletonIntegrity(unittest.TestCase):
         self.assertIn("merge_group:", wf, "workflow 首行附近应有 merge_group")
         agents = (H.REPO / "03-multi-harness-project" / "AGENTS.md").read_text(encoding="utf-8")
         for token in ("检测线", "硬门禁", "可见信号", "required check",
-                      "coharness-gate / check", "认领直推", "bypass actors"):
+                      "job 名", "认领直推", "bypass actors"):
             self.assertIn(token, agents, f"03 AGENTS.md 远端门禁小节缺 {token}")
+        # 2026-10-03 真机修正：required check 的 context 是 job 名 `check`，
+        # 不是 `<workflow> / <job>` 形态（A/B 实证见 T-108 硬门禁节）。
+        self.assertNotIn("coharness-gate / check", agents,
+                         "AGENTS.md 又写回了错的 required check context")
         self.assertNotIn("逃不过远端", agents, "未限定硬门禁的'逃不过远端'是过度承诺")
         rfc = (H.REPO / "docs" / "rfcs" / "RFC-0004-远端门禁.md").read_text(encoding="utf-8")
-        for token in ("检测线", "硬门禁", "coharness-gate / check",
+        for token in ("检测线", "硬门禁", "job 名", '"context": "check"',
                       '"include": ["~DEFAULT_BRANCH"]', "bypass"):
             self.assertIn(token, rfc, f"RFC-0004 硬门禁节缺 {token}")
+        self.assertNotIn('"context": "coharness-gate / check"', rfc,
+                         "RFC-0004 装机 JSON 又写回了错的 context")
         self.assertNotIn("逃不过远端", rfc, "RFC-0004 还留着未限定的'逃不过远端'")
         for rel, tokens in (("README.md", ("检测线", "可见信号")),
                             ("README.en.md", ("detection line", "visible signal"))):
             text = (H.REPO / rel).read_text(encoding="utf-8")
-            tokens = tokens + ("coharness-gate / check", "required check")
+            tokens = tokens + ("required check", "job name" if rel.endswith("en.md") else "job 名")
             for token in tokens:
                 self.assertIn(token, text, f"{rel} 缺两级口径关键词 {token}")
+            self.assertNotIn("coharness-gate / check", text,
+                             f"{rel} 又写回了错的 required check context")
 
     def test_skeletons_ship_no_run_residue(self):
         for sk in SKELETONS:

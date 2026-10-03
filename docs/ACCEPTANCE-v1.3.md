@@ -34,7 +34,7 @@
 | W20 `--against <ref>` 基线 diff 执法 | 干净树下 diff 改动挂卡远端执法，可见降级 | **已闭（真机）** | 提交 `61e655a`（`check.py` 行数预算 760→820 独立 commit 走先例程序）+ 提交 `93f7c98`（`check.py` 新增 `--against <ref>`，判定核心复用，基线缺失响亮失败；03 workflow 升级 PR 用 `origin/main`、push 用 `event.before`，全零/不可达可见降级发 notice；`tests/test_check_current.py::AgainstBaseline` 三类用例：卡外改动被拦、挂卡放行、基线缺失响亮失败；既有用例零改动全绿；`check.py` 现 815/820 行 ≤820）+ 提交 `e1c92b2`（`docs/audits/T-108-远端门禁本地等价验证.md` 本地 bash 等价演练，证明分支选路与真实 check.py 拦截行为成立）。**真机已跑**：`docs/audits/T-108-远端门禁真机验证.md`，临时仓 `MatikaneMeika/coharness-gate-e2e` 六场景——首次推降级绿 `37113729185`、卡外改动 push 红 `37113765618`、合法 push 绿 `37113844835`、强推降级不硬红 `37113895710`、非法看板 push 红 `37113956156`、卡外改动 PR 红 `37114008208`。 |
 
 ### 未闭项与阻塞
-- **W19 / W20 真机 run 阻塞**：GitHub Actions 真实环境的三类用例（非法看板 push 拦、卡外改动 PR 拦、合法 push 绿）需要创建临时 GitHub 仓库并推送测试，当前在本地分支受冻结限制未推远端，等用户批准后在临时仓验证并回填 run 链接。
+- **W19 / W20 真机 run：已闭**（用户批准推送后执行）。临时仓 `MatikaneMeika/coharness-gate-e2e` 六场景真机：红 B/E/F、绿 A/C、强推降级 D；run 链接与日志行见 `docs/audits/T-108-远端门禁真机验证.md`。**rulesets 硬门禁可选项也已补测**（同文件「硬门禁」节）：直推被 GH013 拒、合法 PR `CLEAN`、卡外/非法看板 PR `BLOCKED`；并修正 RFC-0004 原稿的 context 字面量（`check`，非 `coharness-gate / check`）。仅剩 merge queue 为可选欠账。
 
 ## §3 阶段三 W21–W23：集成验证清欠
 
@@ -88,4 +88,4 @@ OK (skipped=6)
 | 工作项 | 目标 | 状态 | 证据 / 现状 |
 |---|---|---|---|
 | W24 workflow 补强：merge_group 预置与最小权限 | merge queue 场景不卡死；模板最小权限 | **已闭（本地）** | `03-multi-harness-project/.github/workflows/coharness.yml` 增加 `merge_group`（`checks_requested` / `branches: [main]`）、`permissions: contents: read`、第三基线支 `github.event.merge_group.base_sha`、actions 版本注释半钉；`tests/test_skeleton_integrity.py` 与 `tests/test_packaging.py` 钉结构，`tests/test_maintain.py` 钉迁移产物；RFC-0004 与 CHANGELOG 追记；T-108 本地等价复跑六场景（含 merge_group 可解析/不可解析）；PoseWise_Health 只读核对为 schema 3、无 workflow，未改它。schema 保持 5。 |
-| W25 两级口径与硬门禁装机文档 | 五载体一口径；RFC-0004 硬门禁节 | **已闭（本地）** | workflow 首行、03 `AGENTS.md`、`maintain.py up_remote_gate` 注入小节（实测从骨架 `_section` 读取，测试钉逐字一致）、RFC-0004、双语 README 全部改为检测线/硬门禁两级；RFC-0004 追记修正版 rulesets JSON、context 耦合、F-A 三条出路、默认检测线与 bypass 默认不配；追补硬化：`--no-verify` 限定为“未配 bypass actors 时”，workflow 首行改“默认是检测线，不是门禁”，双语 README 补硬门禁与认领直推冲突、默认不推荐；ADR-12 追记两条；`tests/test_skeleton_integrity.py` 新增五载体漂移钉子并断言 bypass actors 与 README 关键词；全量 417 条绿。 |
+| W25 两级口径与硬门禁装机文档 | 五载体一口径；RFC-0004 硬门禁节 | **已闭（真机）** | workflow 首行、03 `AGENTS.md`、`maintain.py up_remote_gate` 注入小节（实测从骨架 `_section` 读取，测试钉逐字一致）、RFC-0004、双语 README 全部改为检测线/硬门禁两级；RFC-0004 追记修正版 rulesets JSON、context 耦合、F-A 三条出路、默认检测线与 bypass 默认不配；追补硬化：`--no-verify` 限定为“未配 bypass actors 时”，workflow 首行改“默认是检测线，不是门禁”，双语 README 补硬门禁与认领直推冲突、默认不推荐；ADR-12 追记两条；`tests/test_skeleton_integrity.py` 新增五载体漂移钉子并断言 bypass actors 与 README 关键词；全量 417 条绿。**真机追补（r2）**：rulesets 硬门禁实测后修正 context 字面量——required check 的 `context` 是 job 名 `check`，非 `coharness-gate / check`（A/B 实证，见 T-108 硬门禁节）；RFC-0004 装机 JSON、03 `AGENTS.md`、双语 README、`test_skeleton_integrity.py` token 同步改，并加负向钉子。 |
