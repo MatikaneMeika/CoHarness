@@ -125,7 +125,9 @@ class TestCardFormat(TempProjectCase):
 
     def test_updated_date_far_in_the_future_is_blocked(self):
         from datetime import datetime, timedelta
-        future = datetime.now() + timedelta(minutes=11)
+        # 偏移要离 10 分钟阈值足够远：时间戳按分钟截断会丢掉最多 59 秒，11 分钟只剩约 1 秒
+        # 余量，慢 runner 上 check 晚跑一两秒就漏判（2026-10-03 ubuntu py3.11 真红过）。
+        future = datetime.now() + timedelta(minutes=15)
         H.write_card(self.proj, "T-015", updated=future.strftime("%Y-%m-%d %H:%M"))
         self.assertCheck(["--tasks"], 1, "T-015.md", "超出本地当前时间 10 分钟")
 

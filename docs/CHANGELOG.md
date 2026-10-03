@@ -2,6 +2,8 @@
 
 > 格式：`- YYYY-MM-DD [晋升 I-xxx@来源项目] 摘要`；非晋升的本体演进用 `[演进]` 标签，缺陷修复用 `[缺陷修复]` 并附复现方式。只增不改。
 
+- 2026-10-03 [缺陷修复] **W15 取证：分支首推后 CI 红，真因两处（一处已修、一处加诊断）**。① `test_updated_date_far_in_the_future_is_blocked` 的 future 偏移只剩约 1 秒余量——时间戳按分钟截断丢最多 59 秒，慢 runner 上 check 晚跑一两秒即漏判（ubuntu py3.11 红、重跑消失）；偏移 11→15 分钟。② `test_flag_submit_without_tick` 在 CI（oracle、ubuntu py3.11）偶发 ERROR，本地复现不出（stdlib 与 oracle venv 各跑全量均绿），先取证。`.github/workflows/ci.yml` 失败时改为 `::group::` 折叠打印完整自测输出——原 `tail -16` 只够到摘要行，内层 traceback 永远看不见（T-101 记的级联指示器 `test_apply_check_passes_a_doc_only_patch` 就是被它挡的）。复现（改前红）：`python -m unittest discover -s tests -p "test_check_current.py" -k test_updated_date_far_in_the_future_is_blocked`。
+
 - 2026-10-03 [演进] **远端门禁口径硬化：bypass actors 例外与 README 冲突指引（T-124 追补）**。五载体的“逃不过远端”补上限定：`--no-verify` 逃得过本地，**未配 bypass actors 时**才逃不过启用硬门禁后的远端；workflow 首行改为“默认是检测线，不是门禁”，AGENTS 小节标题显式写“CI 检测线 / 硬门禁”；中文 README 把“装机成 required check”改为“在仓库 rulesets 里绑成 required check”，中英 README 都补“硬门禁与认领直推冲突、默认不推荐”指引；RFC-0004 问题节加 W25 导读注记。测试钉子同步断言 bypass actors 与 README 的 `coharness-gate / check` / required check。全量 416 条绿。本轮不 push、不 merge、不 bump、不打 tag、不发布。
 
 - 2026-10-03 [演进] **远端门禁两级口径与硬门禁装机文档（W25/T-124）**。把“本地钩子第一道、CI 第二道 / 逃不过远端”改成两级：检测线（骨架默认，CI 红=可见信号，未配 required check 时不拦 push/合并）/ 硬门禁（装机选项，required check 绑 `coharness-gate / check`）。五个载体一口径：workflow 首行、03 `AGENTS.md`「远端门禁」小节、`maintain.py` `up_remote_gate` 注入的小节（实际从骨架 `AGENTS.md` `_section` 读取，结构同源，非硬编码）、RFC-0004、双语 README。RFC-0004 追记修正版 rulesets JSON（`conditions.ref_name` 为 `{"include": [...], "exclude": []}` 对象，非裸数组）、context 耦合、F-A 三条出路（bypass actors / 协议改走 PR / 只对 PR 合流分支开）与“检测线是与认领直推协议唯一兼容形态”的默认口径；ADR-12 追记两条。新增五载体漂移钉子，全量 416 条绿。本轮不 push、不 merge、不 bump、不打 tag、不发布。

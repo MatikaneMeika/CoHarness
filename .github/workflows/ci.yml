@@ -50,9 +50,11 @@ jobs:
             ran=$(grep -E '^Ran |^OK|^FAILED' "$log" | tail -2 | tr '\n' ' ' || true)
             echo "::error::rc=$rc 匹配到 $fails 条  总结行: $ran"
             grep -E '^(FAIL|ERROR): ' "$log" | head -20 | sed 's/^/::error::/' || true
-            # 尾部要够长才看得到断言消息：unittest 的 AssertionError 在"Ran N tests"上方十来行，
-            # tail -6 只能看到摘要行（2026-09-30：内层失败名就是这么被挡在门外的）
-            tail -16 "$log" | sed 's/^/::error::tail: /' || true
+            # 完整自测输出进日志（::group:: 折叠）。tail -16 只到摘要行，内层 traceback 看不见：
+            # 2026-10-03 面板腿偶发 ERROR 只能靠猜真因，这条就是为把真因直接打进日志加的。
+            echo "::group::完整自测输出"
+            cat "$log"
+            echo "::endgroup::"
           else
             echo "自测全绿：$(grep -E '^Ran ' "$log" | tail -1 || true)"
           fi
@@ -84,9 +86,11 @@ jobs:
             ran=$(grep -E '^Ran |^OK|^FAILED' "$log" | tail -2 | tr '\n' ' ' || true)
             echo "::error::rc=$rc 匹配到 $fails 条  总结行: $ran"
             grep -E '^(FAIL|ERROR): ' "$log" | head -20 | sed 's/^/::error::/' || true
-            # 尾部要够长才看得到断言消息：unittest 的 AssertionError 在"Ran N tests"上方十来行，
-            # tail -6 只能看到摘要行（2026-09-30：内层失败名就是这么被挡在门外的）
-            tail -16 "$log" | sed 's/^/::error::tail: /' || true
+            # 完整自测输出进日志（::group:: 折叠）。tail -16 只到摘要行，内层 traceback 看不见：
+            # 2026-10-03 面板腿偶发 ERROR 只能靠猜真因，这条就是为把真因直接打进日志加的。
+            echo "::group::完整自测输出"
+            cat "$log"
+            echo "::endgroup::"
           else
             echo "自测全绿（预言机在场）：$(grep -E '^Ran ' "$log" | tail -1 || true)"
           fi
