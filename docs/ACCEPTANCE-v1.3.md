@@ -17,13 +17,13 @@
 
 | 工作项 | 目标 | 状态 | 证据 / 现状 |
 |---|---|---|---|
-| W15 CI 偶发红取证与闭口 | 连续 10 轮全绿或覆盖 ≥2 周；环境问题成文豁免 | **OPEN（未闭口）** | 取证记录见 `docs/audits/T-101-CI偶发红取证.md`。最近 50 轮 `gh run list` 归因：`success` 28 / `failure` 22，全部 failure 均能对应具名修复提交（无未归因偶发红），但从最新向前连续 success = **1**（机械事实），未达 10 轮判据；本地 31+ 个提交未推送，CI 从未跑过本批代码，依规保持 open 不予静默豁免。 |
+| W15 CI 偶发红取证与闭口 | 连续 10 轮全绿或覆盖 ≥2 周；环境问题成文豁免 | **OPEN（未闭口）** | 取证记录见 `docs/audits/T-101-CI偶发红取证.md`。最近 50 轮 `gh run list` 归因：`success` 28 / `failure` 22，全部 failure 均能对应具名修复提交（无未归因偶发红），但从最新向前连续 success 逐轮累积：r2 快照 = **3**（`aa93836`/`665895e`/`be172ac`，机械事实）；分支已推送，CI 逐轮跑本批代码；未达 10 轮判据，保持 open 不予静默豁免。 |
 | W16 派发失败路径测试钉子 | 建树失败与认领成功建树失败钉子，行为诚实 | **已闭（本地）** | 提交 `9bcdc98`（建树失败用例注入失败前后红绿可证）+ 提交 `9f8c386`（T-113 废除 `git-wt add` 误调，坚守原生 `git worktree add` 路径契约；`_worktree` 失败 detail 补 `argv` 与 `returncode`，`tests/test_dispatch.py` 40 条全绿，`dispatch.py` 299/300 行未抬上限）。 |
 | W17 README 双语定位章节 | 补齐定位层与 Vibe Kanban 迁移注记 | **已闭（本地）** | 提交 `802030a` + `ca13ace`。`README.en.md` 补入 "How CoHarness relates to other tools" 四行详表，`README.md` 中文简版口径一致并双向互链；按机制对比、无星标数字；"Coming from Vibe Kanban?" 迁移注记在位；`tests/test_packaging.py` 钉子通过。 |
 | W18 v1.3.0 发布 | PyPI 1.3.0 上线、Release 双资产、CHANGELOG 归档 | **未开始（已冻结）** | 用户明确指令冻结发布（不 push、不 merge、不 bump 版本、不打 tag、不发 Release、不发 PyPI）；`pyproject.toml` 版本保持 `1.2.3`；`docs/CHANGELOG.md` 8 条 `[未发布]` 条目保持不变。 |
 
 ### 未闭项与阻塞
-- **W15 阻塞**：CI 连续 10 轮绿未满足（当前连续绿=1），受分支尚未推送所限，需等用户批准推送后于远端持续累积运行记录。
+- **W15 阻塞**：CI 连续 10 轮绿未满足（r2 快照当前连续绿=3），分支已推送，随每次提交于远端持续累积运行记录；未达判据前保持 open。
 - **W18 阻塞**：发布流程处于用户明确冻结状态，等待用户后续发布决策。
 
 ## §2 阶段二 W19–W20：远端门禁（两步走）
