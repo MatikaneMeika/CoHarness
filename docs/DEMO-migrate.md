@@ -22,21 +22,21 @@ python docs/demo/migrate_demo.py --keep   # 保留临时项目目录，自己进
 ## 实跑输出（2026-10-02，骨架库 commit 见输出内的 skeleton_commit；临时目录、时间戳与本机路径已隐去）
 
 ```text
-=== v1 演示项目：C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project
+=== v1 演示项目：C:\Users\<user>\AppData\Local\Temp\<临时目录>\03-multi-harness-project
 
 ### 第 1 步：记一次装机指纹（schema 由骨架库当前版本决定）
 
-$ python maintain.py lock C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project
+$ python maintain.py lock C:\Users\<user>\AppData\Local\Temp\<临时目录>\03-multi-harness-project
 [lock] 注意：项目声明的 schema=1，落后于本体 5；指纹按真实值 1 记录。要升级请跑 maintain.py migrate（lock 本身不升级）
-[lock] 已写 C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project\.agent\skeleton.lock（这份指纹可以提交进项目仓库：不含本机路径）
+[lock] 已写 C:\Users\<user>\AppData\Local\Temp\<临时目录>\03-multi-harness-project\.agent\skeleton.lock（这份指纹可以提交进项目仓库：不含本机路径）
   skeleton = 03-multi-harness-project
   skeleton_commit = <骨架库 HEAD>
   schema = 1
   check_sha256 = 7e96191bdec7
 ### 第 2 步：把指纹改回 schema=1，模拟「这个项目还停在老版本」
 
-$ python maintain.py migrate C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project
-== migrate C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project（当前 schema=1←指纹，本体 schema=5）==
+$ python maintain.py migrate C:\Users\<user>\AppData\Local\Temp\<临时目录>\03-multi-harness-project
+== migrate C:\Users\<user>\AppData\Local\Temp\<临时目录>\03-multi-harness-project（当前 schema=1←指纹，本体 schema=5）==
 
 v1 -> v2: 本地记账进 .gitignore + 库路径代入绝对值 + 认领首选 wsc claim + 补降级行为节 + 删常驻卡 + 看板列改四列 statuses + 刷新缺自授权的旧 check.py
   - 待追加：.gitignore 里补 '.agent/telemetry.jsonl'
@@ -64,8 +64,8 @@ v4 -> v5: 复制远端门禁 .github/workflows/coharness.yml + AGENTS.md 微创�
 
 ### 第 3 步：确认后落盘——先自动建备份分支
 
-$ python maintain.py migrate C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project --yes
-== migrate C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project（当前 schema=1←指纹，本体 schema=5）==
+$ python maintain.py migrate C:\Users\<user>\AppData\Local\Temp\<临时目录>\03-multi-harness-project --yes
+== migrate C:\Users\<user>\AppData\Local\Temp\<临时目录>\03-multi-harness-project（当前 schema=1←指纹，本体 schema=5）==
 
 （预检：在临时副本上按同样步骤先跑一遍，输出与上面的 dry-run 同形——待追加 / 待改写 / 待迁移 / 待复制 / 待补 / 待改，冲突就停在这里不落盘）
 
@@ -90,7 +90,7 @@ v4 -> v5: 复制远端门禁 .github/workflows/coharness.yml + AGENTS.md 微创�
   - 已复制：.github/workflows/coharness.yml（远端门禁第二道门，--names --tasks --no-track）
   - 已补：AGENTS.md 追加「远端门禁」小节
   - 已改：AGENTS.md 项目卡声明 schema=5
-[lock] 已写 C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project\.agent\skeleton.lock（这份指纹可以提交进项目仓库：不含本机路径）
+[lock] 已写 C:\Users\<user>\AppData\Local\Temp\<临时目录>\03-multi-harness-project\.agent\skeleton.lock（这份指纹可以提交进项目仓库：不含本机路径）
   skeleton = 03-multi-harness-project
   skeleton_commit = <骨架库 HEAD>
   schema = 5

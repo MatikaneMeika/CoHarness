@@ -1,7 +1,7 @@
 # HANDOFF — 派发控制台（已交付）与总控议题（待决策）
 
 - 工作树：`D:\c-move\.codex\worktrees\5702\CoHarness`
-  （与 `C:\Users\666666\.codex\worktrees\5702\CoHarness` 是同一目录，已用 `dispatch.py` 的
+  （与 `C:\Users\<user>\.codex\worktrees\5702\CoHarness` 是同一目录，已用 `dispatch.py` 的
   SHA256 逐字节比对确认；两个路径都可读写，不要当成两份工作树）
 - 分支：`codex/dispatch-console`，已按批准计划以 `main`（`6cafcfb`）为基线拆分提交；最终全量 367 条通过，本轮合入 `main` 但不发布
 - 日期：2026-10-01
