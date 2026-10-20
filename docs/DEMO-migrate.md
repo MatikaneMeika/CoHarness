@@ -22,20 +22,20 @@ python docs/demo/migrate_demo.py --keep   # 保留临时项目目录，自己进
 ## 实跑输出（2026-10-01，骨架库 commit 见输出内的 skeleton_commit；临时目录与时间戳已隐去）
 
 ```text
-=== v1 演示项目：C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project
+=== v1 演示项目：C:\Users\<user>\AppData\Local\Temp\<临时目录>\03-multi-harness-project
 
 ### 第 1 步：记一次装机指纹（schema 由骨架库当前版本决定）
 
-$ python maintain.py lock C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project
-[lock] 已写 C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project\.agent\skeleton.lock（这份指纹可以提交进项目仓库：不含本机路径）
+$ python maintain.py lock C:\Users\<user>\AppData\Local\Temp\<临时目录>\03-multi-harness-project
+[lock] 已写 C:\Users\<user>\AppData\Local\Temp\<临时目录>\03-multi-harness-project\.agent\skeleton.lock（这份指纹可以提交进项目仓库：不含本机路径）
   skeleton = 03-multi-harness-project
   skeleton_commit = <骨架库 HEAD>
   schema = 4
   check_sha256 = f0e3d145dc3d
 ### 第 2 步：把指纹改回 schema=1，模拟「这个项目还停在老版本」
 
-$ python maintain.py migrate C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project
-== migrate C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project（当前 schema=1←指纹，本体 schema=4）==
+$ python maintain.py migrate C:\Users\<user>\AppData\Local\Temp\<临时目录>\03-multi-harness-project
+== migrate C:\Users\<user>\AppData\Local\Temp\<临时目录>\03-multi-harness-project（当前 schema=1←指纹，本体 schema=4）==
 
 v1 -> v2: 本地记账进 .gitignore + 库路径代入绝对值 + 认领首选 wsc claim + 补降级行为节 + 删常驻卡 + 看板列改四列 statuses + 刷新缺自授权的旧 check.py
   - 待追加：.gitignore 里补 '.agent/telemetry.jsonl'
@@ -57,8 +57,8 @@ v3 -> v4: scripts/check.py 三方合并到当前骨架（审阅意见 / 结果�
 
 ### 第 3 步：确认后落盘——先自动建备份分支
 
-$ python maintain.py migrate C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project --yes
-== migrate C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project（当前 schema=1←指纹，本体 schema=4）==
+$ python maintain.py migrate C:\Users\<user>\AppData\Local\Temp\<临时目录>\03-multi-harness-project --yes
+== migrate C:\Users\<user>\AppData\Local\Temp\<临时目录>\03-multi-harness-project（当前 schema=1←指纹，本体 schema=4）==
 [migrate] 已建备份分支 coh-backup-<时间戳>（回到旧状态：git reset --hard coh-backup-<时间戳>）
 
 v1 -> v2: 本地记账进 .gitignore + 库路径代入绝对值 + 认领首选 wsc claim + 补降级行为节 + 删常驻卡 + 看板列改四列 statuses + 刷新缺自授权的旧 check.py
@@ -75,7 +75,7 @@ v2 -> v3: 适配指针升级为各工具原生目录格式（.cursor/rules、.wi
 
 v3 -> v4: scripts/check.py 三方合并到当前骨架（审阅意见 / 结果行 / 可观察验收 / 所有权执法），冲突拒绝覆盖
   - 已到位：scripts/check.py 已是当前骨架版本
-[lock] 已写 C:\Users\666666\AppData\Local\Temp\<临时目录>\03-multi-harness-project\.agent\skeleton.lock（这份指纹可以提交进项目仓库：不含本机路径）
+[lock] 已写 C:\Users\<user>\AppData\Local\Temp\<临时目录>\03-multi-harness-project\.agent\skeleton.lock（这份指纹可以提交进项目仓库：不含本机路径）
   skeleton = 03-multi-harness-project
   skeleton_commit = <骨架库 HEAD>
   schema = 4
